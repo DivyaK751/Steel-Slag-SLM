@@ -1,0 +1,23 @@
+# Python virtual environments and bytecode
+.venv/
+__pycache__/
+*.py[cod]
+
+# Local credentials and environment files
+.env
+.env.*
+!.env.example
+
+# Generated research data and downloaded papers are kept out of source control
+**/outputs/
+
+# Local Google authentication artifacts and private keys
+**/token.json
+**/credentials.json
+**/*service-account*.json
+*.pem
+*.key
+
+# Editor and test artifacts
+.pytest_cache/
+.coverage

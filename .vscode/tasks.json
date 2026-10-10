@@ -1,0 +1,71 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Pipeline: run offline tests",
+      "type": "process",
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "args": [
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "paper_collection_pipeline/data_ingestion/tests",
+        "-v"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Pipeline: retrieve one-page preview",
+      "type": "process",
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "args": [
+        "-m",
+        "paper_collection_pipeline.data_ingestion.run_retrieval",
+        "--max-pages",
+        "1"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Pipeline: prepare final manifests and local PDFs",
+      "type": "process",
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "args": [
+        "-m",
+        "paper_collection_pipeline.data_ingestion.deliver_papers"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Pipeline: sync local PDFs to Shared Drive",
+      "type": "process",
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "args": [
+        "-m",
+        "paper_collection_pipeline.data_ingestion.drive_upload"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Experiment: audit OpenAlex retrieval profiles",
+      "type": "process",
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "args": [
+        "-m",
+        "paper_collection_pipeline.experiments.retrieval_audit"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Experiment: summarize retrieval audit labels",
+      "type": "process",
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "args": [
+        "-m",
+        "paper_collection_pipeline.experiments.summarize_retrieval_audit"
+      ],
+      "problemMatcher": []
+    }
+  ]
+}
