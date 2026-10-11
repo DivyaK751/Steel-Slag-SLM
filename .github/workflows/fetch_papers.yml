@@ -1,0 +1,42 @@
+name: Fetch papers
+
+on:
+  schedule:
+    - cron: "15 0 * * *"  # 00:15 UTC, just after OpenAlex resets daily budgets
+  workflow_dispatch:
+    inputs:
+      max_papers:
+        description: "Stop each member's run after this many papers (blank = until budget is used)"
+        required: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      # Members run one after another, so each run sees the previous run's uploads in Drive
+      max-parallel: 1
+      fail-fast: false
+      matrix:
+        member: [1, 2, 3, 4, 5]
+    env:
+      OPENALEX_API_KEY: ${{ secrets[format('OPENALEX_API_KEY_{0}', matrix.member)] }}
+      OPENALEX_CONTACT_EMAIL: ${{ secrets.OPENALEX_CONTACT_EMAIL }}
+      DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+      GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Write Google credentials
+        run: |
+          printf '%s' "$GOOGLE_SERVICE_ACCOUNT_JSON" > "$RUNNER_TEMP/service_account.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/service_account.json" >> "$GITHUB_ENV"
+      - name: Fetch papers with member ${{ matrix.member }}'s key
+        run: |
+          if [ -z "$OPENALEX_API_KEY" ]; then
+            echo "No OPENALEX_API_KEY_${{ matrix.member }} secret set; skipping."
+            exit 0
+          fi
+          uv run fetch-papers ${MAX_PAPERS:+--max-papers "$MAX_PAPERS"}
+        env:
+          MAX_PAPERS: ${{ inputs.max_papers }}
