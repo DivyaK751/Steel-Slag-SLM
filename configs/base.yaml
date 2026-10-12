@@ -1,0 +1,81 @@
+fetch:
+  # Each query is paged through separately; results are deduplicated by OpenAlex ID.
+  queries:
+    # Quoted phrases keep OpenAlex from matching "steel" and "slag" separately
+    - '"steel slag" cement'
+    - '"steel slag" concrete'
+    - '"steel slag" binder'
+    - '"steel slag" hydration'
+    - '"steel slag" carbonation'
+    - '"steel slag" CO2 sequestration'
+    - '"steel slag" characterization'
+    - '"steelmaking slag"'
+    - '"BOF slag"'
+    - '"EAF slag"'
+    - '"ladle slag"'
+  search_filter: "is_oa:true,language:en"
+  # Citation sort surfaces famous off-topic papers; relevance keeps results on steel slag
+  sort: "relevance_score:desc"
+  per_page: 200
+  max_pages_per_query: 5
+  request_timeout_s: 30
+  # Stop before a paid download once the remaining daily budget drops below this
+  min_budget_usd: 0.011
+
+# Rules distilled from the team's "Feedback on papers" review.
+# All matching is case-insensitive, with hyphens treated as spaces.
+relevance:
+  # Title or abstract must mention a steel slag (not just "slag")
+  slag_terms:
+    - steel slag
+    - steelmaking slag
+    - stainless steel slag
+    - eaf slag
+    - bof slag
+    - ladle slag
+    - converter slag
+    - electric arc furnace slag
+    - basic oxygen furnace slag
+  # Title or abstract must touch a use case we extract (cementitious or CO2) ...
+  include_terms:
+    - cement
+    - concrete
+    - mortar
+    - binder
+    - clinker
+    - pozzolan
+    - hydration
+    - carbonation
+    - co2
+    - sequestration
+  # ... or the title must signal a characterization or utilization study. These words are
+  # title-only because nearly every abstract says "utilization" or "characterization".
+  include_title_terms:
+    - mineralogy
+    - mineralogical
+    - characterization
+    - characterisation
+    - chemical composition
+    - utilization
+    - utilisation
+    - valorization
+    - valorisation
+  # A title containing any of these is skipped (asphalt, soil, leaching, GGBFS feedback)
+  exclude_title_terms:
+    - asphalt
+    - bitumen
+    - bituminous
+    - soil
+    - subgrade
+    - groundwater
+    - geochemical
+    - slag heap
+    - blast furnace
+    - ggbfs
+    - ggbs
+
+drive:
+  # Move "No" papers here instead of deleting them, so the job never re-downloads them
+  rejected_subfolder_name: Rejected
+  # Papers with no downloadable PDF are listed here so daily runs stop retrying them
+  no_pdf_list_name: _fetcher_no_pdf_ids.txt
