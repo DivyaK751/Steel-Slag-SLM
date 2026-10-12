@@ -7,6 +7,7 @@ requires-python = ">=3.11"
 dependencies = [
     "google-api-python-client>=2.100",
     "google-auth>=2.23",
+    "google-auth-oauthlib>=1.5.0",
     "pydantic>=2.5",
     "python-dotenv>=1.0",
     "pyyaml>=6.0",
@@ -33,6 +34,8 @@ select = ["E", "F", "I", "B", "UP"]
 [tool.mypy]
 strict = true
 ignore_missing_imports = true
+# google-auth ships without type hints
+untyped_calls_exclude = ["google"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

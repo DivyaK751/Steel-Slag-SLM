@@ -2,9 +2,14 @@
 
 import io
 import re
+from pathlib import Path
 from typing import Any
 
-import google.auth
+from google.auth.credentials import Credentials
+from google.auth.transport.requests import Request
+from google.oauth2 import service_account
+from google.oauth2.credentials import Credentials as UserCredentials
+from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
@@ -20,9 +25,45 @@ _LIST_ALL_DRIVES = {**_ALL_DRIVES, "includeItemsFromAllDrives": True}
 _OPENALEX_ID_PATTERN = re.compile(r"^(W\d+)")
 
 
-def build_drive_service() -> Any:
-    """Create a Drive client from Application Default Credentials or a service account key."""
-    credentials, _ = google.auth.default(scopes=DRIVE_SCOPES)
+def _load_user_credentials(oauth_client_file: Path, token_file: Path) -> Credentials:
+    """Sign in with a personal Google account, reusing the saved login when possible."""
+    credentials: UserCredentials | None = None
+    if token_file.is_file():
+        credentials = UserCredentials.from_authorized_user_file(str(token_file), DRIVE_SCOPES)
+    if credentials and credentials.valid:
+        return credentials
+    if credentials and credentials.expired and credentials.refresh_token:
+        credentials.refresh(Request())
+    else:
+        # Opens a browser tab once; later runs reuse the saved token
+        flow = InstalledAppFlow.from_client_secrets_file(str(oauth_client_file), DRIVE_SCOPES)
+        credentials = flow.run_local_server(port=0)
+    assert credentials is not None
+    token_file.parent.mkdir(parents=True, exist_ok=True)
+    token_file.write_text(credentials.to_json())
+    return credentials
+
+
+def build_drive_service(
+    service_account_file: Path | None, oauth_client_file: Path | None, token_file: Path
+) -> Any:
+    """Create a Drive client from a service account key or, failing that, a personal login.
+
+    Raises:
+        ValueError: If neither a service account key nor an OAuth client file is given.
+    """
+    credentials: Credentials
+    if service_account_file:
+        credentials = service_account.Credentials.from_service_account_file(
+            str(service_account_file), scopes=DRIVE_SCOPES
+        )
+    elif oauth_client_file:
+        credentials = _load_user_credentials(oauth_client_file, token_file)
+    else:
+        raise ValueError(
+            "No Google sign-in configured: set GOOGLE_OAUTH_CLIENT_FILE (your own account) "
+            "or GOOGLE_APPLICATION_CREDENTIALS (service account) in .env"
+        )
     return build("drive", "v3", credentials=credentials, cache_discovery=False)
 
 
@@ -44,10 +85,17 @@ def _list_children(service: Any, folder_id: str, extra_query: str = "") -> list[
     items: list[dict[str, str]] = []
     page_token = None
     while True:
-        response = service.files().list(
-            q=query, fields="nextPageToken, files(id, name)", pageSize=1000,
-            pageToken=page_token, **_LIST_ALL_DRIVES,
-        ).execute()
+        response = (
+            service.files()
+            .list(
+                q=query,
+                fields="nextPageToken, files(id, name)",
+                pageSize=1000,
+                pageToken=page_token,
+                **_LIST_ALL_DRIVES,
+            )
+            .execute()
+        )
         items.extend(response.get("files", []))
         page_token = response.get("nextPageToken")
         if not page_token:
@@ -90,7 +138,9 @@ def upload_pdf(service: Any, folder_id: str, paper: Paper, pdf: bytes, pdf_sourc
         },
     }
     media = MediaIoBaseUpload(io.BytesIO(pdf), mimetype="application/pdf", resumable=True)
-    created = service.files().create(
-        body=metadata, media_body=media, fields="id", **_ALL_DRIVES
-    ).execute()
+    created = (
+        service.files()
+        .create(body=metadata, media_body=media, fields="id", **_ALL_DRIVES)
+        .execute()
+    )
     return str(created["id"])

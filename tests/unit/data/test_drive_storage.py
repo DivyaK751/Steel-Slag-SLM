@@ -1,4 +1,12 @@
-from steel_slag_slm.data.drive_storage import build_file_name, parse_openalex_id
+from pathlib import Path
+
+import pytest
+
+from steel_slag_slm.data.drive_storage import (
+    build_drive_service,
+    build_file_name,
+    parse_openalex_id,
+)
 from steel_slag_slm.schemas import Paper
 
 
@@ -16,3 +24,8 @@ def test_parse_openalex_id_reads_old_and_new_file_names() -> None:
 def test_file_name_round_trips_to_its_id() -> None:
     paper = Paper("W123", "Steel slag binders", "", None, None, None, None)
     assert parse_openalex_id(build_file_name(paper)) == "W123"
+
+
+def test_build_drive_service_requires_a_sign_in_method(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="No Google sign-in configured"):
+        build_drive_service(None, None, tmp_path / "token.json")
