@@ -24,13 +24,19 @@ def settings() -> Settings:
     )
 
 
+saved_no_pdf: set[str] = set()
+
+
 @pytest.fixture
 def uploads(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     """Fake Drive that already holds W1 and records every upload."""
     uploaded: list[str] = []
+    saved_no_pdf.clear()
     storage = drive_storage
     monkeypatch.setattr(storage, "list_known_paper_ids", lambda *_: {"W1"})
     monkeypatch.setattr(storage, "has_paper", lambda *_: False)
+    monkeypatch.setattr(storage, "read_id_list", lambda *_: {"W9"})
+    monkeypatch.setattr(storage, "write_id_list", lambda _s, _f, _n, ids: saved_no_pdf.update(ids))
     monkeypatch.setattr(
         storage, "upload_pdf", lambda _s, _f, paper, _pdf, _src: uploaded.append(paper.openalex_id)
     )
@@ -72,3 +78,12 @@ def test_run_fetch_respects_max_new_papers(settings: Settings, uploads: list[str
     client = _client({"q1": [_paper("W2"), _paper("W3")], "q2": [_paper("W4")]})
     fetch_papers.run_fetch(settings, MagicMock(), client, max_new_papers=2)
     assert uploads == ["W2", "W3"]
+
+
+def test_run_fetch_remembers_papers_without_a_pdf(settings: Settings, uploads: list[str]) -> None:
+    client = _client({"q1": [_paper("W9"), _paper("W2"), _paper("W3")], "q2": []})
+    client.download_pdf.side_effect = [None, (b"%PDF", "free")]
+    outcomes = fetch_papers.run_fetch(settings, MagicMock(), client, max_new_papers=None)
+    assert uploads == ["W3"]
+    assert outcomes["no_pdf_before"] == 1
+    assert saved_no_pdf == {"W9", "W2"}

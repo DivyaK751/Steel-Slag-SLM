@@ -39,6 +39,7 @@ class DriveSettings(BaseModel):
     """Layout of the shared Drive folder."""
 
     rejected_subfolder_name: str
+    no_pdf_list_name: str
 
 
 class Settings(BaseModel):

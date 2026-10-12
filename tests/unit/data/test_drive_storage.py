@@ -1,10 +1,12 @@
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
 from steel_slag_slm.data.drive_storage import (
     build_drive_service,
     build_file_name,
+    has_paper,
     parse_openalex_id,
 )
 from steel_slag_slm.schemas import Paper
@@ -29,3 +31,10 @@ def test_file_name_round_trips_to_its_id() -> None:
 def test_build_drive_service_requires_a_sign_in_method(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="No Google sign-in configured"):
         build_drive_service(None, None, tmp_path / "token.json")
+
+
+def test_has_paper_ignores_longer_ids_with_the_same_prefix() -> None:
+    service = MagicMock()
+    service.files().list().execute.return_value = {"files": [{"id": "1", "name": "W123 - x.pdf"}]}
+    assert not has_paper(service, "folder", "W12")
+    assert has_paper(service, "folder", "W123")

@@ -102,17 +102,18 @@ def _list_children(service: Any, folder_id: str, extra_query: str = "") -> list[
             return items
 
 
-def _find_subfolder_id(service: Any, parent_id: str, name: str) -> str | None:
+def _find_child_id(service: Any, parent_id: str, name: str, extra_query: str = "") -> str | None:
     escaped_name = name.replace("'", "\\'")
-    query = f" and mimeType = '{FOLDER_MIME_TYPE}' and name = '{escaped_name}'"
-    matches = _list_children(service, parent_id, query)
+    matches = _list_children(service, parent_id, f" and name = '{escaped_name}'{extra_query}")
     return matches[0]["id"] if matches else None
 
 
 def list_known_paper_ids(service: Any, folder_id: str, rejected_subfolder_name: str) -> set[str]:
     """Return OpenAlex IDs already in the folder or in its rejected subfolder."""
     folder_ids = [folder_id]
-    rejected_id = _find_subfolder_id(service, folder_id, rejected_subfolder_name)
+    rejected_id = _find_child_id(
+        service, folder_id, rejected_subfolder_name, f" and mimeType = '{FOLDER_MIME_TYPE}'"
+    )
     if rejected_id:
         folder_ids.append(rejected_id)
     names = [item["name"] for fid in folder_ids for item in _list_children(service, fid)]
@@ -121,7 +122,9 @@ def list_known_paper_ids(service: Any, folder_id: str, rejected_subfolder_name: 
 
 def has_paper(service: Any, folder_id: str, openalex_id: str) -> bool:
     """Check whether a teammate's run uploaded this paper since we listed the folder."""
-    return bool(_list_children(service, folder_id, f" and name contains '{openalex_id}'"))
+    matches = _list_children(service, folder_id, f" and name contains '{openalex_id}'")
+    # "contains" also matches longer IDs (W12 matches W123), so compare exactly
+    return any(parse_openalex_id(item["name"]) == openalex_id for item in matches)
 
 
 def upload_pdf(service: Any, folder_id: str, paper: Paper, pdf: bytes, pdf_source: str) -> str:
@@ -144,3 +147,24 @@ def upload_pdf(service: Any, folder_id: str, paper: Paper, pdf: bytes, pdf_sourc
         .execute()
     )
     return str(created["id"])
+
+
+def read_id_list(service: Any, folder_id: str, file_name: str) -> set[str]:
+    """Read IDs from a one-per-line text file in the folder; empty if the file doesn't exist."""
+    file_id = _find_child_id(service, folder_id, file_name)
+    if not file_id:
+        return set()
+    content: bytes = service.files().get_media(fileId=file_id, **_ALL_DRIVES).execute()
+    return {line.strip() for line in content.decode().splitlines() if line.strip()}
+
+
+def write_id_list(service: Any, folder_id: str, file_name: str, ids: set[str]) -> None:
+    """Save IDs one per line to a text file in the folder, replacing its previous contents."""
+    content = "\n".join(sorted(ids)).encode()
+    media = MediaIoBaseUpload(io.BytesIO(content), mimetype="text/plain")
+    file_id = _find_child_id(service, folder_id, file_name)
+    if file_id:
+        service.files().update(fileId=file_id, media_body=media, **_ALL_DRIVES).execute()
+    else:
+        body = {"name": file_name, "parents": [folder_id]}
+        service.files().create(body=body, media_body=media, **_ALL_DRIVES).execute()

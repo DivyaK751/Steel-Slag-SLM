@@ -33,19 +33,26 @@ def run_fetch(
 
     Returns:
         Counts of what happened to each paper: added_free, added_openalex, irrelevant,
-        already_known, no_pdf.
+        already_known, no_pdf_before, no_pdf.
     """
     folder_id = settings.drive_folder_id
+    no_pdf_list_name = settings.drive.no_pdf_list_name
     known_ids = drive_storage.list_known_paper_ids(
         drive_service, folder_id, settings.drive.rejected_subfolder_name
     )
-    logger.info("%d papers already in Drive", len(known_ids))
+    no_pdf_ids = drive_storage.read_id_list(drive_service, folder_id, no_pdf_list_name)
+    logger.info(
+        "%d papers already in Drive, %d known to have no PDF", len(known_ids), len(no_pdf_ids)
+    )
     outcomes: Counter[str] = Counter()
 
     try:
         for paper in _iter_unique_papers(client, settings.fetch.queries):
             if paper.openalex_id in known_ids:
                 outcomes["already_known"] += 1
+                continue
+            if paper.openalex_id in no_pdf_ids:
+                outcomes["no_pdf_before"] += 1
                 continue
             if not is_relevant(paper, settings.relevance):
                 outcomes["irrelevant"] += 1
@@ -58,6 +65,7 @@ def run_fetch(
                 continue
             download = client.download_pdf(paper)
             if download is None:
+                no_pdf_ids.add(paper.openalex_id)
                 outcomes["no_pdf"] += 1
                 continue
 
@@ -72,5 +80,9 @@ def run_fetch(
                 break
     except BudgetExhaustedError as error:
         logger.info("Stopping: %s", error)
+    finally:
+        # Saved even if the run crashes, so the next run doesn't retry these
+        if outcomes["no_pdf"]:
+            drive_storage.write_id_list(drive_service, folder_id, no_pdf_list_name, no_pdf_ids)
 
     return outcomes

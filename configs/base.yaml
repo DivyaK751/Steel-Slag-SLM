@@ -77,3 +77,5 @@ relevance:
 drive:
   # Move "No" papers here instead of deleting them, so the job never re-downloads them
   rejected_subfolder_name: Rejected
+  # Papers with no downloadable PDF are listed here so daily runs stop retrying them
+  no_pdf_list_name: _fetcher_no_pdf_ids.txt
