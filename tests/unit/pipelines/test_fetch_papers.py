@@ -4,9 +4,10 @@ import pytest
 import yaml
 from pydantic import SecretStr
 
+import steel_slag_slm.pipelines.fetch_papers as fetch_papers
 from steel_slag_slm.config import BASE_CONFIG_PATH, Settings
+from steel_slag_slm.data import drive_storage
 from steel_slag_slm.exceptions import BudgetExhaustedError
-from steel_slag_slm.pipelines import fetch_papers
 from steel_slag_slm.schemas import Paper
 
 
@@ -27,7 +28,7 @@ def settings() -> Settings:
 def uploads(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     """Fake Drive that already holds W1 and records every upload."""
     uploaded: list[str] = []
-    storage = fetch_papers.drive_storage
+    storage = drive_storage
     monkeypatch.setattr(storage, "list_known_paper_ids", lambda *_: {"W1"})
     monkeypatch.setattr(storage, "has_paper", lambda *_: False)
     monkeypatch.setattr(

@@ -14,13 +14,20 @@ from steel_slag_slm.exceptions import BudgetExhaustedError
 from steel_slag_slm.schemas import Paper
 
 SETTINGS = FetchSettings(
-    queries=["steel slag"], search_filter="is_oa:true", sort="cited_by_count:desc",
-    per_page=200, max_pages_per_query=1, request_timeout_s=1, min_budget_usd=0.011,
+    queries=["steel slag"],
+    search_filter="is_oa:true",
+    sort="cited_by_count:desc",
+    per_page=200,
+    max_pages_per_query=1,
+    request_timeout_s=1,
+    min_budget_usd=0.011,
 )
 PAPER = Paper("W1", "t", "", None, None, "https://free.example/p.pdf", "https://paid.example/p")
 
 
-def _response(status: int = 200, content: bytes = b"%PDF-1.7", headers: dict[str, str] | None = None):
+def _response(
+    status: int = 200, content: bytes = b"%PDF-1.7", headers: dict[str, str] | None = None
+) -> MagicMock:
     response = MagicMock(spec=requests.Response)
     response.status_code = status
     response.ok = status < 400
@@ -42,15 +49,18 @@ def test_rebuild_abstract_orders_words_by_position() -> None:
 
 
 def test_parse_work_extracts_short_id_and_pdf_urls() -> None:
-    paper = parse_work({
-        "id": "https://openalex.org/W2068066265",
-        "title": "An Overview of Utilization of Steel Slag",
-        "publication_year": 2012,
-        "best_oa_location": {"pdf_url": "https://free.example/p.pdf"},
-        "content_urls": {"pdf": "https://content.openalex.org/works/W2068066265.pdf"},
-    })
+    paper = parse_work(
+        {
+            "id": "https://openalex.org/W2068066265",
+            "title": "An Overview of Utilization of Steel Slag",
+            "publication_year": 2012,
+            "best_oa_location": {"pdf_url": "https://free.example/p.pdf"},
+            "content_urls": {"pdf": "https://content.openalex.org/works/W2068066265.pdf"},
+        }
+    )
     assert paper.openalex_id == "W2068066265"
     assert paper.free_pdf_url == "https://free.example/p.pdf"
+    assert paper.paid_pdf_url is not None
     assert paper.paid_pdf_url.endswith("W2068066265.pdf")
 
 

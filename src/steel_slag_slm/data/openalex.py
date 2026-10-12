@@ -32,7 +32,9 @@ def rebuild_abstract(inverted_index: dict[str, list[int]] | None) -> str:
     """Turn OpenAlex's word -> positions index back into plain abstract text."""
     if not inverted_index:
         return ""
-    positions = {pos: word for word, word_positions in inverted_index.items() for pos in word_positions}
+    positions = {
+        pos: word for word, word_positions in inverted_index.items() for pos in word_positions
+    }
     return " ".join(positions[pos] for pos in sorted(positions))
 
 
@@ -59,7 +61,10 @@ class OpenAlexClient:
     """OpenAlex access for one API key, tracking how much of its daily budget is left."""
 
     def __init__(
-        self, api_key: str, contact_email: str, settings: FetchSettings,
+        self,
+        api_key: str,
+        contact_email: str,
+        settings: FetchSettings,
         session: requests.Session | None = None,
     ) -> None:
         self._api_key = api_key
@@ -73,7 +78,9 @@ class OpenAlexClient:
         """GET a billed OpenAlex endpoint, raising once the daily budget is gone."""
         params = {**params, "api_key": self._api_key}
         for attempt in range(2):
-            response = self._session.get(url, params=params, timeout=self._settings.request_timeout_s)
+            response = self._session.get(
+                url, params=params, timeout=self._settings.request_timeout_s
+            )
             self.remaining_budget_usd = parse_remaining_budget(response.headers)
             if response.status_code != 429:
                 return response
@@ -88,13 +95,16 @@ class OpenAlexClient:
         for _ in range(self._settings.max_pages_per_query):
             if not cursor:
                 return
-            response = self._billed_get(WORKS_URL, {
-                "search": query,
-                "filter": self._settings.search_filter,
-                "sort": self._settings.sort,
-                "per_page": self._settings.per_page,
-                "cursor": cursor,
-            })
+            response = self._billed_get(
+                WORKS_URL,
+                {
+                    "search": query,
+                    "filter": self._settings.search_filter,
+                    "sort": self._settings.sort,
+                    "per_page": self._settings.per_page,
+                    "cursor": cursor,
+                },
+            )
             response.raise_for_status()
             page = response.json()
             cursor = page.get("meta", {}).get("next_cursor")
