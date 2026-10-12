@@ -50,9 +50,11 @@ Google only lets a registered app ask for a login.
 2. **APIs & Services → Library**, search **Google Drive API**, click **Enable**.
 3. **Google Auth Platform → Branding** (older consoles: **APIs & Services → OAuth consent
    screen**): fill in an app name (e.g. `Steel Slag Fetcher`) and your email, then save.
-4. **Audience**: if asked for a user type, choose **External**. Then click **Publish app** so
-   the status says **In production**. This matters: in "Testing" status Google ends the
-   login after 7 days and the nightly job stops.
+4. **Audience**: if the project is under **columbia.edu** (shown on the console's welcome page),
+   choose **Internal**: only Columbia accounts can sign in, there's no "unverified app"
+   warning, and the login doesn't expire. Otherwise choose **External** and click **Publish
+   app** so the status says **In production**; in "Testing" status Google ends the login
+   after 7 days and the nightly job stops.
 5. **Clients → Create client → Desktop app** (older consoles: **Credentials → Create
    credentials → OAuth client ID → Desktop app**), click **Create**, then **Download JSON**.
 6. Save it as `~/keys/steel_slag_oauth_client.json`:
@@ -82,8 +84,8 @@ uv run fetch-papers --max-papers 1
 ```
 
 A browser tab opens. Sign in with the **account that owns the folder** (e.g. your LionMail).
-Google warns "Google hasn't verified this app": click **Advanced → Go to Steel Slag Fetcher
-(unsafe)** (it's your own app), then **Continue / Allow**. The run should end with a
+With an **External** app Google warns "Google hasn't verified this app": click **Advanced → Go
+to Steel Slag Fetcher (unsafe)** (it's your own app). Then click **Continue / Allow**. The run should end with a
 `Summary:` line and one new PDF in the folder.
 
 The login is now saved in `~/.config/steel_slag_slm/google_token.json`. **This file gives full
@@ -98,7 +100,7 @@ secret**, and add each of these:
 
 | Secret name | Value |
 |---|---|
-| `OPENALEX_API_KEY_1` … `OPENALEX_API_KEY_5` | One member's OpenAlex key each |
+| `OPENALEX_API_KEY_YASSINE`, `OPENALEX_API_KEY_DIVYA`, `OPENALEX_API_KEY_LAKSHYA`, `OPENALEX_API_KEY_ANISHA`, `OPENALEX_API_KEY_KANE` | Each member's own OpenAlex key |
 | `OPENALEX_CONTACT_EMAIL` | A contact email; OpenAlex and publishers ask for one |
 | `DRIVE_FOLDER_ID` | The folder ID, just the ID: no URL, no quotes |
 | `GOOGLE_OAUTH_TOKEN_JSON` | The **entire contents** of `~/.config/steel_slag_slm/google_token.json` from step 3 |
@@ -111,7 +113,7 @@ With the GitHub CLI instead (`brew install gh`, then `gh auth login`), from the 
 The first prompts for the value; the second reads the file directly:
 
 ```bash
-gh secret set OPENALEX_API_KEY_1
+gh secret set OPENALEX_API_KEY_YASSINE
 ```
 
 ```bash
@@ -187,7 +189,7 @@ the nightly job runs is safe: the re-check before each download prevents duplica
 
 | Symptom | Cause and fix |
 |---|---|
-| Run log says `No OPENALEX_API_KEY_N secret set; skipping` | That member's key isn't in GitHub secrets (step 4). Harmless. |
+| Run log says `No OPENALEX_API_KEY_<NAME> secret set; skipping` | That member's key isn't in GitHub secrets (step 4). Harmless. |
 | `404 File not found` from Drive | The account the job signs in as can't see the folder, or `DRIVE_FOLDER_ID` has extra text (URL, quotes). Re-enter just the ID. |
 | `storageQuotaExceeded` / "Service Accounts do not have storage quota" | The job is using the service account on a My Drive folder. Set `GOOGLE_OAUTH_TOKEN_JSON` (steps 3–4). |
 | `The saved Google login ... is missing or no longer valid` | The login expired or was revoked (or the app was left in "Testing"). Redo step 3 (delete `~/.config/steel_slag_slm/google_token.json` first) and update the `GOOGLE_OAUTH_TOKEN_JSON` secret. |

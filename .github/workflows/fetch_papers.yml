@@ -18,7 +18,8 @@ jobs:
       max-parallel: 1
       fail-fast: false
       matrix:
-        member: [1, 2, 3, 4, 5]
+        # Each name reads the secret OPENALEX_API_KEY_<NAME>
+        member: [YASSINE, DIVYA, LAKSHYA, ANISHA, KANE]
     env:
       OPENALEX_API_KEY: ${{ secrets[format('OPENALEX_API_KEY_{0}', matrix.member)] }}
       OPENALEX_CONTACT_EMAIL: ${{ secrets.OPENALEX_CONTACT_EMAIL }}
