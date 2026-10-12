@@ -27,25 +27,73 @@ used up.
   shared folder instead of deleting them. The job checks that subfolder too and never
   downloads them again.
 
+### Google Drive access
+
+Having access to the folder yourself is not enough: the script has to sign in to Google as
+someone who can edit the folder. There are two ways, and `.env` sets exactly one of them.
+
+| Who signs in | Used for | `.env` setting |
+|---|---|---|
+| **You**, with your own Google account | Running it on your machine | `GOOGLE_OAUTH_CLIENT_FILE` |
+| A **service account** (a robot Google account) | The daily GitHub Actions job | `GOOGLE_APPLICATION_CREDENTIALS` |
+
+#### Your own account (local runs)
+
+Google only lets registered apps ask for a login, so **one person registers the app once**
+and shares the file with the team:
+
+1. Go to <https://console.cloud.google.com>, create a project (e.g. `steel-slag`), then open
+   **APIs & Services → Library** and enable **Google Drive API**.
+2. **APIs & Services → OAuth consent screen**: choose **Internal** if it's offered (only
+   people at the university can sign in). If only **External** is offered, pick it and add
+   all five teammates' emails under **Test users**.
+3. **APIs & Services → Credentials → Create credentials → OAuth client ID**, application type
+   **Desktop app**. Download the JSON file.
+4. Share that JSON with the team privately (e.g. in the shared Drive). Never commit it.
+
+**Each member** then does:
+
+1. Save the JSON as `~/keys/steel_slag_oauth_client.json`.
+2. In `.env`, set `GOOGLE_OAUTH_CLIENT_FILE=~/keys/steel_slag_oauth_client.json` and leave
+   `GOOGLE_APPLICATION_CREDENTIALS` commented out.
+3. Run `uv run fetch-papers --max-papers 3`. A browser tab opens: sign in with the Google
+   account that can edit the folder and click **Allow**.
+
+The login is saved in `~/.config/steel_slag_slm/google_token.json`, so later runs don't open
+the browser. To sign in as someone else, delete that file. With an **External** app in
+testing mode, Google expires the login after 7 days; delete the file and sign in again.
+
+#### Service account (daily background job)
+
+A scheduled job can't click **Allow** in a browser, so it signs in as a service account:
+
+1. In the same Google Cloud project: **IAM & Admin → Service Accounts → Create service
+   account** (e.g. `paper-fetcher`). Skip the optional role steps.
+2. Open it → **Keys → Add key → Create new key → JSON**. Keep the file out of the repo.
+3. In Drive, open the shared drive → **Manage members**, add the service account's email
+   (`paper-fetcher@<project>.iam.gserviceaccount.com`) as **Content manager**.
+
+The folder must be in a **Shared Drive**: a service account has no storage of its own, so
+uploads into someone's "My Drive" fail.
+
 ### Run it on your machine
 
 ```bash
-gcloud auth application-default login --scopes=https://www.googleapis.com/auth/drive,https://www.googleapis.com/auth/cloud-platform
-uv run fetch-papers --max-papers 5
+uv run fetch-papers --max-papers 3   # small trial run
+uv run fetch-papers                  # run until today's budget is used up
 ```
 
 ### Daily background job (GitHub Actions)
 
 `.github/workflows/fetch_papers.yml` runs every day at 00:15 UTC. It runs each member's key in
 turn, so up to 5 × the daily budget is spent without two runs fetching the same paper. It
-can also be started by hand from the repo's **Actions** tab.
+can also be started by hand from the repo's **Actions** tab. GitHub only runs scheduled jobs
+from `main`, so it starts once this is merged.
 
-One-time setup:
+One-time setup, after creating the service account above: in GitHub → **Settings → Secrets
+and variables → Actions**, add:
 
-1. Create a Google Cloud service account, enable the Drive API, and download its JSON key.
-2. Add the service account's email to the shared drive as a **Content manager**.
-3. In GitHub → Settings → Secrets and variables → Actions, add:
-   - `OPENALEX_API_KEY_1` … `OPENALEX_API_KEY_5`, one per member (missing ones are skipped)
-   - `OPENALEX_CONTACT_EMAIL`
-   - `DRIVE_FOLDER_ID`
-   - `GOOGLE_SERVICE_ACCOUNT_JSON` (the full key file contents)
+- `OPENALEX_API_KEY_1` … `OPENALEX_API_KEY_5`, one per member (missing ones are skipped)
+- `OPENALEX_CONTACT_EMAIL`
+- `DRIVE_FOLDER_ID`
+- `GOOGLE_SERVICE_ACCOUNT_JSON` (the full contents of the service account's JSON key)
