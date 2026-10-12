@@ -3,7 +3,7 @@
 import argparse
 import logging
 
-from steel_slag_slm.config import GOOGLE_TOKEN_PATH, load_settings
+from steel_slag_slm.config import load_settings
 from steel_slag_slm.data.drive_storage import build_drive_service
 from steel_slag_slm.data.openalex import OpenAlexClient
 from steel_slag_slm.pipelines.fetch_papers import run_fetch
@@ -26,7 +26,9 @@ def fetch_papers() -> None:
         settings.openalex_api_key.get_secret_value(), settings.contact_email, settings.fetch
     )
     drive_service = build_drive_service(
-        settings.google_service_account_file, settings.google_oauth_client_file, GOOGLE_TOKEN_PATH
+        settings.google_service_account_file,
+        settings.google_oauth_client_file,
+        settings.google_oauth_token_file,
     )
     outcomes = run_fetch(settings, drive_service, client, args.max_papers)
 

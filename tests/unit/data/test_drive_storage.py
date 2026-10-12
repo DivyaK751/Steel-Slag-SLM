@@ -38,3 +38,12 @@ def test_has_paper_ignores_longer_ids_with_the_same_prefix() -> None:
     service.files().list().execute.return_value = {"files": [{"id": "1", "name": "W123 - x.pdf"}]}
     assert not has_paper(service, "folder", "W12")
     assert has_paper(service, "folder", "W123")
+
+
+def test_build_drive_service_without_client_file_fails_clearly_on_a_bad_saved_login(
+    tmp_path: Path,
+) -> None:
+    token_file = tmp_path / "token.json"
+    token_file.write_text('{"client_id": "x", "client_secret": "y", "refresh_token": ""}')
+    with pytest.raises(RuntimeError, match="GOOGLE_OAUTH_TOKEN_JSON"):
+        build_drive_service(None, None, token_file)

@@ -25,8 +25,13 @@ _LIST_ALL_DRIVES = {**_ALL_DRIVES, "includeItemsFromAllDrives": True}
 _OPENALEX_ID_PATTERN = re.compile(r"^(W\d+)")
 
 
-def _load_user_credentials(oauth_client_file: Path, token_file: Path) -> Credentials:
-    """Sign in with a personal Google account, reusing the saved login when possible."""
+def _load_user_credentials(oauth_client_file: Path | None, token_file: Path) -> Credentials:
+    """Sign in with a personal Google account, reusing the saved login when possible.
+
+    Raises:
+        RuntimeError: If the saved login can't be refreshed and no OAuth client file is
+            available to open a browser sign-in (e.g. on GitHub Actions).
+    """
     credentials: UserCredentials | None = None
     if token_file.is_file():
         credentials = UserCredentials.from_authorized_user_file(str(token_file), DRIVE_SCOPES)
@@ -34,10 +39,16 @@ def _load_user_credentials(oauth_client_file: Path, token_file: Path) -> Credent
         return credentials
     if credentials and credentials.expired and credentials.refresh_token:
         credentials.refresh(Request())
-    else:
+    elif oauth_client_file:
         # Opens a browser tab once; later runs reuse the saved token
         flow = InstalledAppFlow.from_client_secrets_file(str(oauth_client_file), DRIVE_SCOPES)
         credentials = flow.run_local_server(port=0)
+    else:
+        raise RuntimeError(
+            f"The saved Google login at {token_file} is missing or no longer valid. "
+            "Sign in again locally with `uv run fetch-papers`, then update the "
+            "GOOGLE_OAUTH_TOKEN_JSON secret."
+        )
     assert credentials is not None
     token_file.parent.mkdir(parents=True, exist_ok=True)
     token_file.write_text(credentials.to_json())
@@ -49,15 +60,17 @@ def build_drive_service(
 ) -> Any:
     """Create a Drive client from a service account key or, failing that, a personal login.
 
+    A saved personal login (token_file) works on its own, which is how GitHub Actions signs in.
+
     Raises:
-        ValueError: If neither a service account key nor an OAuth client file is given.
+        ValueError: If no service account key, OAuth client file, or saved login is available.
     """
     credentials: Credentials
     if service_account_file:
         credentials = service_account.Credentials.from_service_account_file(
             str(service_account_file), scopes=DRIVE_SCOPES
         )
-    elif oauth_client_file:
+    elif oauth_client_file or token_file.is_file():
         credentials = _load_user_credentials(oauth_client_file, token_file)
     else:
         raise ValueError(
