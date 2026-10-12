@@ -11,7 +11,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CONFIGS_DIR = PROJECT_ROOT / "configs"
 BASE_CONFIG_PATH = CONFIGS_DIR / "base.yaml"
 # Kept outside the repo so a personal Google login can never be committed
-GOOGLE_TOKEN_PATH = Path.home() / ".config" / "steel_slag_slm" / "google_token.json"
+DEFAULT_GOOGLE_TOKEN_PATH = Path.home() / ".config" / "steel_slag_slm" / "google_token.json"
 
 
 class FetchSettings(BaseModel):
@@ -54,6 +54,7 @@ class Settings(BaseModel):
     # Exactly one Google sign-in is used: a service account (CI) or a personal login (local)
     google_service_account_file: Path | None = None
     google_oauth_client_file: Path | None = None
+    google_oauth_token_file: Path = DEFAULT_GOOGLE_TOKEN_PATH
 
 
 def _require_env(name: str) -> str:
@@ -84,4 +85,8 @@ def load_settings(config_path: Path = BASE_CONFIG_PATH) -> Settings:
         drive_folder_id=_require_env("DRIVE_FOLDER_ID"),
         google_service_account_file=_optional_path_env("GOOGLE_APPLICATION_CREDENTIALS"),
         google_oauth_client_file=_optional_path_env("GOOGLE_OAUTH_CLIENT_FILE"),
+        # Unlike the paths above this may not exist yet: the first sign-in creates it
+        google_oauth_token_file=Path(
+            os.environ.get("GOOGLE_OAUTH_TOKEN_FILE", "").strip() or DEFAULT_GOOGLE_TOKEN_PATH
+        ).expanduser(),
     )
