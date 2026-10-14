@@ -7,7 +7,7 @@ from pydantic import SecretStr
 import steel_slag_slm.pipelines.fetch_papers as fetch_papers
 from steel_slag_slm.config import BASE_CONFIG_PATH, Settings
 from steel_slag_slm.data import drive_storage
-from steel_slag_slm.exceptions import BudgetExhaustedError
+from steel_slag_slm.exceptions import BudgetExhaustedError, OpenAlexRequestError
 from steel_slag_slm.schemas import Paper
 
 
@@ -87,3 +87,29 @@ def test_run_fetch_remembers_papers_without_a_pdf(settings: Settings, uploads: l
     assert uploads == ["W3"]
     assert outcomes["no_pdf_before"] == 1
     assert saved_no_pdf == {"W9", "W2"}
+
+
+def test_run_fetch_skips_failed_download_without_marking_it_as_no_pdf(
+    settings: Settings, uploads: list[str]
+) -> None:
+    client = _client({"q1": [_paper("W2"), _paper("W3")], "q2": []})
+    client.download_pdf.side_effect = [OpenAlexRequestError("timed out"), (b"%PDF", "free")]
+    outcomes = fetch_papers.run_fetch(settings, MagicMock(), client, max_new_papers=None)
+    assert uploads == ["W3"]
+    assert outcomes["download_error"] == 1
+    assert "W2" not in saved_no_pdf
+
+
+def test_run_fetch_moves_to_next_query_when_a_search_fails(
+    settings: Settings, uploads: list[str]
+) -> None:
+    def iter_papers(query: str):  # type: ignore[no-untyped-def]
+        if query == "q1":
+            yield _paper("W2")
+            raise OpenAlexRequestError("connection dropped")
+        yield _paper("W4")
+
+    client = _client({})
+    client.iter_papers.side_effect = iter_papers
+    fetch_papers.run_fetch(settings, MagicMock(), client, max_new_papers=None)
+    assert uploads == ["W2", "W4"]

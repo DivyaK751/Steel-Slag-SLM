@@ -9,7 +9,7 @@ from steel_slag_slm.config import Settings
 from steel_slag_slm.data import drive_storage
 from steel_slag_slm.data.openalex import OpenAlexClient
 from steel_slag_slm.data.relevance import is_relevant
-from steel_slag_slm.exceptions import BudgetExhaustedError
+from steel_slag_slm.exceptions import BudgetExhaustedError, OpenAlexRequestError
 from steel_slag_slm.schemas import Paper
 
 logger = logging.getLogger(__name__)
@@ -20,10 +20,13 @@ def _iter_unique_papers(client: OpenAlexClient, queries: list[str]) -> Iterator[
     seen_ids: set[str] = set()
     for query in queries:
         logger.info("Searching: %s", query)
-        for paper in client.iter_papers(query):
-            if paper.openalex_id not in seen_ids:
-                seen_ids.add(paper.openalex_id)
-                yield paper
+        try:
+            for paper in client.iter_papers(query):
+                if paper.openalex_id not in seen_ids:
+                    seen_ids.add(paper.openalex_id)
+                    yield paper
+        except OpenAlexRequestError as error:
+            logger.warning("Search for %s failed, moving to the next query: %s", query, error)
 
 
 def run_fetch(
@@ -33,7 +36,7 @@ def run_fetch(
 
     Returns:
         Counts of what happened to each paper: added_free, added_openalex, irrelevant,
-        already_known, no_pdf_before, no_pdf.
+        already_known, no_pdf_before, no_pdf, download_error.
     """
     folder_id = settings.drive_folder_id
     no_pdf_list_name = settings.drive.no_pdf_list_name
@@ -63,7 +66,13 @@ def run_fetch(
                 known_ids.add(paper.openalex_id)
                 outcomes["already_known"] += 1
                 continue
-            download = client.download_pdf(paper)
+            try:
+                download = client.download_pdf(paper)
+            except OpenAlexRequestError as error:
+                # A network hiccup, not a missing PDF: stay off the no-PDF list so tomorrow retries
+                logger.warning("Download failed for %s, skipping: %s", paper.openalex_id, error)
+                outcomes["download_error"] += 1
+                continue
             if download is None:
                 no_pdf_ids.add(paper.openalex_id)
                 outcomes["no_pdf"] += 1

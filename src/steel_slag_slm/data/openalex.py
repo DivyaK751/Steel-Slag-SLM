@@ -8,7 +8,7 @@ from typing import Any
 import requests
 
 from steel_slag_slm.config import FetchSettings
-from steel_slag_slm.exceptions import BudgetExhaustedError
+from steel_slag_slm.exceptions import BudgetExhaustedError, OpenAlexRequestError
 from steel_slag_slm.schemas import Paper
 
 logger = logging.getLogger(__name__)
@@ -75,12 +75,22 @@ class OpenAlexClient:
         self.remaining_budget_usd: float | None = None
 
     def _billed_get(self, url: str, params: dict[str, Any]) -> requests.Response:
-        """GET a billed OpenAlex endpoint, raising once the daily budget is gone."""
+        """GET a billed OpenAlex endpoint, raising once the daily budget is gone.
+
+        Raises:
+            BudgetExhaustedError: If OpenAlex keeps answering 429.
+            OpenAlexRequestError: If the request times out, drops, or returns a 5xx error.
+        """
         params = {**params, "api_key": self._api_key}
         for attempt in range(2):
-            response = self._session.get(
-                url, params=params, timeout=self._settings.request_timeout_s
-            )
+            try:
+                response = self._session.get(
+                    url, params=params, timeout=self._settings.request_timeout_s
+                )
+                if response.status_code >= 500:
+                    response.raise_for_status()
+            except requests.RequestException as error:
+                raise OpenAlexRequestError(f"OpenAlex request failed: {error}") from error
             self.remaining_budget_usd = parse_remaining_budget(response.headers)
             if response.status_code != 429:
                 return response
@@ -119,6 +129,7 @@ class OpenAlexClient:
 
         Raises:
             BudgetExhaustedError: If a paid download is needed but the budget is used up.
+            OpenAlexRequestError: If the paid download fails for a temporary reason.
         """
         if paper.free_pdf_url:
             try:
