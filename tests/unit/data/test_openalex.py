@@ -10,7 +10,7 @@ from steel_slag_slm.data.openalex import (
     parse_work,
     rebuild_abstract,
 )
-from steel_slag_slm.exceptions import BudgetExhaustedError
+from steel_slag_slm.exceptions import BudgetExhaustedError, OpenAlexRequestError
 from steel_slag_slm.schemas import Paper
 
 SETTINGS = FetchSettings(
@@ -36,7 +36,7 @@ def _response(
     return response
 
 
-def _client(*responses: MagicMock) -> OpenAlexClient:
+def _client(*responses: MagicMock | Exception) -> OpenAlexClient:
     session = MagicMock()
     session.headers = {}
     session.get.side_effect = list(responses)
@@ -91,4 +91,18 @@ def test_download_pdf_raises_after_repeated_429(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr("steel_slag_slm.data.openalex.time.sleep", lambda _: None)
     client = _client(_response(content=b"<html>"), _response(429), _response(429))
     with pytest.raises(BudgetExhaustedError):
+        client.download_pdf(PAPER)
+
+
+def test_download_pdf_raises_request_error_when_paid_download_times_out() -> None:
+    client = _client(_response(content=b"<html>"), requests.ReadTimeout("read timed out"))
+    with pytest.raises(OpenAlexRequestError):
+        client.download_pdf(PAPER)
+
+
+def test_download_pdf_raises_request_error_on_server_error() -> None:
+    server_error = _response(status=503, content=b"")
+    server_error.raise_for_status.side_effect = requests.HTTPError("503")
+    client = _client(_response(content=b"<html>"), server_error)
+    with pytest.raises(OpenAlexRequestError):
         client.download_pdf(PAPER)

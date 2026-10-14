@@ -21,6 +21,8 @@ MAX_TITLE_CHARS_IN_NAME = 120
 # Shared-drive flags every call needs, or Drive silently ignores shared drives
 _ALL_DRIVES = {"supportsAllDrives": True}
 _LIST_ALL_DRIVES = {**_ALL_DRIVES, "includeItemsFromAllDrives": True}
+# Retries Google's temporary errors (5xx, rate limits) with backoff before giving up
+DRIVE_RETRIES = 3
 
 _OPENALEX_ID_PATTERN = re.compile(r"^(W\d+)")
 
@@ -107,7 +109,7 @@ def _list_children(service: Any, folder_id: str, extra_query: str = "") -> list[
                 pageToken=page_token,
                 **_LIST_ALL_DRIVES,
             )
-            .execute()
+            .execute(num_retries=DRIVE_RETRIES)
         )
         items.extend(response.get("files", []))
         page_token = response.get("nextPageToken")
@@ -157,7 +159,7 @@ def upload_pdf(service: Any, folder_id: str, paper: Paper, pdf: bytes, pdf_sourc
     created = (
         service.files()
         .create(body=metadata, media_body=media, fields="id", **_ALL_DRIVES)
-        .execute()
+        .execute(num_retries=DRIVE_RETRIES)
     )
     return str(created["id"])
 
@@ -167,7 +169,9 @@ def read_id_list(service: Any, folder_id: str, file_name: str) -> set[str]:
     file_id = _find_child_id(service, folder_id, file_name)
     if not file_id:
         return set()
-    content: bytes = service.files().get_media(fileId=file_id, **_ALL_DRIVES).execute()
+    content: bytes = (
+        service.files().get_media(fileId=file_id, **_ALL_DRIVES).execute(num_retries=DRIVE_RETRIES)
+    )
     return {line.strip() for line in content.decode().splitlines() if line.strip()}
 
 
@@ -177,7 +181,11 @@ def write_id_list(service: Any, folder_id: str, file_name: str, ids: set[str]) -
     media = MediaIoBaseUpload(io.BytesIO(content), mimetype="text/plain")
     file_id = _find_child_id(service, folder_id, file_name)
     if file_id:
-        service.files().update(fileId=file_id, media_body=media, **_ALL_DRIVES).execute()
+        service.files().update(fileId=file_id, media_body=media, **_ALL_DRIVES).execute(
+            num_retries=DRIVE_RETRIES
+        )
     else:
         body = {"name": file_name, "parents": [folder_id]}
-        service.files().create(body=body, media_body=media, **_ALL_DRIVES).execute()
+        service.files().create(body=body, media_body=media, **_ALL_DRIVES).execute(
+            num_retries=DRIVE_RETRIES
+        )
