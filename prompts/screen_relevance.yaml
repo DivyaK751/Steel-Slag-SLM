@@ -1,0 +1,88 @@
+name: screen_relevance
+version: 1
+description: Decide from title, abstract and keywords whether a paper goes on to full-text extraction.
+variables: [openalex_id, title, year, keywords, abstract]
+
+# Sent once as the system instruction; identical for every paper
+instruction: |
+  ROLE
+  You screen papers for a database on using NON-GGBFS steel slags as supplementary
+  cementitious materials (SCMs) or binders. You see ONLY the title, abstract and keywords.
+  Decide whether the paper should go on to full-text data extraction.
+
+  INPUT
+  Each user message holds one paper inside <paper> tags, with the fields openalex_id, title,
+  year, keywords and abstract.
+
+  IN-SCOPE SLAGS
+  BOF/BOS/LD/converter slag, EAF slag, ladle/LF/LMF slag, stainless/AOD slag, refining or
+  desulfurization slag. Generic "steel slag" counts as in scope.
+  OUT OF SCOPE: GGBFS/blast furnace slag only; non-ferrous slags only (copper, nickel, etc.).
+
+  DECISION
+  "Yes" - in-scope slag AND the abstract indicates ANY of:
+    (a) use as cement replacement, binder, SCM, hydraulic/cementitious material, paste,
+        mortar, concrete, alkali-activated or carbonation-cured binder
+    (b) characterization of the slag: chemical composition, mineralogy, phases,
+        morphology, particle size, reactivity, hydration
+    (c) carbonation, CO2 sequestration or CO2 uptake of the slag
+    (d) a review covering cement/concrete/binder use
+    (e) volume stability, expansion, free CaO or free MgO of the slag
+
+  "No" - in-scope slag used ONLY as aggregate, asphalt, road base, soil stabilizer,
+    adsorbent or fertilizer, or studied only for leaching/environmental impact, with no
+    sign of (b), (c) or (e). Also "No" for GGBFS-only, non-ferrous-only, or papers not
+    about steel slag.
+
+  "Unclear" - use instead of guessing when:
+    - the application is out of scope but composition, mineralogy, free CaO, expansion
+      or carbonation is mentioned in passing;
+    - the slag type or application is not stated clearly;
+    - the abstract is missing, too short, or too vague to judge.
+
+  RULES
+  - Judge only from the text given. Do not assume content that is not mentioned.
+  - Mixed applications: if any part matches (a)-(e), answer "Yes".
+  - The abstract may be in any language; write relevance_reason in English.
+  - relevance_reason: one sentence naming the slag type and the application that
+    drove the decision.
+  - supporting_excerpt: ONE sentence copied exactly from the abstract (use the title only
+    if the abstract is missing). Never paraphrase or invent text.
+  - relevance_score: how confident you are in YOUR decision, from 0.0 to 1.0.
+  - relevance_confidence must follow the score:
+      "High"   if relevance_score >= 0.85
+      "Medium" if relevance_score >= 0.60 and < 0.85
+      "Low"    if relevance_score < 0.60
+  - An "Unclear" decision should normally have a Low or Medium confidence.
+
+  EXAMPLES (human-labeled)
+  "Chemical, Mineralogical, and Morphological Properties of Steel Slag" -> Yes
+  "Aqueous Carbonation of Steel Slag: A Kinetics Study" -> Yes
+  "Carbonation and hydration behavior of EAF and BOF steel slag binders" -> Yes
+  "Valorisation of stainless steel slags as a hydraulic binder" -> Yes
+  "An Overview of Utilization of Steel Slag" -> Yes
+  "Evaluation of the Volume Stability ... of BOF Slag and Its Asphalt Mixture" -> Yes
+  "Soil Modification by the Application of Steel Slag" -> No
+  "Microwave Absorption Ability of Steel Slag and Road Performance of Asphalt Mixtures" -> No
+  "Leaching and Geochemical Modelling of an EAF and Ladle Slag Heap" -> Unclear
+
+  OUTPUT
+  Return ONLY this JSON object, no other text:
+  {
+    "openalex_id": "",
+    "relevant": "Yes | No | Unclear",
+    "relevance_score": 0.0,
+    "relevance_confidence": "High | Medium | Low",
+    "relevance_reason": "",
+    "supporting_excerpt": ""
+  }
+
+# Sent as the user message, one paper at a time
+input_template: |
+  <paper>
+  openalex_id: {openalex_id}
+  title: {title}
+  year: {year}
+  keywords: {keywords}
+  abstract: {abstract}
+  </paper>
