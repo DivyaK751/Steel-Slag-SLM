@@ -14,3 +14,6 @@ class Paper:
     year: int | None
     free_pdf_url: str | None  # publisher or repository copy, costs nothing
     paid_pdf_url: str | None  # OpenAlex cached copy, billed per download
+    authors: tuple[str, ...] = ()
+    keywords: tuple[str, ...] = ()
+    language: str | None = None  # ISO 639-1 code from OpenAlex, e.g. "en"
