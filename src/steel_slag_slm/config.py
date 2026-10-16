@@ -77,6 +77,13 @@ class ScreeningSettings(AgentSettings):
     papers_table: str  # fully qualified: project.dataset.table
 
 
+class EvaluationSettings(BaseModel):
+    """Where the human-labelled papers live and where run reports are saved."""
+
+    labels_table: str  # fully qualified: project.dataset.table
+    output_dir: Path
+
+
 class Settings(BaseModel):
     """Everything the paper fetcher needs, from configs/ and the environment."""
 
@@ -167,3 +174,15 @@ def load_screening_settings(config_path: Path = BASE_CONFIG_PATH) -> ScreeningSe
         f"{_require_env('GOOGLE_CLOUD_PROJECT')}.{registry.dataset}.{registry.table}"
     )
     return ScreeningSettings(**_agent_section(raw_config, "screening"), papers_table=papers_table)
+
+
+def load_evaluation_settings(
+    papers_table: str, config_path: Path = BASE_CONFIG_PATH
+) -> EvaluationSettings:
+    """Build evaluation settings; the labels table sits next to the papers table."""
+    raw_config = _read_base_config(config_path)["evaluation"]
+    project_and_dataset = papers_table.rsplit(".", 1)[0]
+    return EvaluationSettings(
+        labels_table=f"{project_and_dataset}.{raw_config['table']}",
+        output_dir=PROJECT_ROOT / raw_config["output_dir"],
+    )

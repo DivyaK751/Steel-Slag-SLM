@@ -37,3 +37,12 @@ def test_render_paper_marks_missing_abstract() -> None:
     text = render_paper(load_prompt("screen_relevance"), _paper(abstract=""))
     assert "abstract: (not available)" in text
     assert "keywords: slag, cement" in text
+
+
+def test_paper_from_row_accepts_keyword_list_or_comma_string() -> None:
+    from steel_slag_slm.agents.relevance_screener import paper_from_row
+
+    base = {"openalex_id": "W1", "title": None, "abstract": None, "year": None}
+    assert paper_from_row({**base, "keywords": ["a", "b"]}).keywords == ("a", "b")
+    assert paper_from_row({**base, "keywords": "a, b,"}).keywords == ("a", "b")
+    assert paper_from_row({**base, "keywords": None}).title == ""

@@ -80,3 +80,9 @@ def test_gcp_settings_default_to_vertex_ai(monkeypatch: pytest.MonkeyPatch) -> N
     settings = config.load_gcp_settings()
     assert (settings.project, settings.location) == ("proj", "global")
     assert config.os.environ["GOOGLE_GENAI_USE_ENTERPRISE"] == "TRUE"
+
+
+def test_evaluation_table_sits_next_to_papers_table() -> None:
+    settings = config.load_evaluation_settings("other-proj.steel_slag.papers_trial")
+    assert settings.labels_table == "other-proj.steel_slag.screening_evaluation"
+    assert settings.output_dir.name == "evaluation"

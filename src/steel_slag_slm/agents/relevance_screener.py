@@ -1,6 +1,8 @@
 """Screen a paper's title, abstract and keywords for full-text extraction with Gemini."""
 
 import re
+from collections.abc import Mapping
+from typing import Any
 
 from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
@@ -17,6 +19,23 @@ MISSING_FIELD = "(not available)"
 def build_screener_agent(settings: ScreeningSettings, prompt: PromptTemplate) -> LlmAgent:
     """Create the screening agent from its settings and prompt."""
     return build_structured_agent(AGENT_NAME, settings, prompt.instruction, RelevanceDecision)
+
+
+def paper_from_row(row: Mapping[str, Any]) -> PaperForScreening:
+    """Build the screener's input from a BigQuery row.
+
+    Keywords may be a list (papers table) or one comma-separated string (labelled copies).
+    """
+    keywords = row.get("keywords") or ()
+    if isinstance(keywords, str):
+        keywords = [keyword.strip() for keyword in keywords.split(",")]
+    return PaperForScreening(
+        openalex_id=row["openalex_id"],
+        title=row.get("title") or "",
+        abstract=row.get("abstract") or "",
+        year=row.get("year"),
+        keywords=tuple(keyword for keyword in keywords if keyword),
+    )
 
 
 def render_paper(prompt: PromptTemplate, paper: PaperForScreening) -> str:

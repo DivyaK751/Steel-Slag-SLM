@@ -9,3 +9,4 @@ __pycache__/
 /models/
 *.json.key
 service_account*.json
+/reports/evaluation/

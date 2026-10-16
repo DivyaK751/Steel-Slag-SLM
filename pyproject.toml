@@ -10,6 +10,7 @@ dependencies = [
     "google-auth>=2.23",
     "google-auth-oauthlib>=1.5.0",
     "google-cloud-bigquery>=3.46.2",
+    "openpyxl>=3.1.5",
     "pydantic>=2.5",
     "python-dotenv>=1.0",
     "pyyaml>=6.0",
@@ -20,9 +21,17 @@ dependencies = [
 fetch-papers = "steel_slag_slm.cli:fetch_papers"
 sync-registry = "steel_slag_slm.cli:sync_registry"
 screen-papers = "steel_slag_slm.cli:screen_papers"
+evaluate-screening = "steel_slag_slm.cli:evaluate_screening"
 
 [dependency-groups]
-dev = ["mypy>=1.8", "pytest>=8.0", "ruff>=0.4", "types-pyyaml", "types-requests"]
+dev = [
+    "mypy>=1.8",
+    "pytest>=8.0",
+    "ruff>=0.4",
+    "types-openpyxl>=3.1.5.20260827",
+    "types-pyyaml",
+    "types-requests",
+]
 
 [build-system]
 requires = ["hatchling"]

@@ -200,3 +200,9 @@ screening:
   batch_size: 50
   # Gemini calls in flight at once; raise slowly, Vertex quotas are per minute
   max_concurrency: 8
+
+evaluation:
+  # Human-labelled papers; lives in the same project and dataset as the papers table
+  table: screening_evaluation
+  # One Excel report per run, git-ignored
+  output_dir: reports/evaluation

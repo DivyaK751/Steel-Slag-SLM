@@ -8,7 +8,7 @@ from google.adk.runners import Runner
 from google.cloud import bigquery
 from google.genai.errors import APIError
 
-from steel_slag_slm.agents.relevance_screener import screen_paper
+from steel_slag_slm.agents.relevance_screener import paper_from_row, screen_paper
 from steel_slag_slm.agents.runner import gather_bounded
 from steel_slag_slm.config import ScreeningSettings
 from steel_slag_slm.data.bigquery_store import merge_updates, query_rows
@@ -49,16 +49,7 @@ def fetch_unscreened(
         _UNSCREENED_SQL.format(table=table_id),
         {"limit": limit, "attempted_ids": sorted(attempted_ids)},
     )
-    return [
-        PaperForScreening(
-            openalex_id=row["openalex_id"],
-            title=row["title"] or "",
-            abstract=row["abstract"] or "",
-            year=row["year"],
-            keywords=tuple(row["keywords"] or ()),
-        )
-        for row in rows
-    ]
+    return [paper_from_row(row) for row in rows]
 
 
 def decision_row(paper: PaperForScreening, decision: RelevanceDecision) -> dict[str, Any]:
