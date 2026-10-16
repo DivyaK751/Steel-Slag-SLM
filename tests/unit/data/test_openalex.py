@@ -5,6 +5,7 @@ import requests
 
 from steel_slag_slm.config import FetchSettings
 from steel_slag_slm.data.openalex import (
+    MAX_IDS_PER_LOOKUP,
     OpenAlexClient,
     parse_remaining_budget,
     parse_work,
@@ -62,6 +63,31 @@ def test_parse_work_extracts_short_id_and_pdf_urls() -> None:
     assert paper.free_pdf_url == "https://free.example/p.pdf"
     assert paper.paid_pdf_url is not None
     assert paper.paid_pdf_url.endswith("W2068066265.pdf")
+
+
+def test_parse_work_keeps_authors_keywords_and_language() -> None:
+    paper = parse_work(
+        {
+            "id": "https://openalex.org/W1",
+            "language": "en",
+            "authorships": [{"author": {"display_name": "A. Author"}}, {"author": {}}],
+            "keywords": [{"display_name": "steel slag"}, {"display_name": "hydration"}],
+        }
+    )
+    assert paper.authors == ("A. Author",)
+    assert paper.keywords == ("steel slag", "hydration")
+    assert paper.language == "en"
+
+
+def test_iter_papers_by_id_looks_up_ids_in_batches() -> None:
+    page = _response()
+    page.json.return_value = {"results": [{"id": "https://openalex.org/W1"}]}
+    ids = [f"W{n}" for n in range(MAX_IDS_PER_LOOKUP + 1)]
+    client = _client(page, page)
+    papers = list(client.iter_papers_by_id(ids))
+    assert len(papers) == 2
+    filters = [call.kwargs["params"]["filter"] for call in client._session.get.call_args_list]
+    assert filters[0].startswith("openalex:W0|W1|") and filters[1] == f"openalex:W{len(ids) - 1}"
 
 
 def test_parse_remaining_budget_ignores_missing_or_bad_values() -> None:

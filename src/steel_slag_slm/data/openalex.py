@@ -17,6 +17,8 @@ WORKS_URL = "https://api.openalex.org/works"
 REMAINING_BUDGET_HEADER = "X-RateLimit-Remaining-USD"
 PDF_MAGIC_BYTES = b"%PDF"
 RATE_LIMIT_RETRY_DELAY_S = 1.0
+# OpenAlex accepts at most 100 values in one OR filter
+MAX_IDS_PER_LOOKUP = 100
 
 
 def parse_remaining_budget(headers: Mapping[str, str]) -> float | None:
@@ -50,6 +52,15 @@ def parse_work(work: dict[str, Any]) -> Paper:
         year=work.get("publication_year"),
         free_pdf_url=best_location.get("pdf_url"),
         paid_pdf_url=content_urls.get("pdf"),
+        authors=tuple(
+            name
+            for authorship in work.get("authorships") or []
+            if (name := (authorship.get("author") or {}).get("display_name"))
+        ),
+        keywords=tuple(
+            name for keyword in work.get("keywords") or [] if (name := keyword.get("display_name"))
+        ),
+        language=work.get("language"),
     )
 
 
@@ -100,7 +111,7 @@ class OpenAlexClient:
         raise BudgetExhaustedError("OpenAlex returned 429 twice; daily budget is likely used up")
 
     def iter_papers(self, query: str) -> Iterator[Paper]:
-        """Yield papers matching the query, most cited first, across result pages."""
+        """Yield papers matching the query in the configured sort order, across result pages."""
         cursor: str | None = "*"
         for _ in range(self._settings.max_pages_per_query):
             if not cursor:
@@ -119,6 +130,20 @@ class OpenAlexClient:
             page = response.json()
             cursor = page.get("meta", {}).get("next_cursor")
             for work in page.get("results", []):
+                yield parse_work(work)
+
+    def iter_papers_by_id(self, openalex_ids: list[str]) -> Iterator[Paper]:
+        """Yield the papers with these OpenAlex IDs, looking up many per request.
+
+        IDs that OpenAlex doesn't know are skipped, so fewer papers than IDs may come back.
+        """
+        for start in range(0, len(openalex_ids), MAX_IDS_PER_LOOKUP):
+            batch = openalex_ids[start : start + MAX_IDS_PER_LOOKUP]
+            response = self._billed_get(
+                WORKS_URL, {"filter": f"openalex:{'|'.join(batch)}", "per_page": len(batch)}
+            )
+            response.raise_for_status()
+            for work in response.json().get("results", []):
                 yield parse_work(work)
 
     def download_pdf(self, paper: Paper) -> tuple[bytes, str] | None:
