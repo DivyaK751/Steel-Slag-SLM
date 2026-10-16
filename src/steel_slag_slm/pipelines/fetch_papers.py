@@ -3,10 +3,13 @@
 import logging
 from collections import Counter
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from typing import Any
 
+from google.cloud import bigquery
+
 from steel_slag_slm.config import Settings
-from steel_slag_slm.data import drive_storage
+from steel_slag_slm.data import drive_storage, paper_registry
 from steel_slag_slm.data.openalex import OpenAlexClient
 from steel_slag_slm.data.relevance import is_relevant
 from steel_slag_slm.exceptions import BudgetExhaustedError, OpenAlexRequestError
@@ -29,10 +32,27 @@ def _iter_unique_papers(client: OpenAlexClient, queries: list[str]) -> Iterator[
             logger.warning("Search for %s failed, moving to the next query: %s", query, error)
 
 
+def _save_registry_rows(
+    bigquery_client: bigquery.Client, settings: Settings, rows: list[dict[str, Any]]
+) -> None:
+    if not rows:
+        return
+    table_id = paper_registry.ensure_papers_table(bigquery_client, settings.registry)
+    paper_registry.add_rows(bigquery_client, table_id, rows)
+    logger.info("Added %d papers to the BigQuery registry", len(rows))
+
+
 def run_fetch(
-    settings: Settings, drive_service: Any, client: OpenAlexClient, max_new_papers: int | None
+    settings: Settings,
+    drive_service: Any,
+    client: OpenAlexClient,
+    max_new_papers: int | None,
+    bigquery_client: bigquery.Client | None = None,
 ) -> Counter[str]:
     """Add new relevant papers to Drive, stopping at max_new_papers or when the budget runs out.
+
+    With a BigQuery client, each uploaded paper also gets a registry row (abstract, DOI,
+    keywords, language, ...), so nothing has to look it up again later.
 
     Returns:
         Counts of what happened to each paper: added_free, added_openalex, irrelevant,
@@ -48,6 +68,7 @@ def run_fetch(
         "%d papers already in Drive, %d known to have no PDF", len(known_ids), len(no_pdf_ids)
     )
     outcomes: Counter[str] = Counter()
+    registry_rows: list[dict[str, Any]] = []
 
     try:
         for paper in _iter_unique_papers(client, settings.fetch.queries):
@@ -79,7 +100,8 @@ def run_fetch(
                 continue
 
             pdf, pdf_source = download
-            drive_storage.upload_pdf(drive_service, folder_id, paper, pdf, pdf_source)
+            file_id = drive_storage.upload_pdf(drive_service, folder_id, paper, pdf, pdf_source)
+            registry_rows.append(paper_registry.build_row(paper, file_id, datetime.now(UTC)))
             known_ids.add(paper.openalex_id)
             outcomes[f"added_{pdf_source}"] += 1
             logger.info("Added (%s) %s: %s", pdf_source, paper.openalex_id, paper.title[:90])
@@ -93,5 +115,8 @@ def run_fetch(
         # Saved even if the run crashes, so the next run doesn't retry these
         if outcomes["no_pdf"]:
             drive_storage.write_id_list(drive_service, folder_id, no_pdf_list_name, no_pdf_ids)
+        # One load job per run; if it fails, the nightly registry sync adds these rows instead
+        if bigquery_client is not None:
+            _save_registry_rows(bigquery_client, settings, registry_rows)
 
     return outcomes

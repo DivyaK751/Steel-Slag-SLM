@@ -135,6 +135,15 @@ def list_known_paper_ids(service: Any, folder_id: str, rejected_subfolder_name: 
     return {paper_id for name in names if (paper_id := parse_openalex_id(name))}
 
 
+def list_paper_files(service: Any, folder_id: str) -> dict[str, str]:
+    """Map each OpenAlex ID in the folder (not its subfolders) to its Drive file ID."""
+    return {
+        paper_id: item["id"]
+        for item in _list_children(service, folder_id, " and mimeType = 'application/pdf'")
+        if (paper_id := parse_openalex_id(item["name"]))
+    }
+
+
 def has_paper(service: Any, folder_id: str, openalex_id: str) -> bool:
     """Check whether a teammate's run uploaded this paper since we listed the folder."""
     matches = _list_children(service, folder_id, f" and name contains '{openalex_id}'")

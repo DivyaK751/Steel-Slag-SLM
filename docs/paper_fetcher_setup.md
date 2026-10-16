@@ -25,6 +25,19 @@ member's OpenAlex key. Each run:
 Papers with no downloadable PDF are written to `_fetcher_no_pdf_ids.txt` in the folder, so
 later nights don't waste time retrying them. Leave that file in place.
 
+### BigQuery paper registry
+
+Every paper in the folder also gets one row in the BigQuery table `steel_slag.papers`
+(OpenAlex ID, title, authors, year, DOI, language, abstract, keywords, Drive link). Later steps,
+such as relevance screening, read abstracts from there instead of opening Drive.
+
+- Each fetch run adds a row for every paper it uploads.
+- Before the fetch runs, a **sync-registry** job adds rows for any paper in the folder that has
+  none yet: on its first run that is every paper already there, after that only papers added by
+  hand or missed because a BigQuery write failed. It looks papers up on OpenAlex by ID, 100 per
+  request, for a fraction of a cent.
+- Both are skipped until the two BigQuery secrets in step 4 are set.
+
 ## One-time setup
 
 Done once, by the person who **owns the Drive folder** (the job uploads as them), in about
@@ -104,6 +117,8 @@ secret**, and add each of these:
 | `OPENALEX_CONTACT_EMAIL` | A contact email; OpenAlex and publishers ask for one |
 | `DRIVE_FOLDER_ID` | The folder ID, just the ID: no URL, no quotes |
 | `GOOGLE_OAUTH_TOKEN_JSON` | The **entire contents** of `~/.config/steel_slag_slm/google_token.json` from step 3 |
+| `GOOGLE_CLOUD_PROJECT` | The Google Cloud project that holds BigQuery, e.g. `capstone-project-511200` |
+| `GCP_SERVICE_ACCOUNT_JSON` | The **entire contents** of a JSON key for a service account in that project with the *BigQuery Data Editor* and *BigQuery Job User* roles |
 
 When `GOOGLE_OAUTH_TOKEN_JSON` is set, the job uses it and ignores
 `GOOGLE_SERVICE_ACCOUNT_JSON`. Secrets are encrypted and hidden in logs, even though the repo
@@ -184,6 +199,9 @@ with the team's OAuth client JSON (shared privately) and sign in with their **ow
 account that can edit the folder; their saved login stays on their laptop and isn't needed on
 GitHub. A manual run uses that member's OpenAlex budget for the day. Running by hand while
 the nightly job runs is safe: the re-check before each download prevents duplicates.
+
+To fill the BigQuery registry by hand, set `GOOGLE_CLOUD_PROJECT` in `.env`, sign in with
+`gcloud auth application-default login`, and run `uv run sync-registry`.
 
 ## Troubleshooting
 

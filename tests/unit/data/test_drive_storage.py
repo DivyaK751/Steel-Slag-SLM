@@ -7,6 +7,7 @@ from steel_slag_slm.data.drive_storage import (
     build_drive_service,
     build_file_name,
     has_paper,
+    list_paper_files,
     parse_openalex_id,
 )
 from steel_slag_slm.schemas import Paper
@@ -47,3 +48,11 @@ def test_build_drive_service_without_client_file_fails_clearly_on_a_bad_saved_lo
     token_file.write_text('{"client_id": "x", "client_secret": "y", "refresh_token": ""}')
     with pytest.raises(RuntimeError, match="GOOGLE_OAUTH_TOKEN_JSON"):
         build_drive_service(None, None, token_file)
+
+
+def test_list_paper_files_maps_ids_to_file_ids_and_skips_other_files() -> None:
+    service = MagicMock()
+    service.files().list().execute.return_value = {
+        "files": [{"id": "f1", "name": "W1 - Slag.pdf"}, {"id": "f2", "name": "notes.pdf"}]
+    }
+    assert list_paper_files(service, "F") == {"W1": "f1"}

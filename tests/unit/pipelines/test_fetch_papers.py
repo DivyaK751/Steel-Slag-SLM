@@ -6,7 +6,7 @@ from pydantic import SecretStr
 
 import steel_slag_slm.pipelines.fetch_papers as fetch_papers
 from steel_slag_slm.config import BASE_CONFIG_PATH, Settings
-from steel_slag_slm.data import drive_storage
+from steel_slag_slm.data import drive_storage, paper_registry
 from steel_slag_slm.exceptions import BudgetExhaustedError, OpenAlexRequestError
 from steel_slag_slm.schemas import Paper
 
@@ -37,9 +37,12 @@ def uploads(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     monkeypatch.setattr(storage, "has_paper", lambda *_: False)
     monkeypatch.setattr(storage, "read_id_list", lambda *_: {"W9"})
     monkeypatch.setattr(storage, "write_id_list", lambda _s, _f, _n, ids: saved_no_pdf.update(ids))
-    monkeypatch.setattr(
-        storage, "upload_pdf", lambda _s, _f, paper, _pdf, _src: uploaded.append(paper.openalex_id)
-    )
+
+    def upload_pdf(_s: object, _f: str, paper: Paper, _pdf: bytes, _src: str) -> str:
+        uploaded.append(paper.openalex_id)
+        return f"file-{paper.openalex_id}"
+
+    monkeypatch.setattr(storage, "upload_pdf", upload_pdf)
     return uploaded
 
 
@@ -113,3 +116,17 @@ def test_run_fetch_moves_to_next_query_when_a_search_fails(
     client.iter_papers.side_effect = iter_papers
     fetch_papers.run_fetch(settings, MagicMock(), client, max_new_papers=None)
     assert uploads == ["W2", "W4"]
+
+
+def test_run_fetch_adds_a_registry_row_for_each_uploaded_paper(
+    settings: Settings, uploads: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    saved: list[dict[str, str]] = []
+    monkeypatch.setattr(paper_registry, "ensure_papers_table", lambda *_: "p.d.t")
+    monkeypatch.setattr(paper_registry, "add_rows", lambda _c, _t, rows: saved.extend(rows))
+    client = _client({"q1": [_paper("W2"), _paper("W3")], "q2": []})
+    fetch_papers.run_fetch(settings, MagicMock(), client, None, bigquery_client=MagicMock())
+    assert [(row["openalex_id"], row["drive_file_id"]) for row in saved] == [
+        ("W2", "file-W2"),
+        ("W3", "file-W3"),
+    ]

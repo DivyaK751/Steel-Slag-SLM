@@ -17,6 +17,7 @@ dependencies = [
 
 [project.scripts]
 fetch-papers = "steel_slag_slm.cli:fetch_papers"
+sync-registry = "steel_slag_slm.cli:sync_registry"
 
 [dependency-groups]
 dev = ["mypy>=1.8", "pytest>=8.0", "ruff>=0.4", "types-pyyaml", "types-requests"]
