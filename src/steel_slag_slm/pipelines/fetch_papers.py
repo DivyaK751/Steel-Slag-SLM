@@ -64,7 +64,8 @@ def run_fetch(
 
     The queue is a text file of OpenAlex IDs in Drive. Whenever it runs dry, every search
     reads its next pages to refill it; once every search has been read to its end with
-    nothing new, the run stops. With a BigQuery client, each uploaded paper also gets a
+    nothing new, the run stops. Searches newly added to the config are read first, even
+    if the queue isn't empty. With a BigQuery client, each uploaded paper also gets a
     registry row.
 
     Returns:
@@ -78,9 +79,13 @@ def run_fetch(
     )
     no_pdf_ids = drive_storage.read_id_list(drive_service, folder_id, names.no_pdf_list_name)
     queue = drive_storage.read_id_list(drive_service, folder_id, names.queue_list_name)
-    progress = parse_progress(
+    queries = settings.fetch.queries
+    saved_progress = parse_progress(
         drive_storage.read_text_file(drive_service, folder_id, names.search_progress_name)
     )
+    # Searches removed from the config are dropped; ones added since the last run start now
+    progress = {query: page for query, page in saved_progress.items() if query in queries}
+    new_queries = [query for query in queries if query not in progress]
     logger.info(
         "%d papers in Drive, %d with no PDF, %d queued", len(known_ids), len(no_pdf_ids), len(queue)
     )
@@ -91,15 +96,21 @@ def run_fetch(
     finished_searches: set[str] = set()
 
     try:
+        if new_queries:
+            logger.info("Reading %d searches added since the last run", len(new_queries))
+            queued_before = len(queue)
+            discover_papers(settings, client, new_queries, progress, known_ids | no_pdf_ids, queue)
+            outcomes["queued"] += len(queue) - queued_before
+
         while max_new_papers is None or _count_added(outcomes) < max_new_papers:
             pending = sorted(queue - retry_tomorrow)
             if not pending:
-                if finished_searches >= set(settings.fetch.queries):
+                if finished_searches >= set(queries):
                     logger.info("Every search was read to its end with nothing new; stopping")
                     break
                 queued_before = len(queue)
                 finished_searches |= discover_papers(
-                    settings, client, progress, known_ids | no_pdf_ids, queue
+                    settings, client, queries, progress, known_ids | no_pdf_ids, queue
                 )
                 outcomes["queued"] += len(queue) - queued_before
                 continue

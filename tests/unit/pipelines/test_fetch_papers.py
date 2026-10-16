@@ -29,7 +29,7 @@ def settings() -> Settings:
 class FakeDrive:
     """Drive folder holding W1, with W9 on the no-PDF list and the given queue and progress."""
 
-    def __init__(self, settings: Settings, queue: set[str], progress: str = "") -> None:
+    def __init__(self, settings: Settings, queue: set[str], progress: str = "q1\t1\nq2\t1") -> None:
         names = settings.drive
         self.files = {
             names.queue_list_name: "\n".join(sorted(queue)),
@@ -87,7 +87,7 @@ def test_run_fetch_downloads_queued_papers_before_searching(
 def test_run_fetch_searches_deeper_when_the_queue_is_empty(
     settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    drive = FakeDrive(settings, queue=set(), progress="q1\t6")
+    drive = FakeDrive(settings, queue=set(), progress="q1\t6\nq2\t1")
     drive.install(monkeypatch)
     client = _client(
         {
@@ -163,3 +163,17 @@ def test_run_fetch_adds_a_registry_row_for_each_uploaded_paper(
         ("W2", "file-W2"),
         ("W3", "file-W3"),
     ]
+
+
+def test_run_fetch_reads_newly_added_searches_first_and_forgets_removed_ones(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # q2 is new in the config and "old" was removed from it; the queue is not empty
+    drive = FakeDrive(settings, queue={"W2"}, progress="q1\t16\nold\t4")
+    drive.install(monkeypatch)
+    client = _client({"q2": [SearchPages([_paper("W5")], 6)]})
+    outcomes = _run(settings, client, max_new_papers=1)
+    client.read_search_pages.assert_called_once_with("q2", 1, settings.fetch.pages_per_discovery)
+    assert outcomes["queued"] == 1
+    assert drive.uploaded == ["W2"]
+    assert drive.files[settings.drive.search_progress_name] == "q1\t16\nq2\t6"

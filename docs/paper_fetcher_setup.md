@@ -188,6 +188,9 @@ Nothing has to be done for the job to keep going. The team's routine is:
 Everything is in `configs/base.yaml`; no code changes needed:
 
 - `fetch.queries`: the OpenAlex searches. Keep phrases in quotes, e.g. `'"ladle slag" cement'`.
+  A newly added search is read from page 1 at the start of the next run, even if the queue
+  still has papers in it. A removed search is dropped from the progress file. Rewording a
+  search counts as removing it and adding a new one, so it starts again from page 1.
 - `relevance.exclude_title_terms`: titles containing these are skipped (e.g. `asphalt`).
 - `relevance.include_terms` / `include_title_terms`: what makes a paper worth keeping.
 
