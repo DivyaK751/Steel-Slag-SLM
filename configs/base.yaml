@@ -13,6 +13,32 @@ fetch:
     - '"BOF slag"'
     - '"EAF slag"'
     - '"ladle slag"'
+    # Slag-type synonyms (Europe/India say LD; US says "steel furnace slag")
+    - '"electric arc furnace slag"'
+    - '"basic oxygen furnace slag"'
+    - '"ladle furnace slag"'
+    - '"LMF slag"'
+    - '"LD slag"'
+    - '"BOS slag"'
+    - '"converter slag"'
+    - '"stainless steel slag"'
+    - '"AOD slag"'
+    - '"steel furnace slag"'
+    # Use cases and processing routes from the Project Overview
+    - '"steel slag" supplementary cementitious'
+    - '"steel slag" pozzolanic'
+    - '"steel slag" alkali-activated'
+    - '"steel slag" geopolymer'
+    - '"steel slag" mineral carbonation'
+    - '"steel slag" "CO2 uptake"'
+    - '"steel slag" grinding'
+    - '"steel slag" "mechanical activation"'
+    - '"steel slag" "volume stability"'
+    - '"steel slag" expansion'
+    - '"steel slag" "free lime"'
+    - '"steel slag" "compressive strength"'
+    - '"steel slag" durability'
+    - '"steel slag" reactivity'
   search_filter: "is_oa:true,language:en"
   # Citation sort surfaces famous off-topic papers; relevance keeps results on steel slag
   sort: "relevance_score:desc"
@@ -25,18 +51,38 @@ fetch:
 # Rules distilled from the team's "Feedback on papers" review.
 # All matching is case-insensitive, with hyphens treated as spaces.
 relevance:
-  # Title or abstract must mention a steel slag (not just "slag")
+  # Title or abstract must mention a steel slag (not just "slag"). Terms match as substrings,
+  # so "steel slag" also covers "steel slags" and "stainless steel slag"
   slag_terms:
     - steel slag
     - steelmaking slag
-    - stainless steel slag
+    - steel making slag  # "steel-making slag" after hyphens become spaces
+    - basic oxygen steelmaking slag
     - eaf slag
+    - eafs
     - bof slag
-    - ladle slag
+    - bofs
+    - ld slag
+    - bos slag
     - converter slag
     - electric arc furnace slag
+    - electric furnace slag
     - basic oxygen furnace slag
-  # Title or abstract must touch a use case we extract (cementitious or CO2) ...
+    - steel furnace slag
+    - ladle slag
+    - ladle furnace slag
+    - lf slag
+    - lmf slag
+    - ladle metallurgy slag
+    - secondary metallurgy slag
+    - white slag  # reducing ladle slag
+    - black slag  # oxidizing EAF slag
+    - aod slag
+    - argon oxygen decarburization slag
+    - dephosphorization slag
+  # Title or abstract must touch a use case we extract (cementitious, stability or CO2) ...
+  # "cement" also covers cementitious/SCM wording, "pozzolan" covers pozzolanic/pozzolana,
+  # "co2" covers CO2 uptake, "carbonation" covers mineral carbonation
   include_terms:
     - cement
     - concrete
@@ -44,35 +90,90 @@ relevance:
     - binder
     - clinker
     - pozzolan
+    - puzzolan  # older spelling
     - hydration
+    - hydraulic
+    - alkali activated
+    - geopolymer
+    - grinding
+    - compressive strength
+    - setting time
+    - volume stability
+    - soundness
+    - expansion
+    - free lime
+    - f cao  # "f-CaO" after hyphens become spaces
+    - free mgo
     - carbonation
     - co2
     - sequestration
+    - carbon capture
   # ... or the title must signal a characterization or utilization study. These words are
   # title-only because nearly every abstract says "utilization" or "characterization".
   include_title_terms:
     - mineralogy
     - mineralogical
+    - mineral phases
+    - phase composition
     - characterization
     - characterisation
     - chemical composition
+    - microstructure
+    - reactivity
+    - pretreatment
+    - modification
     - utilization
     - utilisation
     - valorization
     - valorisation
-  # A title containing any of these is skipped (asphalt, soil, leaching, GGBFS feedback)
+    - recycling
+    - reuse
+    - mayenite  # high-Al ladle slag phase
+    - belite
+    - dicalcium silicate
+    - c2s
+    - ro phase
+    - wustite
+    - periclase
+  # A title containing any of these is skipped (off-topic uses of steel slag)
   exclude_title_terms:
     - asphalt
     - bitumen
     - bituminous
     - soil
     - subgrade
+    - road base
+    - base course
+    - railway ballast
     - groundwater
     - geochemical
     - slag heap
+    - fertilizer
+    - fertiliser
+    - phosphate removal
+    - phosphorus removal
+    - adsorption
+    - adsorbent
+    - wastewater
+    - heavy metal removal
+    - acid mine drainage
+    - catalyst
+  # Other slags skip a title only when it names no steel slag, so blends such as
+  # "steel slag-GGBFS-cement" stay in
+  other_slag_title_terms:
     - blast furnace
     - ggbfs
     - ggbs
+    - copper slag
+    - nickel slag
+    - ferronickel
+    - ferrochrome
+    - silicomanganese
+    - lead slag
+    - zinc slag
+    - titanium slag
+    - phosphorus slag
+    - incineration
 
 drive:
   # Move "No" papers here instead of deleting them, so the job never re-downloads them

@@ -64,6 +64,23 @@ def test_is_relevant_skips_blast_furnace_slag_but_not_electric_arc_furnace(
     assert is_relevant(_paper("Electric arc furnace slag as a concrete aggregate"), rules)
 
 
+def test_is_relevant_keeps_blends_of_steel_slag_with_other_slags(rules: RelevanceRules) -> None:
+    assert is_relevant(_paper("Steel slag-GGBFS-cement ternary binder hydration"), rules)
+    assert not is_relevant(
+        _paper("Copper slag as cement replacement", abstract="unlike steel slag"), rules
+    )
+
+
+def test_is_relevant_accepts_new_slag_names_and_use_cases(rules: RelevanceRules) -> None:
+    assert is_relevant(_paper("Volume stability of LD slag with high free lime content"), rules)
+    assert is_relevant(_paper("Mayenite formation in LMF slag"), rules)
+
+
+def test_is_relevant_skips_steel_slag_for_wastewater_treatment(rules: RelevanceRules) -> None:
+    paper = _paper("Steel slag for phosphate removal from wastewater", abstract="CO2 too")
+    assert not is_relevant(paper, rules)
+
+
 def test_normalize_for_matching_treats_dashes_as_spaces() -> None:
     assert normalize_for_matching("Steel  Slag–Asphalt") == "steel slag asphalt"
 
