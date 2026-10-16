@@ -9,6 +9,8 @@ from steel_slag_slm.data.drive_storage import (
     has_paper,
     list_paper_files,
     parse_openalex_id,
+    read_id_list,
+    read_text_file,
 )
 from steel_slag_slm.schemas import Paper
 
@@ -56,3 +58,10 @@ def test_list_paper_files_maps_ids_to_file_ids_and_skips_other_files() -> None:
         "files": [{"id": "f1", "name": "W1 - Slag.pdf"}, {"id": "f2", "name": "notes.pdf"}]
     }
     assert list_paper_files(service, "F") == {"W1": "f1"}
+
+
+def test_read_text_file_is_empty_when_the_file_does_not_exist_yet() -> None:
+    service = MagicMock()
+    service.files().list().execute.return_value = {"files": []}
+    assert read_text_file(service, "F", "_fetcher_queue_ids.txt") == ""
+    assert read_id_list(service, "F", "_fetcher_queue_ids.txt") == set()
