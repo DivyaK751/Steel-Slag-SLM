@@ -23,6 +23,11 @@ def is_relevant(paper: Paper, rules: RelevanceRules) -> bool:
     # Exclusions only look at the title: abstracts often mention asphalt or GGBFS in passing
     if _contains_any(title, rules.exclude_title_terms):
         return False
+    # Other slags only rule a title out when it names no steel slag, keeping blended binders
+    if _contains_any(title, rules.other_slag_title_terms) and not _contains_any(
+        title, rules.slag_terms
+    ):
+        return False
     if not _contains_any(title_and_abstract, rules.slag_terms):
         return False
     return _contains_any(title_and_abstract, rules.include_terms) or _contains_any(

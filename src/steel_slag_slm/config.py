@@ -33,6 +33,7 @@ class RelevanceRules(BaseModel):
     include_terms: list[str]
     include_title_terms: list[str]
     exclude_title_terms: list[str]
+    other_slag_title_terms: list[str]
 
 
 class DriveSettings(BaseModel):
