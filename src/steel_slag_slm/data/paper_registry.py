@@ -26,6 +26,12 @@ PAPERS_SCHEMA = [
     bigquery.SchemaField("drive_file_id", "STRING"),
     bigquery.SchemaField("drive_link", "STRING"),
     bigquery.SchemaField("added_at", "TIMESTAMP"),
+    # Filled in later by relevance screening; empty when a row is first added
+    bigquery.SchemaField("relevant", "STRING", description="Yes / No / Unclear"),
+    bigquery.SchemaField("relevance_score", "FLOAT64", description="0.0-1.0 model confidence"),
+    bigquery.SchemaField("relevance_confidence", "STRING", description="High / Medium / Low"),
+    bigquery.SchemaField("relevance_reason", "STRING", description="One-sentence explanation"),
+    bigquery.SchemaField("supporting_excerpt", "STRING", description="Quote from the abstract"),
 ]
 
 
