@@ -121,28 +121,6 @@ class OpenAlexClient:
                 time.sleep(RATE_LIMIT_RETRY_DELAY_S)
         raise BudgetExhaustedError("OpenAlex returned 429 twice; daily budget is likely used up")
 
-    def iter_papers(self, query: str) -> Iterator[Paper]:
-        """Yield papers matching the query in the configured sort order, across result pages."""
-        cursor: str | None = "*"
-        for _ in range(self._settings.max_pages_per_query):
-            if not cursor:
-                return
-            response = self._billed_get(
-                WORKS_URL,
-                {
-                    "search": query,
-                    "filter": self._settings.search_filter,
-                    "sort": self._settings.sort,
-                    "per_page": self._settings.per_page,
-                    "cursor": cursor,
-                },
-            )
-            response.raise_for_status()
-            page = response.json()
-            cursor = page.get("meta", {}).get("next_cursor")
-            for work in page.get("results", []):
-                yield parse_work(work)
-
     def read_search_pages(self, query: str, first_page: int, page_count: int) -> SearchPages:
         """Read page_count result pages of a search, starting at first_page.
 

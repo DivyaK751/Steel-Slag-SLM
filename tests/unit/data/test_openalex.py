@@ -20,7 +20,6 @@ SETTINGS = FetchSettings(
     search_filter="is_oa:true",
     sort="cited_by_count:desc",
     per_page=200,
-    max_pages_per_query=1,
     pages_per_discovery=2,
     request_timeout_s=1,
     min_budget_usd=0.011,
