@@ -42,12 +42,21 @@ class DriveSettings(BaseModel):
     no_pdf_list_name: str
 
 
+class RegistrySettings(BaseModel):
+    """Where the BigQuery table listing every paper in the Drive folder lives."""
+
+    dataset: str
+    table: str
+    location: str
+
+
 class Settings(BaseModel):
     """Everything the pipelines need, from configs/ and the environment."""
 
     fetch: FetchSettings
     relevance: RelevanceRules
     drive: DriveSettings
+    registry: RegistrySettings
     openalex_api_key: SecretStr
     contact_email: str
     drive_folder_id: str
@@ -55,6 +64,10 @@ class Settings(BaseModel):
     google_service_account_file: Path | None = None
     google_oauth_client_file: Path | None = None
     google_oauth_token_file: Path = DEFAULT_GOOGLE_TOKEN_PATH
+    # BigQuery is optional: without a project the fetcher skips the registry
+    gcp_project: str | None = None
+    # Separate from the Drive sign-in, which may be a personal login without BigQuery access
+    gcp_credentials_file: Path | None = None
 
 
 def _require_env(name: str) -> str:
@@ -89,4 +102,6 @@ def load_settings(config_path: Path = BASE_CONFIG_PATH) -> Settings:
         google_oauth_token_file=Path(
             os.environ.get("GOOGLE_OAUTH_TOKEN_FILE", "").strip() or DEFAULT_GOOGLE_TOKEN_PATH
         ).expanduser(),
+        gcp_project=os.environ.get("GOOGLE_CLOUD_PROJECT", "").strip() or None,
+        gcp_credentials_file=_optional_path_env("GCP_CREDENTIALS_FILE"),
     )
