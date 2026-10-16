@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+from typing import Any
 
 import yaml
 from dotenv import load_dotenv
@@ -51,8 +52,33 @@ class RegistrySettings(BaseModel):
     location: str
 
 
+class GcpSettings(BaseModel):
+    """The Google Cloud project and region that Vertex AI and BigQuery calls are billed to."""
+
+    project: str
+    location: str
+    # Unattended runs only; locally BigQuery uses `gcloud auth application-default login`
+    credentials_file: Path | None = None
+
+
+class AgentSettings(BaseModel):
+    """Model settings shared by every agent: the `llm:` defaults plus the agent's overrides."""
+
+    model: str
+    temperature: float
+
+
+class ScreeningSettings(AgentSettings):
+    """How the relevance-screening agent reads and fills the BigQuery papers table."""
+
+    prompt_name: str
+    batch_size: int
+    max_concurrency: int
+    papers_table: str  # fully qualified: project.dataset.table
+
+
 class Settings(BaseModel):
-    """Everything the pipelines need, from configs/ and the environment."""
+    """Everything the paper fetcher needs, from configs/ and the environment."""
 
     fetch: FetchSettings
     relevance: RelevanceRules
@@ -88,10 +114,22 @@ def _optional_path_env(name: str) -> Path | None:
     return path
 
 
+def _read_base_config(config_path: Path) -> dict[str, Any]:
+    """Load .env into the environment and return the parsed YAML config."""
+    load_dotenv(PROJECT_ROOT / ".env")
+    raw_config: dict[str, Any] = yaml.safe_load(config_path.read_text())
+    return raw_config
+
+
+def _agent_section(raw_config: dict[str, Any], name: str) -> dict[str, Any]:
+    """Merge the shared `llm:` defaults with one agent's section; the agent's values win."""
+    overrides = {key: value for key, value in raw_config[name].items() if value is not None}
+    return {**raw_config["llm"], **overrides}
+
+
 def load_settings(config_path: Path = BASE_CONFIG_PATH) -> Settings:
     """Build settings from the YAML config plus secrets from the environment or .env."""
-    load_dotenv(PROJECT_ROOT / ".env")
-    raw_config = yaml.safe_load(config_path.read_text())
+    raw_config = _read_base_config(config_path)
     return Settings(
         **raw_config,
         openalex_api_key=SecretStr(_require_env("OPENALEX_API_KEY")),
@@ -106,3 +144,26 @@ def load_settings(config_path: Path = BASE_CONFIG_PATH) -> Settings:
         gcp_project=os.environ.get("GOOGLE_CLOUD_PROJECT", "").strip() or None,
         gcp_credentials_file=_optional_path_env("GCP_CREDENTIALS_FILE"),
     )
+
+
+def load_gcp_settings() -> GcpSettings:
+    """Read the GCP project and region from the environment or .env."""
+    load_dotenv(PROJECT_ROOT / ".env")
+    # ADK reads this flag itself; this project always calls Gemini through Vertex AI
+    os.environ.setdefault("GOOGLE_GENAI_USE_ENTERPRISE", "TRUE")
+    return GcpSettings(
+        project=_require_env("GOOGLE_CLOUD_PROJECT"),
+        location=_require_env("GOOGLE_CLOUD_LOCATION"),
+        credentials_file=_optional_path_env("GCP_CREDENTIALS_FILE"),
+    )
+
+
+def load_screening_settings(config_path: Path = BASE_CONFIG_PATH) -> ScreeningSettings:
+    """Build the screening agent's settings; needs no OpenAlex or Drive secrets."""
+    raw_config = _read_base_config(config_path)
+    registry = RegistrySettings(**raw_config["registry"])
+    # The override lets Gemini bill one project while the papers table lives in another
+    papers_table = os.environ.get("BIGQUERY_PAPERS_TABLE", "").strip() or (
+        f"{_require_env('GOOGLE_CLOUD_PROJECT')}.{registry.dataset}.{registry.table}"
+    )
+    return ScreeningSettings(**_agent_section(raw_config, "screening"), papers_table=papers_table)

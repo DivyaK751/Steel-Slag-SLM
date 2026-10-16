@@ -186,3 +186,17 @@ registry:
   dataset: steel_slag
   table: papers
   location: US
+
+# Defaults shared by every Gemini agent; an agent's own section can override any of them
+llm:
+  model: gemini-3.8-flash
+  # Screening and extraction should give the same answer twice for the same paper
+  temperature: 0.0
+
+screening:
+  prompt_name: screen_relevance
+  model: null  # null = use llm.model
+  # Rows read from BigQuery and written back per round trip
+  batch_size: 50
+  # Gemini calls in flight at once; raise slowly, Vertex quotas are per minute
+  max_concurrency: 8

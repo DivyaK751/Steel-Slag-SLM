@@ -22,3 +22,25 @@ key until each key's daily budget is used up, with no manual steps.
 - Code: `src/steel_slag_slm/data/` (OpenAlex, Drive, relevance) and
   `src/steel_slag_slm/pipelines/fetch_papers.py`
 - Schedule: `.github/workflows/fetch_papers.yml`
+
+## Relevance screening
+
+An ADK agent running Gemini on Vertex AI reads papers in the BigQuery `papers` table that have
+no decision yet (`relevant IS NULL`). It judges each one from its title, abstract and keywords
+using [prompts/screen_relevance.yaml](prompts/screen_relevance.yaml), then fills in `relevant`,
+`relevance_score`, `relevance_confidence`, `relevance_reason` and `supporting_excerpt`.
+
+```bash
+gcloud auth application-default login         # once; uses your own Google account
+# in .env: GOOGLE_CLOUD_PROJECT, GOOGLE_CLOUD_LOCATION, BIGQUERY_PAPERS_TABLE (see .env.example)
+uv run screen-papers --max-papers 5 --dry-run  # log decisions, write nothing
+uv run screen-papers                           # screen everything still unscreened
+uv run pytest -m integration                   # 3 obvious cases against real Gemini
+```
+
+- Model, batch size and concurrency: the `llm:` and `screening:` sections of `configs/base.yaml`
+- A paper whose screening fails stays unscreened and is retried on the next run.
+- `supporting_excerpt` is kept only if it really appears in the abstract (or the title).
+- Code: `src/steel_slag_slm/agents/` (shared ADK helpers plus the screener),
+  `data/bigquery_store.py` and `pipelines/screen_papers.py`. A new agent adds a prompt, an
+  output schema, a small agent module and a pipeline, and reuses the rest.
