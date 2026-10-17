@@ -5,6 +5,7 @@ description = "Steel slag literature pipeline and small language model"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "docling>=2.140.0",
     "google-adk>=2.12.0",
     "google-api-python-client>=2.100",
     "google-auth>=2.23",
@@ -12,6 +13,7 @@ dependencies = [
     "google-cloud-bigquery>=3.46.2",
     "openpyxl>=3.1.5",
     "pydantic>=2.5",
+    "pymupdf>=1.28.2",
     "python-dotenv>=1.0",
     "pyyaml>=6.0",
     "requests>=2.31",
@@ -33,9 +35,7 @@ dev = [
     "types-requests",
 ]
 notebook = [
-    "docling>=2.0",
     "ipykernel>=6.29",
-    "pymupdf>=1.24",
 ]
 
 [build-system]

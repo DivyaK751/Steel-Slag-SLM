@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.15' and sys_platform == 'win32'",
@@ -4154,6 +4154,7 @@ name = "steel-slag-slm"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "docling" },
     { name = "google-adk" },
     { name = "google-api-python-client" },
     { name = "google-auth" },
@@ -4161,6 +4162,7 @@ dependencies = [
     { name = "google-cloud-bigquery" },
     { name = "openpyxl" },
     { name = "pydantic" },
+    { name = "pymupdf" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "requests" },
@@ -4176,13 +4178,12 @@ dev = [
     { name = "types-requests" },
 ]
 notebook = [
-    { name = "docling" },
     { name = "ipykernel" },
-    { name = "pymupdf" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "docling", specifier = ">=2.140.0" },
     { name = "google-adk", specifier = ">=2.12.0" },
     { name = "google-api-python-client", specifier = ">=2.100" },
     { name = "google-auth", specifier = ">=2.23" },
@@ -4190,6 +4191,7 @@ requires-dist = [
     { name = "google-cloud-bigquery", specifier = ">=3.46.2" },
     { name = "openpyxl", specifier = ">=3.1.5" },
     { name = "pydantic", specifier = ">=2.5" },
+    { name = "pymupdf", specifier = ">=1.28.2" },
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "requests", specifier = ">=2.31" },
@@ -4204,11 +4206,7 @@ dev = [
     { name = "types-pyyaml" },
     { name = "types-requests" },
 ]
-notebook = [
-    { name = "docling", specifier = ">=2.0" },
-    { name = "ipykernel", specifier = ">=6.29" },
-    { name = "pymupdf", specifier = ">=1.24" },
-]
+notebook = [{ name = "ipykernel", specifier = ">=6.29" }]
 
 [[package]]
 name = "sympy"
