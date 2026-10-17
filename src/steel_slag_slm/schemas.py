@@ -26,42 +26,6 @@ class Paper:
 
 
 @dataclass(frozen=True, slots=True)
-class ImagePlacement:
-    """Locate an image resource on a source PDF page."""
-
-    page_number: int
-    bbox: tuple[float, float, float, float]
-
-
-@dataclass(frozen=True, slots=True)
-class ParsedImage:
-    """Describe one extracted image resource and its Drive copy, when uploaded."""
-
-    xref: int
-    file_name: str
-    width: int
-    height: int
-    placements: tuple[ImagePlacement, ...]
-    drive_file_id: str | None = None
-    drive_link: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class ParsedDocument:
-    """Store one parsed paper with source provenance and extracted content."""
-
-    openalex_id: str
-    source_pdf_file_id: str
-    source_pdf_name: str
-    source_pdf_link: str
-    text_parser: str
-    image_parser: str
-    markdown: str
-    tables: tuple[str, ...]
-    images: tuple[ParsedImage, ...]
-
-
-@dataclass(frozen=True, slots=True)
 class PaperForScreening:
     """One row of the BigQuery papers table, reduced to what the screening agent reads."""
 

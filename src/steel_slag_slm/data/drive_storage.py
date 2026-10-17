@@ -123,40 +123,6 @@ def _find_child_id(service: Any, parent_id: str, name: str, extra_query: str = "
     return matches[0]["id"] if matches else None
 
 
-def download_pdf(service: Any, file_id: str) -> bytes:
-    """Return the raw bytes of a PDF stored in Drive."""
-    content: bytes = (
-        service.files()
-        .get_media(fileId=file_id, **_ALL_DRIVES)
-        .execute(num_retries=DRIVE_RETRIES)
-    )
-    return content
-
-
-def ensure_subfolder(service: Any, parent_id: str, name: str) -> str:
-    """Return the ID of the named subfolder, creating it if it does not exist."""
-    existing = _find_child_id(
-        service,
-        parent_id,
-        name,
-        f" and mimeType = '{FOLDER_MIME_TYPE}'",
-    )
-    if existing:
-        return existing
-
-    body = {
-        "name": name,
-        "parents": [parent_id],
-        "mimeType": FOLDER_MIME_TYPE,
-    }
-    created = (
-        service.files()
-        .create(body=body, fields="id", **_ALL_DRIVES)
-        .execute(num_retries=DRIVE_RETRIES)
-    )
-    return str(created["id"])
-
-
 def list_known_paper_ids(service: Any, folder_id: str, rejected_subfolder_name: str) -> set[str]:
     """Return OpenAlex IDs already in the folder or in its rejected subfolder."""
     folder_ids = [folder_id]
