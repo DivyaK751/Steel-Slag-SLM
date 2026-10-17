@@ -17,6 +17,9 @@ from steel_slag_slm.schemas import Paper
 
 logger = logging.getLogger(__name__)
 
+# Temporary failures: the paper stays queued and is retried on the next run
+RETRY_LATER_OUTCOMES = {"download_error", "upload_error"}
+
 
 def _save_registry_rows(
     bigquery_client: bigquery.Client, settings: Settings, rows: list[dict[str, Any]]
@@ -48,7 +51,12 @@ def _fetch_paper(
     if download is None:
         return "no_pdf", None
     pdf, pdf_source = download
-    file_id = drive_storage.upload_pdf(drive_service, folder_id, paper, pdf, pdf_source)
+    try:
+        file_id = drive_storage.upload_pdf(drive_service, folder_id, paper, pdf, pdf_source)
+    except (TimeoutError, ConnectionError) as error:
+        # Only network hiccups: real Drive errors (e.g. a revoked login) should stop the run
+        logger.warning("Upload failed for %s, keeping it queued: %s", paper.openalex_id, error)
+        return "upload_error", None
     logger.info("Added (%s) %s: %s", pdf_source, paper.openalex_id, paper.title[:90])
     return f"added_{pdf_source}", file_id
 
@@ -70,7 +78,7 @@ def run_fetch(
 
     Returns:
         Counts: queued, added_free, added_openalex, already_known, not_found, no_pdf,
-        download_error.
+        download_error, upload_error.
     """
     folder_id = settings.drive_folder_id
     names = settings.drive
@@ -142,7 +150,7 @@ def run_fetch(
                     else _fetch_paper(settings, drive_service, client, paper)
                 )
                 outcomes[outcome] += 1
-                if outcome == "download_error":
+                if outcome in RETRY_LATER_OUTCOMES:
                     retry_tomorrow.add(paper_id)
                     continue
                 queue.discard(paper_id)

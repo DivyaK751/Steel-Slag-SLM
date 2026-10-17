@@ -194,3 +194,23 @@ def test_run_fetch_saves_registry_rows_after_each_batch_not_twice(
     client = _client({"q1": [SearchPages([], 1)], "q2": [SearchPages([], 1)]})
     fetch_papers.run_fetch(settings, MagicMock(), client, None, bigquery_client=MagicMock())
     assert batches == [["W2", "W3"]]  # saved once after the batch; nothing left for the end
+
+
+def test_run_fetch_keeps_a_paper_queued_when_the_drive_upload_times_out(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    drive = FakeDrive(settings, queue={"W2", "W3"})
+    drive.install(monkeypatch)
+    uploads = iter([TimeoutError("The read operation timed out"), "file-W3"])
+
+    def upload_pdf(*_: object) -> str:
+        result = next(uploads)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    monkeypatch.setattr(drive_storage, "upload_pdf", upload_pdf)
+    client = _client({"q1": [SearchPages([], 1)], "q2": [SearchPages([], 1)]})
+    outcomes = _run(settings, client)
+    assert outcomes["upload_error"] == 1 and outcomes["added_free"] == 1
+    assert drive.ids(settings.drive.queue_list_name) == {"W2"}
