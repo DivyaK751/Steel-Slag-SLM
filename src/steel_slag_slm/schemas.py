@@ -26,6 +26,37 @@ class Paper:
 
 
 @dataclass(frozen=True, slots=True)
+class ImagePlacement:
+    """Locate an image resource on a source PDF page."""
+
+    page_number: int
+    bbox: tuple[float, float, float, float]
+
+
+@dataclass(frozen=True, slots=True)
+class ParsedImage:
+    """Describe one extracted image resource and its source-page placements."""
+
+    xref: int
+    file_name: str
+    width: int
+    height: int
+    placements: tuple[ImagePlacement, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ParsedDocument:
+    """Store text, tables, and image resources parsed from one PDF."""
+
+    text_parser: str
+    image_parser: str
+    page_count: int
+    markdown: str
+    tables: tuple[str, ...]
+    images: tuple[ParsedImage, ...]
+    
+
+@dataclass(frozen=True, slots=True)
 class PaperForScreening:
     """One row of the BigQuery papers table, reduced to what the screening agent reads."""
 
