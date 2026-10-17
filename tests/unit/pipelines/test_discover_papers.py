@@ -34,7 +34,9 @@ def test_discover_queues_new_relevant_papers_and_advances_each_search(
     ]
     progress = {"q1": 6}
     queue = {"W5"}
-    finished = discover_papers(settings, client, progress, skip_ids={"W1"}, queue=queue)
+    finished = discover_papers(
+        settings, client, ["q1", "q2"], progress, skip_ids={"W1"}, queue=queue
+    )
     assert queue == {"W2", "W4", "W5"}  # W1 known, W3 irrelevant, W5 already queued
     assert progress == {"q1": 11, "q2": 1}
     assert finished == {"q2"}
@@ -46,5 +48,5 @@ def test_discover_leaves_a_failed_search_where_it_was(settings: Settings) -> Non
     client = MagicMock()
     client.read_search_pages.side_effect = [OpenAlexRequestError("timeout"), SearchPages([], 6)]
     progress = {"q1": 3}
-    discover_papers(settings, client, progress, skip_ids=set(), queue=set())
+    discover_papers(settings, client, ["q1", "q2"], progress, skip_ids=set(), queue=set())
     assert progress == {"q1": 3, "q2": 6}

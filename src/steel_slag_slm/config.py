@@ -22,7 +22,6 @@ class FetchSettings(BaseModel):
     search_filter: str
     sort: str
     per_page: int
-    max_pages_per_query: int
     pages_per_discovery: int
     request_timeout_s: float
     min_budget_usd: float

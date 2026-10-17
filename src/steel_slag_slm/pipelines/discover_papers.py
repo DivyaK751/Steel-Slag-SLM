@@ -14,11 +14,12 @@ logger = logging.getLogger(__name__)
 def discover_papers(
     settings: Settings,
     client: OpenAlexClient,
+    queries: list[str],
     progress: dict[str, int],
     skip_ids: set[str],
     queue: set[str],
 ) -> set[str]:
-    """Read each search's next pages, adding relevant papers not in skip_ids to the queue.
+    """Read each query's next pages, adding relevant papers not in skip_ids to the queue.
 
     progress and queue are updated as each search finishes, so the caller can save both even
     if the budget runs out partway through.
@@ -31,7 +32,7 @@ def discover_papers(
     """
     pages = settings.fetch.pages_per_discovery
     finished: set[str] = set()
-    for query in settings.fetch.queries:
+    for query in queries:
         first_page = progress.get(query, FIRST_PAGE)
         try:
             result = client.read_search_pages(query, first_page, pages)

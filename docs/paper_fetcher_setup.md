@@ -10,20 +10,21 @@ At 00:15 UTC, just after OpenAlex resets everyone's daily budget, GitHub Actions
 **Fetch papers** workflow. It runs once per team member, one after another, each with that
 member's OpenAlex key. Each run:
 
-1. **Lists the Drive folder** (and its `Rejected` subfolder) to see which papers we already have.
-2. **Searches OpenAlex** with the queries in `configs/base.yaml`.
-3. **Filters** each result with the relevance rules from the team's paper feedback (keep
-   cementitious / CO2 / characterization, skip asphalt / soil / leaching / GGBFS).
-4. **Skips duplicates**: papers already in the folder, in `Rejected`, or known to have no PDF.
-   It re-checks Drive right before each download, in case another run just added the paper.
-5. **Downloads the PDF**, trying the free publisher copy first and OpenAlex's paid copy
-   ($0.01) only if that fails.
-6. **Uploads it** to the folder as `<OpenAlex ID> - <title>.pdf`.
-7. **Stops** when that member's daily budget (about $1) is used up, then the next member's run
-   starts.
+1. **Reads the queue** (`_fetcher_queue_ids.txt` in the folder): OpenAlex IDs of relevant papers
+   found earlier but not downloaded yet.
+2. **Refills it when it's empty**: every search in `configs/base.yaml` reads its *next* 5 result
+   pages (where each search left off is kept in `_fetcher_search_progress.txt`), filters them
+   with the relevance rules from the team's paper feedback, and queues papers that aren't in the
+   folder, in `Rejected`, or known to have no PDF. A search that reaches its last page starts
+   over from page 1, which picks up newly published papers.
+3. **Downloads queued papers**, trying the free publisher copy first and OpenAlex's paid copy
+   ($0.01) only if that fails, and uploads each as `<OpenAlex ID> - <title>.pdf`.
+4. **Stops** when that member's daily budget (about $1) is used up, saving what's left in the
+   queue for the next member's run, which picks up where it stopped.
 
 Papers with no downloadable PDF are written to `_fetcher_no_pdf_ids.txt` in the folder, so
-later nights don't waste time retrying them. Leave that file in place.
+later nights don't waste time retrying them. Leave all three `_fetcher_*.txt` files in place;
+deleting the progress file just makes every search start again from page 1.
 
 ### BigQuery paper registry
 
@@ -187,6 +188,9 @@ Nothing has to be done for the job to keep going. The team's routine is:
 Everything is in `configs/base.yaml`; no code changes needed:
 
 - `fetch.queries`: the OpenAlex searches. Keep phrases in quotes, e.g. `'"ladle slag" cement'`.
+  A newly added search is read from page 1 at the start of the next run, even if the queue
+  still has papers in it. A removed search is dropped from the progress file. Rewording a
+  search counts as removing it and adding a new one, so it starts again from page 1.
 - `relevance.exclude_title_terms`: titles containing these are skipped (e.g. `asphalt`).
 - `relevance.include_terms` / `include_title_terms`: what makes a paper worth keeping.
 

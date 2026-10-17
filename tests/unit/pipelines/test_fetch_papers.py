@@ -1,3 +1,4 @@
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -7,6 +8,7 @@ from pydantic import SecretStr
 import steel_slag_slm.pipelines.fetch_papers as fetch_papers
 from steel_slag_slm.config import BASE_CONFIG_PATH, Settings
 from steel_slag_slm.data import drive_storage, paper_registry
+from steel_slag_slm.data.openalex import SearchPages
 from steel_slag_slm.exceptions import BudgetExhaustedError, OpenAlexRequestError
 from steel_slag_slm.schemas import Paper
 
@@ -24,109 +26,191 @@ def settings() -> Settings:
     )
 
 
-saved_no_pdf: set[str] = set()
+class FakeDrive:
+    """Drive folder holding W1, with W9 on the no-PDF list and the given queue and progress."""
+
+    def __init__(self, settings: Settings, queue: set[str], progress: str = "q1\t1\nq2\t1") -> None:
+        names = settings.drive
+        self.files = {
+            names.queue_list_name: "\n".join(sorted(queue)),
+            names.no_pdf_list_name: "W9",
+            names.search_progress_name: progress,
+        }
+        self.uploaded: list[str] = []
+
+    def install(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def read_text(_s: object, _f: str, name: str) -> str:
+            return self.files.get(name, "")
+
+        def write_text(_s: object, _f: str, name: str, text: str) -> None:
+            self.files[name] = text
+
+        def upload_pdf(_s: object, _f: str, paper: Paper, _pdf: bytes, _src: str) -> str:
+            self.uploaded.append(paper.openalex_id)
+            return f"file-{paper.openalex_id}"
+
+        monkeypatch.setattr(drive_storage, "list_known_paper_ids", lambda *_: {"W1"})
+        monkeypatch.setattr(drive_storage, "has_paper", lambda *_: False)
+        monkeypatch.setattr(drive_storage, "read_text_file", read_text)
+        monkeypatch.setattr(drive_storage, "write_text_file", write_text)
+        monkeypatch.setattr(drive_storage, "upload_pdf", upload_pdf)
+
+    def ids(self, name: str) -> set[str]:
+        return set(self.files[name].split())
 
 
-@pytest.fixture
-def uploads(monkeypatch: pytest.MonkeyPatch) -> list[str]:
-    """Fake Drive that already holds W1 and records every upload."""
-    uploaded: list[str] = []
-    saved_no_pdf.clear()
-    storage = drive_storage
-    monkeypatch.setattr(storage, "list_known_paper_ids", lambda *_: {"W1"})
-    monkeypatch.setattr(storage, "has_paper", lambda *_: False)
-    monkeypatch.setattr(storage, "read_id_list", lambda *_: {"W9"})
-    monkeypatch.setattr(storage, "write_id_list", lambda _s, _f, _n, ids: saved_no_pdf.update(ids))
-
-    def upload_pdf(_s: object, _f: str, paper: Paper, _pdf: bytes, _src: str) -> str:
-        uploaded.append(paper.openalex_id)
-        return f"file-{paper.openalex_id}"
-
-    monkeypatch.setattr(storage, "upload_pdf", upload_pdf)
-    return uploaded
-
-
-def _client(results_by_query: dict[str, list[Paper]]) -> MagicMock:
+def _client(searches: dict[str, list[SearchPages]] | None = None) -> MagicMock:
     client = MagicMock()
-    client.iter_papers.side_effect = lambda query: iter(results_by_query[query])
+    client.iter_papers_by_id.side_effect = lambda ids: iter(_paper(i) for i in ids)
     client.download_pdf.return_value = (b"%PDF", "free")
+    pages = {query: iter(results) for query, results in (searches or {}).items()}
+    client.read_search_pages.side_effect = lambda query, *_: next(pages[query])
     return client
 
 
-def test_run_fetch_skips_known_irrelevant_and_repeated_papers(
-    settings: Settings, uploads: list[str]
+def _run(settings: Settings, client: MagicMock, max_new_papers: int | None = None) -> Any:
+    return fetch_papers.run_fetch(settings, MagicMock(), client, max_new_papers)
+
+
+def test_run_fetch_downloads_queued_papers_before_searching(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    drive = FakeDrive(settings, queue={"W2", "W3", "W4"})
+    drive.install(monkeypatch)
+    client = _client()
+    _run(settings, client, max_new_papers=2)
+    assert drive.uploaded == ["W2", "W3"]
+    assert drive.ids(settings.drive.queue_list_name) == {"W4"}
+    client.read_search_pages.assert_not_called()
+
+
+def test_run_fetch_searches_deeper_when_the_queue_is_empty(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    drive = FakeDrive(settings, queue=set(), progress="q1\t6\nq2\t1")
+    drive.install(monkeypatch)
     client = _client(
         {
-            "q1": [_paper("W1"), _paper("W2"), _paper("W3", "Steel slag asphalt mixture")],
-            "q2": [_paper("W2"), _paper("W4")],
+            "q1": [SearchPages([_paper("W1"), _paper("W2"), _paper("W9")], 11)],
+            "q2": [SearchPages([_paper("W3", "Steel slag asphalt")], 6)],
         }
     )
-    outcomes = fetch_papers.run_fetch(settings, MagicMock(), client, max_new_papers=None)
-    assert uploads == ["W2", "W4"]
-    assert outcomes["already_known"] == 1 and outcomes["irrelevant"] == 1
+    outcomes = _run(settings, client, max_new_papers=1)
+    assert drive.uploaded == ["W2"]  # W1 in Drive, W9 has no PDF, W3 irrelevant
+    assert outcomes["queued"] == 1
+    assert drive.files[settings.drive.search_progress_name] == "q1\t11\nq2\t6"
 
 
-def test_run_fetch_stops_cleanly_when_budget_runs_out(
-    settings: Settings, uploads: list[str]
+def test_run_fetch_stops_once_every_search_has_nothing_new(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    client = _client({"q1": [_paper("W2"), _paper("W3")], "q2": []})
+    drive = FakeDrive(settings, queue=set())
+    drive.install(monkeypatch)
+    client = _client({"q1": [SearchPages([], 1)], "q2": [SearchPages([_paper("W1")], 1)]})
+    outcomes = _run(settings, client)
+    assert outcomes["queued"] == 0
+    assert client.read_search_pages.call_count == 2
+
+
+def test_run_fetch_keeps_failed_downloads_queued_and_records_missing_pdfs(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    drive = FakeDrive(settings, queue={"W2", "W3", "W4"})
+    drive.install(monkeypatch)
+    client = _client({"q1": [SearchPages([], 1)], "q2": [SearchPages([], 1)]})
+    client.download_pdf.side_effect = [OpenAlexRequestError("timeout"), None, (b"%PDF", "free")]
+    outcomes = _run(settings, client)
+    assert drive.uploaded == ["W4"]
+    assert drive.ids(settings.drive.queue_list_name) == {"W2"}
+    assert drive.ids(settings.drive.no_pdf_list_name) == {"W9", "W3"}
+    assert outcomes["download_error"] == 1 and outcomes["no_pdf"] == 1
+
+
+def test_run_fetch_saves_the_rest_of_the_queue_when_the_budget_runs_out(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    drive = FakeDrive(settings, queue={"W2", "W3", "W4"})
+    drive.install(monkeypatch)
+    client = _client()
     client.download_pdf.side_effect = [(b"%PDF", "openalex"), BudgetExhaustedError("done")]
-    outcomes = fetch_papers.run_fetch(settings, MagicMock(), client, max_new_papers=None)
-    assert uploads == ["W2"]
+    outcomes = _run(settings, client)
     assert outcomes["added_openalex"] == 1
+    assert drive.ids(settings.drive.queue_list_name) == {"W3", "W4"}
 
 
-def test_run_fetch_respects_max_new_papers(settings: Settings, uploads: list[str]) -> None:
-    client = _client({"q1": [_paper("W2"), _paper("W3")], "q2": [_paper("W4")]})
-    fetch_papers.run_fetch(settings, MagicMock(), client, max_new_papers=2)
-    assert uploads == ["W2", "W3"]
-
-
-def test_run_fetch_remembers_papers_without_a_pdf(settings: Settings, uploads: list[str]) -> None:
-    client = _client({"q1": [_paper("W9"), _paper("W2"), _paper("W3")], "q2": []})
-    client.download_pdf.side_effect = [None, (b"%PDF", "free")]
-    outcomes = fetch_papers.run_fetch(settings, MagicMock(), client, max_new_papers=None)
-    assert uploads == ["W3"]
-    assert outcomes["no_pdf_before"] == 1
-    assert saved_no_pdf == {"W9", "W2"}
-
-
-def test_run_fetch_skips_failed_download_without_marking_it_as_no_pdf(
-    settings: Settings, uploads: list[str]
+def test_run_fetch_drops_queued_ids_openalex_no_longer_has(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    client = _client({"q1": [_paper("W2"), _paper("W3")], "q2": []})
-    client.download_pdf.side_effect = [OpenAlexRequestError("timed out"), (b"%PDF", "free")]
-    outcomes = fetch_papers.run_fetch(settings, MagicMock(), client, max_new_papers=None)
-    assert uploads == ["W3"]
-    assert outcomes["download_error"] == 1
-    assert "W2" not in saved_no_pdf
-
-
-def test_run_fetch_moves_to_next_query_when_a_search_fails(
-    settings: Settings, uploads: list[str]
-) -> None:
-    def iter_papers(query: str):  # type: ignore[no-untyped-def]
-        if query == "q1":
-            yield _paper("W2")
-            raise OpenAlexRequestError("connection dropped")
-        yield _paper("W4")
-
-    client = _client({})
-    client.iter_papers.side_effect = iter_papers
-    fetch_papers.run_fetch(settings, MagicMock(), client, max_new_papers=None)
-    assert uploads == ["W2", "W4"]
+    drive = FakeDrive(settings, queue={"W2", "W3"})
+    drive.install(monkeypatch)
+    client = _client()
+    client.iter_papers_by_id.side_effect = lambda ids: iter([_paper("W3")])
+    outcomes = _run(settings, client, max_new_papers=1)
+    assert outcomes["not_found"] == 1
+    assert drive.ids(settings.drive.queue_list_name) == set()
 
 
 def test_run_fetch_adds_a_registry_row_for_each_uploaded_paper(
-    settings: Settings, uploads: list[str], monkeypatch: pytest.MonkeyPatch
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    drive = FakeDrive(settings, queue={"W2", "W3"})
+    drive.install(monkeypatch)
     saved: list[dict[str, str]] = []
     monkeypatch.setattr(paper_registry, "ensure_papers_table", lambda *_: "p.d.t")
     monkeypatch.setattr(paper_registry, "add_rows", lambda _c, _t, rows: saved.extend(rows))
-    client = _client({"q1": [_paper("W2"), _paper("W3")], "q2": []})
-    fetch_papers.run_fetch(settings, MagicMock(), client, None, bigquery_client=MagicMock())
+    fetch_papers.run_fetch(settings, MagicMock(), _client(), 2, bigquery_client=MagicMock())
     assert [(row["openalex_id"], row["drive_file_id"]) for row in saved] == [
         ("W2", "file-W2"),
         ("W3", "file-W3"),
     ]
+
+
+def test_run_fetch_reads_newly_added_searches_first_and_forgets_removed_ones(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # q2 is new in the config and "old" was removed from it; the queue is not empty
+    drive = FakeDrive(settings, queue={"W2"}, progress="q1\t16\nold\t4")
+    drive.install(monkeypatch)
+    client = _client({"q2": [SearchPages([_paper("W5")], 6)]})
+    outcomes = _run(settings, client, max_new_papers=1)
+    client.read_search_pages.assert_called_once_with("q2", 1, settings.fetch.pages_per_discovery)
+    assert outcomes["queued"] == 1
+    assert drive.uploaded == ["W2"]
+    assert drive.files[settings.drive.search_progress_name] == "q1\t16\nq2\t6"
+
+
+def test_run_fetch_saves_registry_rows_after_each_batch_not_twice(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    drive = FakeDrive(settings, queue={"W2", "W3"})
+    drive.install(monkeypatch)
+    batches: list[list[str]] = []
+    monkeypatch.setattr(paper_registry, "ensure_papers_table", lambda *_: "p.d.t")
+    monkeypatch.setattr(
+        paper_registry,
+        "add_rows",
+        lambda _c, _t, rows: batches.append([row["openalex_id"] for row in rows]),
+    )
+    client = _client({"q1": [SearchPages([], 1)], "q2": [SearchPages([], 1)]})
+    fetch_papers.run_fetch(settings, MagicMock(), client, None, bigquery_client=MagicMock())
+    assert batches == [["W2", "W3"]]  # saved once after the batch; nothing left for the end
+
+
+def test_run_fetch_keeps_a_paper_queued_when_the_drive_upload_times_out(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    drive = FakeDrive(settings, queue={"W2", "W3"})
+    drive.install(monkeypatch)
+    uploads = iter([TimeoutError("The read operation timed out"), "file-W3"])
+
+    def upload_pdf(*_: object) -> str:
+        result = next(uploads)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    monkeypatch.setattr(drive_storage, "upload_pdf", upload_pdf)
+    client = _client({"q1": [SearchPages([], 1)], "q2": [SearchPages([], 1)]})
+    outcomes = _run(settings, client)
+    assert outcomes["upload_error"] == 1 and outcomes["added_free"] == 1
+    assert drive.ids(settings.drive.queue_list_name) == {"W2"}
