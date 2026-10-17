@@ -39,6 +39,15 @@ fetch:
     - '"steel slag" "compressive strength"'
     - '"steel slag" durability'
     - '"steel slag" reactivity'
+    - '"induction furnace slag"'
+    - '"steel slag" "clinker production"'
+    - '"steel slag" "iron reclamation"'
+    - '"steel slag aggregate"'
+    - '"artificial aggregate" "steel slag"'
+    - '"steel slag" "early-age hydration"'
+    - '"steel slag binder"'
+    - '"alkaline industrial wastes" carbonation'
+    - '"high performance cementing materials" slag'
   search_filter: "is_oa:true,language:en"
   # Citation sort surfaces famous off-topic papers; relevance keeps results on steel slag
   sort: "relevance_score:desc"
@@ -81,6 +90,7 @@ relevance:
     - aod slag
     - argon oxygen decarburization slag
     - dephosphorization slag
+    - induction furnace slag
   # Title or abstract must touch a use case we extract (cementitious, stability or CO2) ...
   # "cement" also covers cementitious/SCM wording, "pozzolan" covers pozzolanic/pozzolana,
   # "co2" covers CO2 uptake, "carbonation" covers mineral carbonation
@@ -159,6 +169,9 @@ relevance:
     - heavy metal removal
     - acid mine drainage
     - catalyst
+    - leaching
+    - heavy metal
+    - agricultur
   # Other slags skip a title only when it names no steel slag, so blends such as
   # "steel slag-GGBFS-cement" stay in
   other_slag_title_terms:
