@@ -44,6 +44,8 @@ fetch:
   sort: "relevance_score:desc"
   per_page: 200
   max_pages_per_query: 5
+  # Each time the download queue runs dry, every search reads this many more result pages
+  pages_per_discovery: 5
   request_timeout_s: 30
   # Stop before a paid download once the remaining daily budget drops below this
   min_budget_usd: 0.011
@@ -180,6 +182,10 @@ drive:
   rejected_subfolder_name: Rejected
   # Papers with no downloadable PDF are listed here so daily runs stop retrying them
   no_pdf_list_name: _fetcher_no_pdf_ids.txt
+  # Relevant papers found by the searches but not downloaded yet
+  queue_list_name: _fetcher_queue_ids.txt
+  # The next result page each search reads, so runs go deeper instead of repeating page 1
+  search_progress_name: _fetcher_search_progress.txt
 
 registry:
   # One row per paper in the Drive folder, with its abstract, keywords and language

@@ -23,6 +23,7 @@ class FetchSettings(BaseModel):
     sort: str
     per_page: int
     max_pages_per_query: int
+    pages_per_discovery: int
     request_timeout_s: float
     min_budget_usd: float
 
@@ -42,6 +43,8 @@ class DriveSettings(BaseModel):
 
     rejected_subfolder_name: str
     no_pdf_list_name: str
+    queue_list_name: str
+    search_progress_name: str
 
 
 class RegistrySettings(BaseModel):

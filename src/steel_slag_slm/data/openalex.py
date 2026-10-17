@@ -3,6 +3,7 @@
 import logging
 import time
 from collections.abc import Iterator, Mapping
+from dataclasses import dataclass
 from typing import Any
 
 import requests
@@ -19,6 +20,16 @@ PDF_MAGIC_BYTES = b"%PDF"
 RATE_LIMIT_RETRY_DELAY_S = 1.0
 # OpenAlex accepts at most 100 values in one OR filter
 MAX_IDS_PER_LOOKUP = 100
+# Paging by page number (rather than cursor) stops at this many results per search
+MAX_RESULTS_BY_PAGE_NUMBER = 10_000
+
+
+@dataclass(frozen=True, slots=True)
+class SearchPages:
+    """Papers from a run of consecutive result pages, and where the next run should start."""
+
+    papers: list[Paper]
+    next_page: int  # 1 once the search has been read to its end
 
 
 def parse_remaining_budget(headers: Mapping[str, str]) -> float | None:
@@ -131,6 +142,36 @@ class OpenAlexClient:
             cursor = page.get("meta", {}).get("next_cursor")
             for work in page.get("results", []):
                 yield parse_work(work)
+
+    def read_search_pages(self, query: str, first_page: int, page_count: int) -> SearchPages:
+        """Read page_count result pages of a search, starting at first_page.
+
+        Page numbers, unlike cursors, still work the next day, so a search can resume where
+        the last run stopped. Reaching the last page (or OpenAlex's 10,000-result limit for
+        page numbers) sets next_page back to 1 so the search starts over.
+        """
+        per_page = self._settings.per_page
+        last_page = MAX_RESULTS_BY_PAGE_NUMBER // per_page
+        papers: list[Paper] = []
+        for page in range(first_page, first_page + page_count):
+            response = self._billed_get(
+                WORKS_URL,
+                {
+                    "search": query,
+                    "filter": self._settings.search_filter,
+                    "sort": self._settings.sort,
+                    "per_page": per_page,
+                    "page": page,
+                },
+            )
+            response.raise_for_status()
+            body = response.json()
+            results = body.get("results", [])
+            papers.extend(parse_work(work) for work in results)
+            total_pages = -(-body.get("meta", {}).get("count", 0) // per_page)  # ceiling division
+            if not results or page >= min(total_pages, last_page):
+                return SearchPages(papers, next_page=1)
+        return SearchPages(papers, next_page=first_page + page_count)
 
     def iter_papers_by_id(self, openalex_ids: list[str]) -> Iterator[Paper]:
         """Yield the papers with these OpenAlex IDs, looking up many per request.

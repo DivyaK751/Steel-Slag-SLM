@@ -173,21 +173,20 @@ def upload_pdf(service: Any, folder_id: str, paper: Paper, pdf: bytes, pdf_sourc
     return str(created["id"])
 
 
-def read_id_list(service: Any, folder_id: str, file_name: str) -> set[str]:
-    """Read IDs from a one-per-line text file in the folder; empty if the file doesn't exist."""
+def read_text_file(service: Any, folder_id: str, file_name: str) -> str:
+    """Read a text file in the folder; empty if the file doesn't exist yet."""
     file_id = _find_child_id(service, folder_id, file_name)
     if not file_id:
-        return set()
+        return ""
     content: bytes = (
         service.files().get_media(fileId=file_id, **_ALL_DRIVES).execute(num_retries=DRIVE_RETRIES)
     )
-    return {line.strip() for line in content.decode().splitlines() if line.strip()}
+    return content.decode()
 
 
-def write_id_list(service: Any, folder_id: str, file_name: str, ids: set[str]) -> None:
-    """Save IDs one per line to a text file in the folder, replacing its previous contents."""
-    content = "\n".join(sorted(ids)).encode()
-    media = MediaIoBaseUpload(io.BytesIO(content), mimetype="text/plain")
+def write_text_file(service: Any, folder_id: str, file_name: str, text: str) -> None:
+    """Save a text file in the folder, replacing its previous contents."""
+    media = MediaIoBaseUpload(io.BytesIO(text.encode()), mimetype="text/plain")
     file_id = _find_child_id(service, folder_id, file_name)
     if file_id:
         service.files().update(fileId=file_id, media_body=media, **_ALL_DRIVES).execute(
@@ -198,3 +197,14 @@ def write_id_list(service: Any, folder_id: str, file_name: str, ids: set[str]) -
         service.files().create(body=body, media_body=media, **_ALL_DRIVES).execute(
             num_retries=DRIVE_RETRIES
         )
+
+
+def read_id_list(service: Any, folder_id: str, file_name: str) -> set[str]:
+    """Read IDs from a one-per-line text file in the folder; empty if the file doesn't exist."""
+    text = read_text_file(service, folder_id, file_name)
+    return {line.strip() for line in text.splitlines() if line.strip()}
+
+
+def write_id_list(service: Any, folder_id: str, file_name: str, ids: set[str]) -> None:
+    """Save IDs one per line to a text file in the folder, replacing its previous contents."""
+    write_text_file(service, folder_id, file_name, "\n".join(sorted(ids)))

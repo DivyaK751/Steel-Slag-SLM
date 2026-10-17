@@ -6,6 +6,7 @@ import requests
 from steel_slag_slm.config import FetchSettings
 from steel_slag_slm.data.openalex import (
     MAX_IDS_PER_LOOKUP,
+    MAX_RESULTS_BY_PAGE_NUMBER,
     OpenAlexClient,
     parse_remaining_budget,
     parse_work,
@@ -20,6 +21,7 @@ SETTINGS = FetchSettings(
     sort="cited_by_count:desc",
     per_page=200,
     max_pages_per_query=1,
+    pages_per_discovery=2,
     request_timeout_s=1,
     min_budget_usd=0.011,
 )
@@ -132,3 +134,33 @@ def test_download_pdf_raises_request_error_on_server_error() -> None:
     client = _client(_response(content=b"<html>"), server_error)
     with pytest.raises(OpenAlexRequestError):
         client.download_pdf(PAPER)
+
+
+def _results_page(count: int, ids: list[str]) -> MagicMock:
+    page = _response()
+    page.json.return_value = {
+        "meta": {"count": count},
+        "results": [{"id": f"https://openalex.org/{paper_id}"} for paper_id in ids],
+    }
+    return page
+
+
+def test_read_search_pages_resumes_at_first_page_and_reports_the_next_one() -> None:
+    client = _client(_results_page(5000, ["W1"]), _results_page(5000, ["W2"]))
+    result = client.read_search_pages("steel slag", first_page=3, page_count=2)
+    assert [paper.openalex_id for paper in result.papers] == ["W1", "W2"]
+    assert result.next_page == 5
+    pages = [call.kwargs["params"]["page"] for call in client._session.get.call_args_list]
+    assert pages == [3, 4]
+
+
+def test_read_search_pages_starts_over_after_the_last_page() -> None:
+    # 450 results at 200 per page: page 3 is the last one
+    client = _client(_results_page(450, ["W1"]))
+    assert client.read_search_pages("q", first_page=3, page_count=2).next_page == 1
+
+
+def test_read_search_pages_starts_over_at_the_page_number_limit() -> None:
+    last_page = MAX_RESULTS_BY_PAGE_NUMBER // SETTINGS.per_page
+    client = _client(_results_page(50_000, ["W1"]))
+    assert client.read_search_pages("q", first_page=last_page, page_count=2).next_page == 1
