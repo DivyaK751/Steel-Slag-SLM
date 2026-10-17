@@ -6,6 +6,7 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 /data/
+/notebooks/data/raw/pdf_parser_sample/
 /models/
 *.json.key
 service_account*.json
