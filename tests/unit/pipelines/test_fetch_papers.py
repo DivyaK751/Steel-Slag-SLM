@@ -177,3 +177,20 @@ def test_run_fetch_reads_newly_added_searches_first_and_forgets_removed_ones(
     assert outcomes["queued"] == 1
     assert drive.uploaded == ["W2"]
     assert drive.files[settings.drive.search_progress_name] == "q1\t16\nq2\t6"
+
+
+def test_run_fetch_saves_registry_rows_after_each_batch_not_twice(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    drive = FakeDrive(settings, queue={"W2", "W3"})
+    drive.install(monkeypatch)
+    batches: list[list[str]] = []
+    monkeypatch.setattr(paper_registry, "ensure_papers_table", lambda *_: "p.d.t")
+    monkeypatch.setattr(
+        paper_registry,
+        "add_rows",
+        lambda _c, _t, rows: batches.append([row["openalex_id"] for row in rows]),
+    )
+    client = _client({"q1": [SearchPages([], 1)], "q2": [SearchPages([], 1)]})
+    fetch_papers.run_fetch(settings, MagicMock(), client, None, bigquery_client=MagicMock())
+    assert batches == [["W2", "W3"]]  # saved once after the batch; nothing left for the end

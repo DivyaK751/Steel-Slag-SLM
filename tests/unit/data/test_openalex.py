@@ -163,3 +163,9 @@ def test_read_search_pages_starts_over_at_the_page_number_limit() -> None:
     last_page = MAX_RESULTS_BY_PAGE_NUMBER // SETTINGS.per_page
     client = _client(_results_page(50_000, ["W1"]))
     assert client.read_search_pages("q", first_page=last_page, page_count=2).next_page == 1
+
+
+def test_download_pdf_falls_back_to_paid_copy_when_free_link_redirects_to_a_bad_url() -> None:
+    bad_redirect = UnicodeDecodeError("utf-8", b"\xf3", 0, 1, "invalid continuation byte")
+    client = _client(bad_redirect, _response(content=b"%PDF-paid"))
+    assert client.download_pdf(PAPER) == (b"%PDF-paid", "openalex")

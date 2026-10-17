@@ -111,7 +111,8 @@ class OpenAlexClient:
                 )
                 if response.status_code >= 500:
                     response.raise_for_status()
-            except requests.RequestException as error:
+            # UnicodeError: requests can't follow a redirect to a non-UTF-8 URL
+            except (requests.RequestException, UnicodeError) as error:
                 raise OpenAlexRequestError(f"OpenAlex request failed: {error}") from error
             self.remaining_budget_usd = parse_remaining_budget(response.headers)
             if response.status_code != 429:
@@ -182,7 +183,8 @@ class OpenAlexClient:
                 )
                 if _is_pdf(response):
                     return response.content, "free"
-            except requests.RequestException as error:
+            # Publisher links can redirect to non-UTF-8 URLs, which requests can't follow
+            except (requests.RequestException, UnicodeError) as error:
                 logger.debug("Free PDF failed for %s: %s", paper.openalex_id, error)
 
         if not paper.paid_pdf_url:

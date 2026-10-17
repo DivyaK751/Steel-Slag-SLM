@@ -95,6 +95,21 @@ def run_fetch(
     retry_tomorrow: set[str] = set()
     finished_searches: set[str] = set()
 
+    def save_progress() -> None:
+        """Save the queue, search positions, no-PDF list and new registry rows to Drive/BigQuery."""
+        drive_storage.write_id_list(drive_service, folder_id, names.queue_list_name, queue)
+        drive_storage.write_text_file(
+            drive_service, folder_id, names.search_progress_name, format_progress(progress)
+        )
+        if outcomes["no_pdf"]:
+            drive_storage.write_id_list(
+                drive_service, folder_id, names.no_pdf_list_name, no_pdf_ids
+            )
+        # If this write fails, the nightly registry sync adds these rows instead
+        if bigquery_client is not None:
+            _save_registry_rows(bigquery_client, settings, registry_rows)
+        registry_rows.clear()
+
     try:
         if new_queries:
             logger.info("Reading %d searches added since the last run", len(new_queries))
@@ -138,20 +153,12 @@ def run_fetch(
                     registry_rows.append(
                         paper_registry.build_row(paper, file_id, datetime.now(UTC))
                     )
+            # Saved after every batch, so a job killed at GitHub's time limit loses little
+            save_progress()
     except BudgetExhaustedError as error:
         logger.info("Stopping: %s", error)
     finally:
         # Saved even if the run crashes, so the next run continues where this one stopped
-        drive_storage.write_id_list(drive_service, folder_id, names.queue_list_name, queue)
-        drive_storage.write_text_file(
-            drive_service, folder_id, names.search_progress_name, format_progress(progress)
-        )
-        if outcomes["no_pdf"]:
-            drive_storage.write_id_list(
-                drive_service, folder_id, names.no_pdf_list_name, no_pdf_ids
-            )
-        # One load job per run; if it fails, the nightly registry sync adds these rows instead
-        if bigquery_client is not None:
-            _save_registry_rows(bigquery_client, settings, registry_rows)
+        save_progress()
 
     return outcomes
