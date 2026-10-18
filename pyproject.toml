@@ -24,6 +24,7 @@ fetch-papers = "steel_slag_slm.cli:fetch_papers"
 sync-registry = "steel_slag_slm.cli:sync_registry"
 screen-papers = "steel_slag_slm.cli:screen_papers"
 evaluate-screening = "steel_slag_slm.cli:evaluate_screening"
+parse-pdfs = "steel_slag_slm.cli:parse_pdfs"
 
 [dependency-groups]
 dev = [

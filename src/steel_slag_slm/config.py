@@ -46,6 +46,15 @@ class DriveSettings(BaseModel):
     search_progress_name: str
 
 
+class DriveConnectionSettings(BaseModel):
+    """Credentials and source folder used to connect to Google Drive."""
+
+    folder_id: str
+    service_account_file: Path | None = None
+    oauth_client_file: Path | None = None
+    oauth_token_file: Path = DEFAULT_GOOGLE_TOKEN_PATH
+
+
 class RegistrySettings(BaseModel):
     """Where the BigQuery table listing every paper in the Drive folder lives."""
 
@@ -204,3 +213,16 @@ def load_pdf_parsing_settings(
     """Build PDF-parsing settings from the YAML config."""
     raw_config = _read_base_config(config_path)
     return PdfParsingSettings(**raw_config["pdf_parsing"])
+
+
+def load_drive_connection_settings() -> DriveConnectionSettings:
+    """Load Drive authentication and source-folder settings from the environment."""
+    load_dotenv(PROJECT_ROOT / ".env")
+    return DriveConnectionSettings(
+        folder_id=_require_env("DRIVE_FOLDER_ID"),
+        service_account_file=_optional_path_env("GOOGLE_APPLICATION_CREDENTIALS"),
+        oauth_client_file=_optional_path_env("GOOGLE_OAUTH_CLIENT_FILE"),
+        oauth_token_file=Path(
+            os.environ.get("GOOGLE_OAUTH_TOKEN_FILE", "").strip() or DEFAULT_GOOGLE_TOKEN_PATH
+        ).expanduser(),
+    )

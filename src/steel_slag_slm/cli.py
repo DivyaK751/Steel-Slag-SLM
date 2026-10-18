@@ -13,8 +13,11 @@ from google.cloud import bigquery
 from steel_slag_slm.agents.relevance_screener import build_screener_agent
 from steel_slag_slm.agents.runner import build_runner
 from steel_slag_slm.config import (
+    DriveConnectionSettings,
     ScreeningSettings,
     Settings,
+    load_drive_connection_settings,
+    load_pdf_parsing_settings,
     load_evaluation_settings,
     load_gcp_settings,
     load_screening_settings,
@@ -28,6 +31,7 @@ from steel_slag_slm.pipelines.evaluate_screening import run_evaluation
 from steel_slag_slm.pipelines.fetch_papers import run_fetch
 from steel_slag_slm.pipelines.screen_papers import run_screening
 from steel_slag_slm.pipelines.sync_registry import run_registry_sync
+from steel_slag_slm.pipelines.parse_pdfs import run_pdf_parsing
 
 logger = logging.getLogger(__name__)
 
@@ -171,3 +175,30 @@ def evaluate_screening() -> None:
         f"Agreed with humans on {metrics.matched}/{metrics.labelled} labelled papers ({accuracy})"
     )
     print(f"Report: {path}")
+
+
+def parse_pdfs() -> None:
+    """Parse unprocessed trial-paper PDFs and save results to Drive."""
+    argparse.ArgumentParser(description=parse_pdfs.__doc__).parse_args()
+    _setup_logging()
+
+    parsing_settings = load_pdf_parsing_settings()
+    drive_settings = load_drive_connection_settings()
+    gcp_settings = load_gcp_settings()
+
+    drive_service = build_drive_service(
+        drive_settings.service_account_file,
+        drive_settings.oauth_client_file,
+        drive_settings.oauth_token_file,
+    )
+    bigquery_client = build_bigquery_client(
+        gcp_settings.project,
+        gcp_settings.credentials_file,
+    )
+    outcomes = run_pdf_parsing(
+        parsing_settings,
+        bigquery_client,
+        drive_service,
+        drive_settings.folder_id,
+    )
+    print("Summary:", dict(outcomes))
