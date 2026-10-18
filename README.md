@@ -65,7 +65,7 @@ Start with one unindexed paper and inspect its JSON, images, and index entry in 
 uv run parse-pdfs --max-papers 1
 ```
 
-Inspect that paper’s JSON, images, and index entry in the Drive subfolder. If the output looks correct, process all remaining unindexed papers:
+Inspect that paper’s JSON, images, and index entry in the `_parsed` Drive subfolder. If the output looks correct, process all remaining unindexed papers:
 
 ```bash
 uv run parse-pdfs

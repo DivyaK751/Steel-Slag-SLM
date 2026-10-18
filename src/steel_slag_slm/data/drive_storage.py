@@ -4,6 +4,7 @@ import io
 import re
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 from google.auth.credentials import Credentials
 from google.auth.transport.requests import Request
@@ -14,8 +15,6 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
 from steel_slag_slm.schemas import Paper
-
-from urllib.parse import parse_qs, urlparse
 
 DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive"]
 FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
