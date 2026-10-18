@@ -52,8 +52,7 @@ uv run pytest -m integration                   # 3 obvious cases against real Ge
 The `parse-pdfs` command reads paper IDs and Drive links from
 `capstone-project-511200.steel_slag.papers_trial`. It downloads source PDFs from the configured
 Drive folder, parses text and tables with Docling and embedded image resources with PyMuPDF, then
-stores one JSON document per paper, separate image files, and an `index.json` registry in the
-`_parsed` subfolder. The six PDFs used in the exploratory notebook are not production inputs.
+stores each paper under `_parsed/<paper_id>/`, with its parsed content in `parsed.json` and extracted images in an `images/` subfolder. The root `_parsed/index.json` registry records the Drive file and folder IDs for each paper. The six PDFs used in the exploratory notebook are not production inputs.
 
 Configure `DRIVE_FOLDER_ID`, `GOOGLE_CLOUD_PROJECT`, and Google Drive/BigQuery credentials as
 described in `.env.example`. The table and output names are in the `pdf_parsing` section of

@@ -61,6 +61,15 @@ def _load_index(
             "image_file_ids": image_file_ids,
         }
 
+        for key in ("paper_folder_id", "image_folder_id", "source_drive_link"):
+            value = entry.get(key)
+            if value is not None:
+                if not isinstance(value, str):
+                    raise ValueError(
+                        f"Drive index {index_file_name!r} contains an invalid paper entry"
+                    )
+                papers[paper_id][key] = value
+
     return papers
 
 
@@ -105,7 +114,12 @@ def run_pdf_parsing(
     papers = _load_index(drive_service, output_folder_id, settings.index_file_name)
     converter = None
 
-    pending_sources = [source for source in sources if source.openalex_id not in papers]
+    pending_sources = [
+        source
+        for source in sources
+        if not papers.get(source.openalex_id, {}).get("paper_folder_id")
+        or not papers.get(source.openalex_id, {}).get("image_folder_id")
+    ]
     outcomes["already_parsed"] = len(sources) - len(pending_sources)
 
     if max_papers is not None:
@@ -123,15 +137,21 @@ def run_pdf_parsing(
         pdf_bytes = drive_storage.download_pdf(drive_service, source_file_id)
         parsed = pdf_parsing.parse_pdf(pdf_bytes, converter)
 
+        paper_folder_id = drive_storage.ensure_subfolder(
+            drive_service, output_folder_id, source.openalex_id
+        )
+        image_folder_id = drive_storage.ensure_subfolder(
+            drive_service, paper_folder_id, "images"
+        )
+
         image_references: list[dict[str, object]] = []
         image_file_ids: list[str] = []
         for image in parsed.images:
-            drive_file_name = f"{source.openalex_id}_{image.file_name}"
-            mime_type = mimetypes.guess_type(drive_file_name)[0] or "application/octet-stream"
+            mime_type = mimetypes.guess_type(image.file_name)[0] or "application/octet-stream"
             image_file_id = drive_storage.write_file(
                 drive_service,
-                output_folder_id,
-                drive_file_name,
+                image_folder_id,
+                image.file_name,
                 image.image_bytes,
                 mime_type,
             )
@@ -139,7 +159,7 @@ def run_pdf_parsing(
             image_references.append(
                 {
                     "xref": image.xref,
-                    "file_name": drive_file_name,
+                    "file_name": image.file_name,
                     "file_id": image_file_id,
                     "width": image.width,
                     "height": image.height,
@@ -152,14 +172,17 @@ def run_pdf_parsing(
 
         json_file_id = drive_storage.write_file(
             drive_service,
-            output_folder_id,
-            f"{source.openalex_id}.json",
+            paper_folder_id,
+            "parsed.json",
             _serialize_document(source, parsed, image_references),
             "application/json",
         )
 
         papers[source.openalex_id] = {
+            "source_drive_link": source.drive_link,
+            "paper_folder_id": paper_folder_id,
             "json_file_id": json_file_id,
+            "image_folder_id": image_folder_id,
             "image_file_ids": image_file_ids,
         }
         index_bytes = json.dumps(
