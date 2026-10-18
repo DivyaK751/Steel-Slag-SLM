@@ -224,6 +224,16 @@ screening:
   # Gemini calls in flight at once; raise slowly, Vertex quotas are per minute
   max_concurrency: 8
 
+abstract_extraction:
+  prompt_name: extract_abstract
+  model: null  # null = use llm.model
+  # Only the first pages are sent; abstracts sit on page 1 or 2
+  max_pages: 3
+  # Papers read from BigQuery, downloaded from Drive and written back per round trip
+  batch_size: 20
+  # Gemini calls in flight at once; raise slowly, Vertex quotas are per minute
+  max_concurrency: 4
+
 evaluation:
   # Human-labelled papers; lives in the same project and dataset as the papers table
   table: screening_evaluation

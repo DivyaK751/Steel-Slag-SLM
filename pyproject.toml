@@ -54,7 +54,7 @@ select = ["E", "F", "I", "B", "UP"]
 strict = true
 ignore_missing_imports = true
 # google-auth ships without type hints
-untyped_calls_exclude = ["google"]
+untyped_calls_exclude = ["google", "pymupdf"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

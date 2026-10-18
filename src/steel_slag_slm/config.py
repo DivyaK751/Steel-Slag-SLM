@@ -96,6 +96,16 @@ class ScreeningSettings(AgentSettings):
     papers_table: str  # fully qualified: project.dataset.table
 
 
+class AbstractExtractionSettings(AgentSettings):
+    """How the abstract-extraction agent fills missing abstracts from a paper's first pages."""
+
+    prompt_name: str
+    max_pages: int
+    batch_size: int
+    max_concurrency: int
+    papers_table: str  # fully qualified: project.dataset.table
+
+
 class EvaluationSettings(BaseModel):
     """Where the human-labelled papers live and where run reports are saved."""
 
@@ -153,6 +163,15 @@ def _agent_section(raw_config: dict[str, Any], name: str) -> dict[str, Any]:
     return {**raw_config["llm"], **overrides}
 
 
+def _papers_table(raw_config: dict[str, Any]) -> str:
+    """The fully qualified papers table that the agents read from and write to."""
+    registry = RegistrySettings(**raw_config["registry"])
+    # The override lets Gemini bill one project while the papers table lives in another
+    return os.environ.get("BIGQUERY_PAPERS_TABLE", "").strip() or (
+        f"{_require_env('GOOGLE_CLOUD_PROJECT')}.{registry.dataset}.{registry.table}"
+    )
+
+
 def load_settings(config_path: Path = BASE_CONFIG_PATH) -> Settings:
     """Build settings from the YAML config plus secrets from the environment or .env."""
     raw_config = _read_base_config(config_path)
@@ -187,12 +206,20 @@ def load_gcp_settings() -> GcpSettings:
 def load_screening_settings(config_path: Path = BASE_CONFIG_PATH) -> ScreeningSettings:
     """Build the screening agent's settings; needs no OpenAlex or Drive secrets."""
     raw_config = _read_base_config(config_path)
-    registry = RegistrySettings(**raw_config["registry"])
-    # The override lets Gemini bill one project while the papers table lives in another
-    papers_table = os.environ.get("BIGQUERY_PAPERS_TABLE", "").strip() or (
-        f"{_require_env('GOOGLE_CLOUD_PROJECT')}.{registry.dataset}.{registry.table}"
+    return ScreeningSettings(
+        **_agent_section(raw_config, "screening"), papers_table=_papers_table(raw_config)
     )
-    return ScreeningSettings(**_agent_section(raw_config, "screening"), papers_table=papers_table)
+
+
+def load_abstract_extraction_settings(
+    config_path: Path = BASE_CONFIG_PATH,
+) -> AbstractExtractionSettings:
+    """Build the abstract-extraction agent's settings; needs no OpenAlex secrets."""
+    raw_config = _read_base_config(config_path)
+    return AbstractExtractionSettings(
+        **_agent_section(raw_config, "abstract_extraction"),
+        papers_table=_papers_table(raw_config),
+    )
 
 
 def load_evaluation_settings(

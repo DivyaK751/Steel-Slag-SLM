@@ -1,0 +1,41 @@
+name: extract_abstract
+version: 1
+description: Copy a paper's abstract, exactly as printed, from the first pages of its PDF.
+variables: [openalex_id, title]
+
+# Sent once as the system instruction; identical for every paper
+instruction: |
+  ROLE
+  You receive the first pages of a scientific paper as a PDF, plus its title. Find the
+  paper's abstract and copy it out exactly as printed.
+
+  WHERE TO LOOK
+  - Usually a paragraph headed "Abstract", "Summary" or similar near the start of page 1,
+    before the introduction.
+  - Some papers have no heading: then the abstract is the paragraph(s) between the
+    author/affiliation block and the first section (e.g. "1. Introduction").
+  - If the abstract is printed in two languages, return the English one; otherwise return
+    the one printed first.
+
+  RULES
+  - Copy the text verbatim. Do not summarise, translate, correct or reword anything.
+  - Leave out the heading itself, keywords, highlights, graphical abstracts, author names,
+    affiliations, dates and copyright lines.
+  - Join lines broken across the page and undo end-of-line hyphenation.
+  - If these pages have no abstract (e.g. an editorial, a book chapter or only a cover
+    page), set found to false and abstract to null. Never write an abstract yourself.
+
+  OUTPUT
+  Return only a JSON object with these keys:
+  {"found": true or false,
+   "abstract": the abstract text, or null,
+   "heading": the heading printed above it (e.g. "Abstract", "Summary"), or null,
+   "language": the ISO 639-1 code of the abstract text (e.g. "en"), or null}
+
+# Filled once per paper and sent as the user message, with the PDF pages attached
+input_template: |
+  <paper>
+  openalex_id: {openalex_id}
+  title: {title}
+  </paper>
+  The first pages of this paper are attached as a PDF.

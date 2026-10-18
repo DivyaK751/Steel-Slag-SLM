@@ -26,6 +26,9 @@ PAPERS_SCHEMA = [
     bigquery.SchemaField("drive_file_id", "STRING"),
     bigquery.SchemaField("drive_link", "STRING"),
     bigquery.SchemaField("added_at", "TIMESTAMP"),
+    bigquery.SchemaField(
+        "abstract_source", "STRING", description="openalex / pdf / pdf_unverified / ..."
+    ),
     # Filled in later by relevance screening; empty when a row is first added
     bigquery.SchemaField("relevant", "STRING", description="Yes / No / Unclear"),
     bigquery.SchemaField("relevance_score", "FLOAT64", description="0.0-1.0 model confidence"),
@@ -72,6 +75,8 @@ def build_row(paper: Paper, drive_file_id: str, added_at: datetime) -> dict[str,
         "language": paper.language,
         # Empty means OpenAlex has no abstract; NULL makes those rows easy to find later
         "abstract": paper.abstract or None,
+        # NULL until the abstract extractor has looked at the paper's first pages
+        "abstract_source": "openalex" if paper.abstract else None,
         "keywords": list(paper.keywords),
         "drive_file_id": drive_file_id,
         "drive_link": DRIVE_FILE_URL.format(file_id=drive_file_id),
