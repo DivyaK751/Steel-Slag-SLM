@@ -6,9 +6,7 @@ from unittest.mock import MagicMock
 import steel_slag_slm.cli as cli
 
 
-def test_parse_pdfs_builds_clients_and_runs_pipeline(
-    monkeypatch, capsys
-) -> None:
+def test_parse_pdfs_builds_clients_and_runs_pipeline(monkeypatch, capsys) -> None:
     parsing_settings = object()
     drive_settings = MagicMock(
         folder_id="source-folder",
