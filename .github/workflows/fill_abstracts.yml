@@ -5,7 +5,9 @@ on:
   workflow_call:
   workflow_dispatch:
     inputs:
-      max_papers:
+      # Not "max_papers": a called workflow sees the caller's inputs, so the fetch limit
+      # would otherwise cap this job too
+      max_abstracts:
         description: "Stop after trying this many papers (blank = every paper missing an abstract)"
         required: false
         type: string
@@ -33,6 +35,6 @@ jobs:
             echo "GOOGLE_CLOUD_PROJECT or GCP_SERVICE_ACCOUNT_JSON secret not set; skipping."
             exit 0
           fi
-          uv run fill-abstracts ${MAX_PAPERS:+--max-papers "$MAX_PAPERS"}
+          uv run fill-abstracts ${MAX_ABSTRACTS:+--max-papers "$MAX_ABSTRACTS"}
         env:
-          MAX_PAPERS: ${{ inputs.max_papers }}
+          MAX_ABSTRACTS: ${{ inputs.max_abstracts }}
