@@ -13,13 +13,12 @@ from google.cloud import bigquery
 from steel_slag_slm.agents.relevance_screener import build_screener_agent
 from steel_slag_slm.agents.runner import build_runner
 from steel_slag_slm.config import (
-    DriveConnectionSettings,
     ScreeningSettings,
     Settings,
     load_drive_connection_settings,
-    load_pdf_parsing_settings,
     load_evaluation_settings,
     load_gcp_settings,
+    load_pdf_parsing_settings,
     load_screening_settings,
     load_settings,
 )
@@ -29,9 +28,9 @@ from steel_slag_slm.data.paper_registry import build_bigquery_client
 from steel_slag_slm.llm.prompts import PromptTemplate, load_prompt
 from steel_slag_slm.pipelines.evaluate_screening import run_evaluation
 from steel_slag_slm.pipelines.fetch_papers import run_fetch
+from steel_slag_slm.pipelines.parse_pdfs import run_pdf_parsing
 from steel_slag_slm.pipelines.screen_papers import run_screening
 from steel_slag_slm.pipelines.sync_registry import run_registry_sync
-from steel_slag_slm.pipelines.parse_pdfs import run_pdf_parsing
 
 logger = logging.getLogger(__name__)
 
@@ -179,9 +178,18 @@ def evaluate_screening() -> None:
 
 def parse_pdfs() -> None:
     """Parse unprocessed trial-paper PDFs and save results to Drive."""
-    argparse.ArgumentParser(description=parse_pdfs.__doc__).parse_args()
-    _setup_logging()
+    parser = argparse.ArgumentParser(description=parse_pdfs.__doc__)
+    parser.add_argument(
+        "--max-papers",
+        type=int,
+        default=None,
+        help="stop after parsing this many unindexed papers (default: all)",
+    )
+    args = parser.parse_args()
+    if args.max_papers is not None and args.max_papers <= 0:
+        parser.error("--max-papers must be greater than zero")
 
+    _setup_logging()
     parsing_settings = load_pdf_parsing_settings()
     drive_settings = load_drive_connection_settings()
     gcp_settings = load_gcp_settings()
@@ -200,5 +208,6 @@ def parse_pdfs() -> None:
         bigquery_client,
         drive_service,
         drive_settings.folder_id,
+        args.max_papers,
     )
     print("Summary:", dict(outcomes))

@@ -19,7 +19,7 @@ def test_parse_pdfs_builds_clients_and_runs_pipeline(
     gcp_settings = MagicMock(project="billing-project", credentials_file=None)
     calls: dict[str, object] = {}
 
-    monkeypatch.setattr(sys, "argv", ["parse-pdfs"])
+    monkeypatch.setattr(sys, "argv", ["parse-pdfs", "--max-papers", "1"])
     monkeypatch.setattr(cli, "load_pdf_parsing_settings", lambda: parsing_settings)
     monkeypatch.setattr(cli, "load_drive_connection_settings", lambda: drive_settings)
     monkeypatch.setattr(cli, "load_gcp_settings", lambda: gcp_settings)
@@ -39,5 +39,6 @@ def test_parse_pdfs_builds_clients_and_runs_pipeline(
         "bigquery-client",
         "drive-client",
         "source-folder",
+        1,
     )
     assert capsys.readouterr().out == "Summary: {'parsed': 2}\n"
