@@ -205,6 +205,11 @@ registry:
   table: papers
   location: US
 
+pdf_parsing:
+  source_table: capstone-project-511200.steel_slag.papers_trial
+  output_folder_name: _parsed
+  index_file_name: index.json
+
 # Defaults shared by every Gemini agent; an agent's own section can override any of them
 llm:
   model: gemini-3.8-flash

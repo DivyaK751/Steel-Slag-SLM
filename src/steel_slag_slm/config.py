@@ -54,6 +54,14 @@ class RegistrySettings(BaseModel):
     location: str
 
 
+class PdfParsingSettings(BaseModel):
+    """Where PDF parsing reads paper rows and stores its Drive outputs."""
+
+    source_table: str
+    output_folder_name: str
+    index_file_name: str
+
+
 class GcpSettings(BaseModel):
     """The Google Cloud project and region that Vertex AI and BigQuery calls are billed to."""
 
@@ -188,3 +196,11 @@ def load_evaluation_settings(
         labels_table=f"{project_and_dataset}.{raw_config['table']}",
         output_dir=PROJECT_ROOT / raw_config["output_dir"],
     )
+
+
+def load_pdf_parsing_settings(
+    config_path: Path = BASE_CONFIG_PATH,
+) -> PdfParsingSettings:
+    """Build PDF-parsing settings from the YAML config."""
+    raw_config = _read_base_config(config_path)
+    return PdfParsingSettings(**raw_config["pdf_parsing"])
