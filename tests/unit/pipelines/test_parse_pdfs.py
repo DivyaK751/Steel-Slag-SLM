@@ -1,7 +1,8 @@
 import json
-import pytest
 from collections import Counter
 from unittest.mock import MagicMock
+
+import pytest
 
 from steel_slag_slm.config import PdfParsingSettings
 from steel_slag_slm.data import drive_storage, pdf_parsing, pdf_parsing_source
