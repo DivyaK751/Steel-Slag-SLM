@@ -15,6 +15,8 @@ from googleapiclient.http import MediaIoBaseUpload
 
 from steel_slag_slm.schemas import Paper
 
+from urllib.parse import parse_qs, urlparse
+
 DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive"]
 FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
 MAX_TITLE_CHARS_IN_NAME = 120
@@ -126,11 +128,24 @@ def _find_child_id(service: Any, parent_id: str, name: str, extra_query: str = "
 def download_pdf(service: Any, file_id: str) -> bytes:
     """Return the raw bytes of a PDF stored in Drive."""
     content: bytes = (
-        service.files()
-        .get_media(fileId=file_id, **_ALL_DRIVES)
-        .execute(num_retries=DRIVE_RETRIES)
+        service.files().get_media(fileId=file_id, **_ALL_DRIVES).execute(num_retries=DRIVE_RETRIES)
     )
     return content
+
+
+def drive_file_id_from_link(drive_link: str) -> str:
+    """Extract a Drive file ID from a standard Google Drive sharing link."""
+    parsed_link = urlparse(drive_link)
+    if parsed_link.scheme not in {"http", "https"} or parsed_link.hostname != "drive.google.com":
+        raise ValueError(f"Invalid Google Drive link: {drive_link!r}")
+
+    query_ids = parse_qs(parsed_link.query).get("id", [])
+    match = re.search(r"/d/([A-Za-z0-9_-]+)(?:/|$)", parsed_link.path)
+    file_id = query_ids[0] if query_ids else match.group(1) if match else None
+
+    if not file_id or not re.fullmatch(r"[A-Za-z0-9_-]+", file_id):
+        raise ValueError(f"Could not extract a Drive file ID from: {drive_link!r}")
+    return file_id
 
 
 def ensure_subfolder(service: Any, parent_id: str, name: str) -> str:
@@ -152,6 +167,36 @@ def ensure_subfolder(service: Any, parent_id: str, name: str) -> str:
                 "parents": [parent_id],
                 "mimeType": FOLDER_MIME_TYPE,
             },
+            fields="id",
+            **_ALL_DRIVES,
+        )
+        .execute(num_retries=DRIVE_RETRIES)
+    )
+    return str(created["id"])
+
+
+def write_file(
+    service: Any,
+    folder_id: str,
+    file_name: str,
+    content: bytes,
+    mime_type: str,
+) -> str:
+    """Create or replace a file in a Drive folder and return its file ID."""
+    media = MediaIoBaseUpload(io.BytesIO(content), mimetype=mime_type, resumable=True)
+    file_id = _find_child_id(service, folder_id, file_name)
+
+    if file_id:
+        service.files().update(fileId=file_id, media_body=media, **_ALL_DRIVES).execute(
+            num_retries=DRIVE_RETRIES
+        )
+        return file_id
+
+    created = (
+        service.files()
+        .create(
+            body={"name": file_name, "parents": [folder_id]},
+            media_body=media,
             fields="id",
             **_ALL_DRIVES,
         )
@@ -223,17 +268,7 @@ def read_text_file(service: Any, folder_id: str, file_name: str) -> str:
 
 def write_text_file(service: Any, folder_id: str, file_name: str, text: str) -> None:
     """Save a text file in the folder, replacing its previous contents."""
-    media = MediaIoBaseUpload(io.BytesIO(text.encode()), mimetype="text/plain")
-    file_id = _find_child_id(service, folder_id, file_name)
-    if file_id:
-        service.files().update(fileId=file_id, media_body=media, **_ALL_DRIVES).execute(
-            num_retries=DRIVE_RETRIES
-        )
-    else:
-        body = {"name": file_name, "parents": [folder_id]}
-        service.files().create(body=body, media_body=media, **_ALL_DRIVES).execute(
-            num_retries=DRIVE_RETRIES
-        )
+    write_file(service, folder_id, file_name, text.encode("utf-8"), "text/plain")
 
 
 def read_id_list(service: Any, folder_id: str, file_name: str) -> set[str]:
