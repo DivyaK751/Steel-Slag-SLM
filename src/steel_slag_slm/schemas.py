@@ -55,7 +55,7 @@ class ParsedDocument:
     markdown: str
     tables: tuple[str, ...]
     images: tuple[ParsedImage, ...]
-    
+
 
 @dataclass(frozen=True, slots=True)
 class PaperForScreening:

@@ -18,9 +18,7 @@ def build_docling_converter() -> DocumentConverter:
         do_table_structure=True,
     )
     return DocumentConverter(
-        format_options={
-            InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
-        }
+        format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)}
     )
 
 
@@ -61,9 +59,7 @@ def parse_pdf(pdf_bytes: bytes, converter: DocumentConverter) -> ParsedDocument:
                         placements.append(placement)
 
         images = []
-        for image_number, (xref, placements) in enumerate(
-            placements_by_xref.items(), start=1
-        ):
+        for image_number, (xref, placements) in enumerate(placements_by_xref.items(), start=1):
             image = pdf.extract_image(xref)
             images.append(
                 ParsedImage(
