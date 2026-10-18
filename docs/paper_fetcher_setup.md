@@ -37,7 +37,9 @@ such as relevance screening, read abstracts from there instead of opening Drive.
   none yet: on its first run that is every paper already there, after that only papers added by
   hand or missed because a BigQuery write failed. It looks papers up on OpenAlex by ID, 100 per
   request, for a fraction of a cent.
-- Both are skipped until the two BigQuery secrets in step 4 are set.
+- After the fetch, a **fill-abstracts** job gives papers that OpenAlex has no abstract for one
+  from the first pages of their PDF (see the README's "Missing abstracts").
+- All three are skipped until the two BigQuery secrets in step 4 are set.
 
 ## One-time setup
 

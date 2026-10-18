@@ -27,7 +27,9 @@ PAPERS_SCHEMA = [
     bigquery.SchemaField("drive_link", "STRING"),
     bigquery.SchemaField("added_at", "TIMESTAMP"),
     bigquery.SchemaField(
-        "abstract_source", "STRING", description="openalex / pdf / pdf_unverified / ..."
+        "abstract_source",
+        "STRING",
+        description="openalex / pdf / pdf_unverified / pdf_mismatch / not_found",
     ),
     # Filled in later by relevance screening; empty when a row is first added
     bigquery.SchemaField("relevant", "STRING", description="Yes / No / Unclear"),

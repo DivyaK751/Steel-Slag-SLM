@@ -16,9 +16,12 @@ AGENT_NAME = "abstract_extractor"
 MISSING_FIELD = "(not available)"
 # Fewer characters than this means the pages are scanned images with no text to check against
 MIN_TEXT_LAYER_CHARS = 200
-# The abstract counts as found in the pages when this share of its 8-word runs appears there
+# Below this share of printable characters the text layer is garbled (broken font encoding)
+MIN_READABLE_SHARE = 0.9
+# The abstract counts as found in the pages when this share of its 8-word runs appears there.
+# Correct abstracts reviewed by hand scored 74-100% (symbols, sub/superscripts lose a few runs)
 MATCH_WORDS = 8
-MIN_MATCH_SHARE = 0.9
+MIN_MATCH_SHARE = 0.7
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,9 +52,22 @@ async def extract_abstract(
 
 
 def _words(text: str) -> list[str]:
-    # Undo end-of-line hyphenation first, as the prompt asks the model to do
+    # Accepted manuscripts print line numbers in the margin, which PDFs give as lines of
+    # their own; drop those first so a hyphenated word split around one can be rejoined
+    text = re.sub(r"(?m)^\s*\d+\s*$\n?", "", text)
+    # Undo end-of-line hyphenation, as the prompt asks the model to do
     text = re.sub(r"-\s*\n\s*", "", text)
-    return re.findall(r"[^\W_]+", text.lower())
+    # Any bare numbers left are dropped too, so stray line numbers can't break a run
+    return [word for word in re.findall(r"[^\W_]+", text.lower()) if not word.isdigit()]
+
+
+def _has_usable_text(text: str) -> bool:
+    """Whether the pages have a text layer the abstract can be checked against."""
+    stripped = text.strip()
+    if len(stripped) < MIN_TEXT_LAYER_CHARS:
+        return False
+    readable = sum(char.isprintable() or char.isspace() for char in stripped)
+    return readable / len(stripped) >= MIN_READABLE_SHARE
 
 
 def match_share(abstract: str, text: str) -> float:
@@ -71,12 +87,13 @@ def judge_abstract(result: ExtractedAbstract, pages_text: str) -> AbstractOutcom
     """Decide what to store: only abstracts that really appear on the pages are trusted.
 
     The model is told to copy, not write, but a made-up abstract must never be stored as if
-    it came from the paper. Scanned pages can't be checked, so those are flagged instead.
+    it came from the paper. Scanned pages, and pages whose text layer is garbled, can't be
+    checked, so those are flagged instead.
     """
     abstract = re.sub(r"\s+", " ", result.abstract or "").strip()
     if not result.found or not abstract:
         return AbstractOutcome("not_found", None, None)
-    if len(pages_text.strip()) < MIN_TEXT_LAYER_CHARS:
+    if not _has_usable_text(pages_text):
         return AbstractOutcome("pdf_unverified", abstract, None)
     share = match_share(abstract, pages_text)
     if share >= MIN_MATCH_SHARE:
