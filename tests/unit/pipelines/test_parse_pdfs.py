@@ -1,4 +1,5 @@
 import json
+import pytest
 from collections import Counter
 from unittest.mock import MagicMock
 
@@ -110,3 +111,68 @@ def test_run_pdf_parsing_skips_papers_already_in_the_index(monkeypatch) -> None:
     )
 
     assert outcomes == Counter(already_parsed=1)
+
+
+def test_run_pdf_parsing_limits_papers_and_counts_deferred(monkeypatch) -> None:
+    sources = [
+        PdfSource(f"W{number}", f"https://drive.google.com/file/d/SOURCE{number}/view")
+        for number in (123, 124, 125)
+    ]
+    parsed = ParsedDocument(
+        text_parser="Docling",
+        image_parser="PyMuPDF",
+        page_count=1,
+        markdown="# Sample",
+        tables=(),
+        images=(),
+    )
+    parsed_ids: list[str] = []
+
+    monkeypatch.setattr(pdf_parsing_source, "list_pdf_sources", lambda *_: sources)
+    monkeypatch.setattr(drive_storage, "ensure_subfolder", lambda *_: "output-folder")
+    monkeypatch.setattr(drive_storage, "read_text_file", lambda *_: "")
+    monkeypatch.setattr(drive_storage, "drive_file_id_from_link", lambda link: link)
+    monkeypatch.setattr(drive_storage, "download_pdf", lambda *_: b"%PDF")
+    monkeypatch.setattr(pdf_parsing, "build_docling_converter", lambda: object())
+
+    def fake_parse_pdf(pdf_bytes: bytes, converter: object) -> ParsedDocument:
+        parsed_ids.append(pdf_bytes.decode())
+        return parsed
+
+    monkeypatch.setattr(pdf_parsing, "parse_pdf", fake_parse_pdf)
+    monkeypatch.setattr(
+        drive_storage,
+        "write_file",
+        lambda _service, _folder, file_name, _content, _mime: file_name,
+    )
+
+    outcomes = parse_pdfs.run_pdf_parsing(
+        PdfParsingSettings(
+            source_table="project.dataset.papers_trial",
+            output_folder_name="_parsed",
+            index_file_name="index.json",
+        ),
+        MagicMock(),
+        MagicMock(),
+        "source-folder",
+        max_papers=1,
+    )
+
+    assert outcomes["parsed"] == 1
+    assert outcomes["deferred"] == 2
+    assert parsed_ids == ["%PDF"]
+
+
+def test_run_pdf_parsing_rejects_non_positive_limit() -> None:
+    with pytest.raises(ValueError, match="max_papers must be greater than zero"):
+        parse_pdfs.run_pdf_parsing(
+            PdfParsingSettings(
+                source_table="project.dataset.papers_trial",
+                output_folder_name="_parsed",
+                index_file_name="index.json",
+            ),
+            MagicMock(),
+            MagicMock(),
+            "source-folder",
+            max_papers=0,
+        )

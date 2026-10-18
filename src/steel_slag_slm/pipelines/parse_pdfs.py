@@ -88,8 +88,12 @@ def run_pdf_parsing(
     bigquery_client: bigquery.Client,
     drive_service: Any,
     source_folder_id: str,
+    max_papers: int | None = None,
 ) -> Counter[str]:
     """Parse unprocessed trial papers and save their artifacts and index to Drive."""
+    if max_papers is not None and max_papers <= 0:
+        raise ValueError("max_papers must be greater than zero")
+
     sources = pdf_parsing_source.list_pdf_sources(bigquery_client, settings.source_table)
     outcomes: Counter[str] = Counter()
     if not sources:
@@ -101,10 +105,14 @@ def run_pdf_parsing(
     papers = _load_index(drive_service, output_folder_id, settings.index_file_name)
     converter = None
 
-    for source in sources:
-        if source.openalex_id in papers:
-            outcomes["already_parsed"] += 1
-            continue
+    pending_sources = [source for source in sources if source.openalex_id not in papers]
+    outcomes["already_parsed"] = len(sources) - len(pending_sources)
+
+    if max_papers is not None:
+        outcomes["deferred"] = max(0, len(pending_sources) - max_papers)
+        pending_sources = pending_sources[:max_papers]
+
+    for source in pending_sources:
         if not _PAPER_ID_PATTERN.fullmatch(source.openalex_id):
             raise ValueError(f"Invalid OpenAlex paper ID: {source.openalex_id!r}")
 
