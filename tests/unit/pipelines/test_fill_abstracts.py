@@ -17,7 +17,7 @@ ABSTRACT = (
 )
 SETTINGS = AbstractExtractionSettings(
     model="m", temperature=0.0, prompt_name="p", max_pages=3, batch_size=2,
-    max_concurrency=2, papers_table="p.d.t",
+    max_concurrency=2, call_timeout_s=5, papers_table="p.d.t",
 )  # fmt: skip
 PROMPT = PromptTemplate("p", 1, "d", "i", "{openalex_id}{title}", ("openalex_id", "title"))
 
@@ -113,3 +113,20 @@ def test_fill_abstracts_dry_run_writes_nothing_and_respects_max_papers(
     )
     outcomes = _run(max_papers=2, dry_run=True)
     assert outcomes["pdf"] == 2 and written == []
+
+
+def test_fill_abstracts_gives_up_on_a_call_that_hangs(
+    written: list[dict[str, Any]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def extract(_r: object, _p: object, paper: PaperForAbstract, _pdf: bytes) -> Any:
+        if paper.openalex_id == "W1":
+            await asyncio.sleep(60)
+        return ExtractedAbstract(found=True, abstract=ABSTRACT)
+
+    monkeypatch.setattr(fill_abstracts, "extract_abstract", extract)
+    fast = SETTINGS.model_copy(update={"call_timeout_s": 0.05})
+    outcomes = asyncio.run(
+        fill_abstracts.run_fill_abstracts(fast, object(), object(), object(), PROMPT, None)  # type: ignore[arg-type]
+    )
+    assert outcomes["failed"] == 1
+    assert [row["openalex_id"] for row in written] == ["W2", "W3"]

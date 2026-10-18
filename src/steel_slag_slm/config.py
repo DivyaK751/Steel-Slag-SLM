@@ -103,6 +103,7 @@ class AbstractExtractionSettings(AgentSettings):
     max_pages: int
     batch_size: int
     max_concurrency: int
+    call_timeout_s: float
     papers_table: str  # fully qualified: project.dataset.table
 
 

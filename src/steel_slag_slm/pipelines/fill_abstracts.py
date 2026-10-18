@@ -1,5 +1,6 @@
 """Fill missing abstracts in BigQuery from the first pages of each paper's PDF in Drive."""
 
+import asyncio
 import logging
 from collections import Counter
 from typing import Any
@@ -21,14 +22,15 @@ from steel_slag_slm.data.bigquery_store import merge_updates, query_rows
 from steel_slag_slm.data.pdf_pages import first_pages, page_text
 from steel_slag_slm.exceptions import AgentOutputError
 from steel_slag_slm.llm.prompts import PromptTemplate
-from steel_slag_slm.schemas import ExtractedAbstract, PaperForAbstract
+from steel_slag_slm.schemas import PaperForAbstract
 
 logger = logging.getLogger(__name__)
 
 # Columns this pipeline fills; everything else in the table belongs to other jobs
 ABSTRACT_COLUMN_TYPES = {"openalex_id": "STRING", "abstract": "STRING", "abstract_source": "STRING"}
-# Failures that cost one paper, not the run; the paper stays untouched for the next run
-_PER_PAPER_ERRORS = (AgentOutputError, APIError)
+# Failures that cost one paper, not the run; the paper stays untouched for the next run.
+# TimeoutError: a Gemini call that hangs would otherwise hold up its whole batch
+_PER_PAPER_ERRORS = (AgentOutputError, APIError, TimeoutError)
 
 _MISSING_SQL = """
 SELECT openalex_id, title, drive_file_id
@@ -111,23 +113,13 @@ async def run_fill_abstracts(
         readable = [(paper, pages) for paper, pages in loaded if pages is not None]
         outcomes["failed"] += len(loaded) - len(readable)
 
-        async def extract(item: tuple[PaperForAbstract, tuple[bytes, str]]) -> ExtractedAbstract:
-            paper, (pages_pdf, _) = item
-            return await extract_abstract(runner, prompt, paper, pages_pdf)
-
-        results = await gather_bounded(readable, extract, settings.max_concurrency)
-        rows = []
-        for (paper, (_, pages_text)), result in zip(readable, results, strict=True):
-            if isinstance(result, _PER_PAPER_ERRORS):
-                logger.warning(
-                    "Extracting %s failed, will retry next run: %s", paper.openalex_id, result
-                )
-                outcomes["failed"] += 1
-                continue
-            if isinstance(result, Exception):
-                raise result
-            outcome: AbstractOutcome = judge_abstract(result, pages_text)
-            outcomes[outcome.source] += 1
+        async def extract(item: tuple[PaperForAbstract, tuple[bytes, str]]) -> AbstractOutcome:
+            paper, (pages_pdf, pages_text) = item
+            result = await asyncio.wait_for(
+                extract_abstract(runner, prompt, paper, pages_pdf), settings.call_timeout_s
+            )
+            outcome = judge_abstract(result, pages_text)
+            # Logged as each paper finishes, so a long batch still shows progress
             match = "" if outcome.match_share is None else f" (match {outcome.match_share:.0%})"
             logger.info(
                 "%s %s%s: %s",
@@ -136,11 +128,25 @@ async def run_fill_abstracts(
                 match,
                 (outcome.abstract or "")[:120],
             )
+            return outcome
+
+        results = await gather_bounded(readable, extract, settings.max_concurrency)
+        rows = []
+        for (paper, _), result in zip(readable, results, strict=True):
+            if isinstance(result, _PER_PAPER_ERRORS):
+                logger.warning(
+                    "Extracting %s failed, will retry next run: %r", paper.openalex_id, result
+                )
+                outcomes["failed"] += 1
+                continue
+            if isinstance(result, Exception):
+                raise result
+            outcomes[result.source] += 1
             rows.append(
                 {
                     "openalex_id": paper.openalex_id,
-                    "abstract": outcome.abstract,
-                    "abstract_source": outcome.source,
+                    "abstract": result.abstract,
+                    "abstract_source": result.source,
                 }
             )
 
