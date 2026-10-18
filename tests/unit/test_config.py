@@ -110,3 +110,22 @@ def test_drive_connection_settings_load_without_openalex_credentials(
     assert settings.service_account_file is None
     assert settings.oauth_client_file is None
     assert settings.oauth_token_file == config.DEFAULT_GOOGLE_TOKEN_PATH
+
+
+def test_abstract_extraction_settings_fall_back_to_llm_defaults(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("BIGQUERY_PAPERS_TABLE", "proj.ds.papers")
+    path = tmp_path / "base.yaml"
+    raw = yaml.safe_load(_write_config(tmp_path, {}).read_text())
+    raw["abstract_extraction"] = {
+        "prompt_name": "extract_abstract",
+        "model": None,
+        "max_pages": 3,
+        "batch_size": 20,
+        "max_concurrency": 4,
+    }
+    path.write_text(yaml.safe_dump(raw))
+    settings = config.load_abstract_extraction_settings(path)
+    assert settings.model == "default-model" and settings.max_pages == 3
+    assert settings.papers_table == "proj.ds.papers"

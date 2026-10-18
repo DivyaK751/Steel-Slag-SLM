@@ -48,15 +48,20 @@ def build_runner(agent: LlmAgent) -> Runner:
     return InMemoryRunner(agent=agent, app_name=APP_NAME)
 
 
-async def run_structured(runner: Runner, message: str, schema: type[SchemaT]) -> SchemaT:
-    """Send one message in a fresh session and parse the agent's final answer.
+async def run_structured(
+    runner: Runner,
+    message: str,
+    schema: type[SchemaT],
+    attachments: Sequence[types.Part] = (),
+) -> SchemaT:
+    """Send one message, plus any attachments (e.g. PDF pages), and parse the final answer.
 
     Raises:
         AgentOutputError: If the agent gives no final answer or it doesn't match the schema.
     """
     # A new session per item, so one paper's context can never leak into the next
     session = await runner.session_service.create_session(app_name=APP_NAME, user_id=USER_ID)
-    content = types.Content(role="user", parts=[types.Part(text=message)])
+    content = types.Content(role="user", parts=[types.Part(text=message), *attachments])
     final_text = ""
     try:
         async for event in runner.run_async(

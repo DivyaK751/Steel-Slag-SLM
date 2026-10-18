@@ -92,3 +92,21 @@ class RelevanceDecision(BaseModel):
         # The model sometimes picks a band that contradicts its own score; the score wins
         self.relevance_confidence = confidence_for_score(self.relevance_score)
         return self
+
+
+@dataclass(frozen=True, slots=True)
+class PaperForAbstract:
+    """A paper whose abstract is missing, and the Drive file holding its PDF."""
+
+    openalex_id: str
+    title: str
+    drive_file_id: str
+
+
+class ExtractedAbstract(BaseModel):
+    """Gemini's answer when asked for the abstract printed on a paper's first pages."""
+
+    found: bool
+    abstract: str | None = None
+    heading: str | None = None  # e.g. "Abstract" or "Summary", as printed
+    language: str | None = None  # ISO 639-1 code of the abstract text
