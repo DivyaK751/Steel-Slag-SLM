@@ -42,6 +42,7 @@ class ParsedImage:
     width: int
     height: int
     placements: tuple[ImagePlacement, ...]
+    image_bytes: bytes
 
 
 @dataclass(frozen=True, slots=True)
