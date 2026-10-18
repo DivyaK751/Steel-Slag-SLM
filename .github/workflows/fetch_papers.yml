@@ -68,3 +68,11 @@ jobs:
           uv run fetch-papers ${MAX_PAPERS:+--max-papers "$MAX_PAPERS"}
         env:
           MAX_PAPERS: ${{ inputs.max_papers }}
+
+  # Papers OpenAlex has no abstract for get one from the first pages of their PDF
+  fill-abstracts:
+    needs: fetch
+    # Some member runs can fail; the papers that did arrive still need their abstracts
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/fill_abstracts.yml
+    secrets: inherit
