@@ -27,6 +27,13 @@ def test_match_share_ignores_line_breaks_hyphenation_and_case() -> None:
     assert match_share(ABSTRACT.upper(), PAGE_TEXT) == 1.0
 
 
+def test_match_share_ignores_line_numbers_in_the_margin() -> None:
+    # As PDFs give them: each margin number on a line of its own, even inside "Port-/land"
+    lines = PAGE_TEXT.split("\n")
+    numbered = "\n".join(f"{line}\n{number} " for number, line in enumerate(lines, 20))
+    assert match_share(ABSTRACT, numbered) == 1.0
+
+
 def test_judge_abstract_stores_a_verified_abstract() -> None:
     outcome = judge_abstract(_result(ABSTRACT), PAGE_TEXT)
     assert outcome.source == "pdf" and outcome.abstract == ABSTRACT
@@ -40,6 +47,12 @@ def test_judge_abstract_rejects_text_that_is_not_on_the_pages() -> None:
 
 def test_judge_abstract_flags_scanned_pages_it_cannot_check() -> None:
     outcome = judge_abstract(_result(ABSTRACT), pages_text="  \n ")
+    assert outcome.source == "pdf_unverified" and outcome.abstract == ABSTRACT
+
+
+def test_judge_abstract_flags_a_garbled_text_layer_it_cannot_check() -> None:
+    garbled = "\x01\x02\x03\x04 \x05\x06" * 60
+    outcome = judge_abstract(_result(ABSTRACT), pages_text=garbled)
     assert outcome.source == "pdf_unverified" and outcome.abstract == ABSTRACT
 
 

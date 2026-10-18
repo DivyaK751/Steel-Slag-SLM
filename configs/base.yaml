@@ -230,9 +230,11 @@ abstract_extraction:
   # Only the first pages are sent; abstracts sit on page 1 or 2
   max_pages: 3
   # Papers read from BigQuery, downloaded from Drive and written back per round trip
-  batch_size: 20
-  # Gemini calls in flight at once; raise slowly, Vertex quotas are per minute
-  max_concurrency: 4
+  batch_size: 10
+  # Gemini calls in flight at once; at 4, Vertex kept making calls wait and retry
+  max_concurrency: 2
+  # A call taking longer is given up and retried on the next run, so it can't stall a batch
+  call_timeout_s: 120
 
 evaluation:
   # Human-labelled papers; lives in the same project and dataset as the papers table

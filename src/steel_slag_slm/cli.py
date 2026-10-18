@@ -3,6 +3,7 @@
 import argparse
 import asyncio
 import logging
+import os
 import subprocess
 from datetime import datetime
 from typing import Any
@@ -10,11 +11,13 @@ from typing import Any
 from google.adk.runners import Runner
 from google.cloud import bigquery
 
+from steel_slag_slm.agents.abstract_extractor import build_extractor_agent
 from steel_slag_slm.agents.relevance_screener import build_screener_agent
 from steel_slag_slm.agents.runner import build_runner
 from steel_slag_slm.config import (
     ScreeningSettings,
     Settings,
+    load_abstract_extraction_settings,
     load_drive_connection_settings,
     load_evaluation_settings,
     load_gcp_settings,
@@ -28,6 +31,7 @@ from steel_slag_slm.data.paper_registry import build_bigquery_client
 from steel_slag_slm.llm.prompts import PromptTemplate, load_prompt
 from steel_slag_slm.pipelines.evaluate_screening import run_evaluation
 from steel_slag_slm.pipelines.fetch_papers import run_fetch
+from steel_slag_slm.pipelines.fill_abstracts import run_fill_abstracts
 from steel_slag_slm.pipelines.parse_pdfs import run_pdf_parsing
 from steel_slag_slm.pipelines.screen_papers import run_screening
 from steel_slag_slm.pipelines.sync_registry import run_registry_sync
@@ -64,12 +68,16 @@ def _print_remaining_budget(client: OpenAlexClient) -> None:
         print(f"Remaining OpenAlex budget today: ${client.remaining_budget_usd:.3f}")
 
 
+def _quiet_gemini_logs() -> None:
+    # These log every Gemini request at INFO, which buries the per-paper results
+    for noisy_logger in ("httpx", "google_genai", "google_adk"):
+        logging.getLogger(noisy_logger).setLevel(logging.WARNING)
+
+
 def _build_screening() -> tuple[ScreeningSettings, PromptTemplate, Runner, bigquery.Client]:
     """Set up logging, settings, prompt, agent and BigQuery for the screening commands."""
     _setup_logging()
-    # These log every Gemini request at INFO, which buries the per-paper decisions
-    for noisy_logger in ("httpx", "google_genai", "google_adk"):
-        logging.getLogger(noisy_logger).setLevel(logging.WARNING)
+    _quiet_gemini_logs()
     gcp = load_gcp_settings()
     settings = load_screening_settings()
     prompt = load_prompt(settings.prompt_name)
@@ -209,5 +217,52 @@ def parse_pdfs() -> None:
         drive_service,
         drive_settings.folder_id,
         args.max_papers,
+    )
+    print("Summary:", dict(outcomes))
+
+
+def fill_abstracts() -> None:
+    """Fill missing abstracts in BigQuery from the first pages of each paper's PDF."""
+    parser = argparse.ArgumentParser(description=fill_abstracts.__doc__)
+    parser.add_argument(
+        "--max-papers",
+        type=int,
+        default=None,
+        help="stop after trying this many papers (default: every paper missing an abstract)",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="log the extracted abstracts without writing them to BigQuery",
+    )
+    args = parser.parse_args()
+    _setup_logging()
+    _quiet_gemini_logs()
+
+    gcp = load_gcp_settings()
+    settings = load_abstract_extraction_settings()
+    drive_settings = load_drive_connection_settings()
+    drive_service = build_drive_service(
+        drive_settings.service_account_file,
+        drive_settings.oauth_client_file,
+        drive_settings.oauth_token_file,
+    )
+    if gcp.credentials_file:
+        # Gemini signs in through Application Default Credentials. Set only now: on GitHub
+        # this variable would otherwise make Drive use the service account instead of the
+        # saved login that can see the folder
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(gcp.credentials_file)
+    prompt = load_prompt(settings.prompt_name)
+    runner = build_runner(build_extractor_agent(settings, prompt))
+    outcomes = asyncio.run(
+        run_fill_abstracts(
+            settings,
+            build_bigquery_client(gcp.project, gcp.credentials_file),
+            drive_service,
+            runner,
+            prompt,
+            args.max_papers,
+            args.dry_run,
+        )
     )
     print("Summary:", dict(outcomes))

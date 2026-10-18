@@ -45,7 +45,31 @@ uv run pytest -m integration                   # 3 obvious cases against real Ge
   `data/bigquery_store.py` and `pipelines/screen_papers.py`. A new agent adds a prompt, an
   output schema, a small agent module and a pipeline, and reuses the rest.
 
+## Missing abstracts
 
+Some papers have no abstract on OpenAlex. `fill-abstracts` downloads each one's PDF from Drive,
+sends its first 3 pages to Gemini with
+[prompts/extract_abstract.yaml](prompts/extract_abstract.yaml), and writes the abstract back to
+the `papers` table. It runs nightly after the fetch, and can be run by hand:
+
+```bash
+uv run fill-abstracts --max-papers 5 --dry-run  # log the abstracts, write nothing
+uv run fill-abstracts                           # every paper still missing an abstract
+```
+
+`abstract_source` records where each abstract came from:
+
+| Value | Meaning |
+|---|---|
+| `openalex` | From OpenAlex |
+| `pdf` | From the PDF, and found in the pages' text (margin line numbers ignored) |
+| `pdf_unverified` | From the PDF, but the pages are scanned or their text is garbled, so it couldn't be checked |
+| `pdf_mismatch` | Gemini's text wasn't on the pages; nothing stored |
+| `not_found` | No abstract in the first pages (e.g. retraction notes, editorials) |
+
+A paper whose PDF can't be read, or whose Gemini call fails or takes over 2 minutes, stays empty
+and is retried on the next run. Settings: the `abstract_extraction:` section of
+`configs/base.yaml`.
 
 ## PDF parsing
 

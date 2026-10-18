@@ -124,6 +124,7 @@ def test_abstract_extraction_settings_fall_back_to_llm_defaults(
         "max_pages": 3,
         "batch_size": 20,
         "max_concurrency": 4,
+        "call_timeout_s": 120,
     }
     path.write_text(yaml.safe_dump(raw))
     settings = config.load_abstract_extraction_settings(path)
