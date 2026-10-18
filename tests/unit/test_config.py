@@ -86,3 +86,27 @@ def test_evaluation_table_sits_next_to_papers_table() -> None:
     settings = config.load_evaluation_settings("other-proj.steel_slag.papers_trial")
     assert settings.labels_table == "other-proj.steel_slag.screening_evaluation"
     assert settings.output_dir.name == "evaluation"
+
+
+def test_pdf_parsing_settings_use_trial_table_and_drive_names() -> None:
+    settings = config.load_pdf_parsing_settings()
+
+    assert settings.source_table == "capstone-project-511200.steel_slag.papers_trial"
+    assert settings.output_folder_name == "_parsed"
+    assert settings.index_file_name == "index.json"
+
+
+def test_drive_connection_settings_load_without_openalex_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DRIVE_FOLDER_ID", "drive-folder")
+    monkeypatch.delenv("GOOGLE_APPLICATION_CREDENTIALS", raising=False)
+    monkeypatch.delenv("GOOGLE_OAUTH_CLIENT_FILE", raising=False)
+    monkeypatch.delenv("GOOGLE_OAUTH_TOKEN_FILE", raising=False)
+
+    settings = config.load_drive_connection_settings()
+
+    assert settings.folder_id == "drive-folder"
+    assert settings.service_account_file is None
+    assert settings.oauth_client_file is None
+    assert settings.oauth_token_file == config.DEFAULT_GOOGLE_TOKEN_PATH

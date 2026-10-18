@@ -44,3 +44,31 @@ uv run pytest -m integration                   # 3 obvious cases against real Ge
 - Code: `src/steel_slag_slm/agents/` (shared ADK helpers plus the screener),
   `data/bigquery_store.py` and `pipelines/screen_papers.py`. A new agent adds a prompt, an
   output schema, a small agent module and a pipeline, and reuses the rest.
+
+
+
+## PDF parsing
+
+The `parse-pdfs` command reads paper IDs and Drive links from
+`capstone-project-511200.steel_slag.papers_trial`. It downloads source PDFs from the configured
+Drive folder, parses text and tables with Docling and embedded image resources with PyMuPDF, then
+stores one JSON document per paper, separate image files, and an `index.json` registry in the
+`_parsed` subfolder. The six PDFs used in the exploratory notebook are not production inputs.
+
+Configure `DRIVE_FOLDER_ID`, `GOOGLE_CLOUD_PROJECT`, and Google Drive/BigQuery credentials as
+described in `.env.example`. The table and output names are in the `pdf_parsing` section of
+`configs/base.yaml`.
+
+Start with one unindexed paper and inspect its JSON, images, and index entry in Drive:
+
+```bash
+uv run parse-pdfs --max-papers 1
+```
+
+Inspect that paper’s JSON, images, and index entry in the `_parsed` Drive subfolder. If the output looks correct, process all remaining unindexed papers:
+
+```bash
+uv run parse-pdfs
+```
+
+The command skips papers already recorded in the index. If a run fails before updating the index, rerunning it can replace same-named partial output files.

@@ -4,6 +4,7 @@ import io
 import re
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 from google.auth.credentials import Credentials
 from google.auth.transport.requests import Request
@@ -123,6 +124,86 @@ def _find_child_id(service: Any, parent_id: str, name: str, extra_query: str = "
     return matches[0]["id"] if matches else None
 
 
+def download_pdf(service: Any, file_id: str) -> bytes:
+    """Return the raw bytes of a PDF stored in Drive."""
+    content: bytes = (
+        service.files().get_media(fileId=file_id, **_ALL_DRIVES).execute(num_retries=DRIVE_RETRIES)
+    )
+    return content
+
+
+def drive_file_id_from_link(drive_link: str) -> str:
+    """Extract a Drive file ID from a standard Google Drive sharing link."""
+    parsed_link = urlparse(drive_link)
+    if parsed_link.scheme not in {"http", "https"} or parsed_link.hostname != "drive.google.com":
+        raise ValueError(f"Invalid Google Drive link: {drive_link!r}")
+
+    query_ids = parse_qs(parsed_link.query).get("id", [])
+    match = re.search(r"/d/([A-Za-z0-9_-]+)(?:/|$)", parsed_link.path)
+    file_id = query_ids[0] if query_ids else match.group(1) if match else None
+
+    if not file_id or not re.fullmatch(r"[A-Za-z0-9_-]+", file_id):
+        raise ValueError(f"Could not extract a Drive file ID from: {drive_link!r}")
+    return file_id
+
+
+def ensure_subfolder(service: Any, parent_id: str, name: str) -> str:
+    """Return the ID of the named subfolder, creating it if it does not exist."""
+    existing = _find_child_id(
+        service,
+        parent_id,
+        name,
+        f" and mimeType = '{FOLDER_MIME_TYPE}'",
+    )
+    if existing:
+        return existing
+
+    created = (
+        service.files()
+        .create(
+            body={
+                "name": name,
+                "parents": [parent_id],
+                "mimeType": FOLDER_MIME_TYPE,
+            },
+            fields="id",
+            **_ALL_DRIVES,
+        )
+        .execute(num_retries=DRIVE_RETRIES)
+    )
+    return str(created["id"])
+
+
+def write_file(
+    service: Any,
+    folder_id: str,
+    file_name: str,
+    content: bytes,
+    mime_type: str,
+) -> str:
+    """Create or replace a file in a Drive folder and return its file ID."""
+    media = MediaIoBaseUpload(io.BytesIO(content), mimetype=mime_type, resumable=True)
+    file_id = _find_child_id(service, folder_id, file_name)
+
+    if file_id:
+        service.files().update(fileId=file_id, media_body=media, **_ALL_DRIVES).execute(
+            num_retries=DRIVE_RETRIES
+        )
+        return file_id
+
+    created = (
+        service.files()
+        .create(
+            body={"name": file_name, "parents": [folder_id]},
+            media_body=media,
+            fields="id",
+            **_ALL_DRIVES,
+        )
+        .execute(num_retries=DRIVE_RETRIES)
+    )
+    return str(created["id"])
+
+
 def list_known_paper_ids(service: Any, folder_id: str, rejected_subfolder_name: str) -> set[str]:
     """Return OpenAlex IDs already in the folder or in its rejected subfolder."""
     folder_ids = [folder_id]
@@ -186,17 +267,7 @@ def read_text_file(service: Any, folder_id: str, file_name: str) -> str:
 
 def write_text_file(service: Any, folder_id: str, file_name: str, text: str) -> None:
     """Save a text file in the folder, replacing its previous contents."""
-    media = MediaIoBaseUpload(io.BytesIO(text.encode()), mimetype="text/plain")
-    file_id = _find_child_id(service, folder_id, file_name)
-    if file_id:
-        service.files().update(fileId=file_id, media_body=media, **_ALL_DRIVES).execute(
-            num_retries=DRIVE_RETRIES
-        )
-    else:
-        body = {"name": file_name, "parents": [folder_id]}
-        service.files().create(body=body, media_body=media, **_ALL_DRIVES).execute(
-            num_retries=DRIVE_RETRIES
-        )
+    write_file(service, folder_id, file_name, text.encode("utf-8"), "text/plain")
 
 
 def read_id_list(service: Any, folder_id: str, file_name: str) -> set[str]:

@@ -46,12 +46,29 @@ class DriveSettings(BaseModel):
     search_progress_name: str
 
 
+class DriveConnectionSettings(BaseModel):
+    """Credentials and source folder used to connect to Google Drive."""
+
+    folder_id: str
+    service_account_file: Path | None = None
+    oauth_client_file: Path | None = None
+    oauth_token_file: Path = DEFAULT_GOOGLE_TOKEN_PATH
+
+
 class RegistrySettings(BaseModel):
     """Where the BigQuery table listing every paper in the Drive folder lives."""
 
     dataset: str
     table: str
     location: str
+
+
+class PdfParsingSettings(BaseModel):
+    """Where PDF parsing reads paper rows and stores its Drive outputs."""
+
+    source_table: str
+    output_folder_name: str
+    index_file_name: str
 
 
 class GcpSettings(BaseModel):
@@ -187,4 +204,25 @@ def load_evaluation_settings(
     return EvaluationSettings(
         labels_table=f"{project_and_dataset}.{raw_config['table']}",
         output_dir=PROJECT_ROOT / raw_config["output_dir"],
+    )
+
+
+def load_pdf_parsing_settings(
+    config_path: Path = BASE_CONFIG_PATH,
+) -> PdfParsingSettings:
+    """Build PDF-parsing settings from the YAML config."""
+    raw_config = _read_base_config(config_path)
+    return PdfParsingSettings(**raw_config["pdf_parsing"])
+
+
+def load_drive_connection_settings() -> DriveConnectionSettings:
+    """Load Drive authentication and source-folder settings from the environment."""
+    load_dotenv(PROJECT_ROOT / ".env")
+    return DriveConnectionSettings(
+        folder_id=_require_env("DRIVE_FOLDER_ID"),
+        service_account_file=_optional_path_env("GOOGLE_APPLICATION_CREDENTIALS"),
+        oauth_client_file=_optional_path_env("GOOGLE_OAUTH_CLIENT_FILE"),
+        oauth_token_file=Path(
+            os.environ.get("GOOGLE_OAUTH_TOKEN_FILE", "").strip() or DEFAULT_GOOGLE_TOKEN_PATH
+        ).expanduser(),
     )

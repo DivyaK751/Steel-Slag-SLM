@@ -5,6 +5,7 @@ description = "Steel slag literature pipeline and small language model"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "docling>=2.140.0",
     "google-adk>=2.12.0",
     "google-api-python-client>=2.100",
     "google-auth>=2.23",
@@ -12,6 +13,7 @@ dependencies = [
     "google-cloud-bigquery>=3.46.2",
     "openpyxl>=3.1.5",
     "pydantic>=2.5",
+    "pymupdf>=1.28.2",
     "python-dotenv>=1.0",
     "pyyaml>=6.0",
     "requests>=2.31",
@@ -22,6 +24,7 @@ fetch-papers = "steel_slag_slm.cli:fetch_papers"
 sync-registry = "steel_slag_slm.cli:sync_registry"
 screen-papers = "steel_slag_slm.cli:screen_papers"
 evaluate-screening = "steel_slag_slm.cli:evaluate_screening"
+parse-pdfs = "steel_slag_slm.cli:parse_pdfs"
 
 [dependency-groups]
 dev = [
@@ -31,6 +34,9 @@ dev = [
     "types-openpyxl>=3.1.5.20260827",
     "types-pyyaml",
     "types-requests",
+]
+notebook = [
+    "ipykernel>=6.29",
 ]
 
 [build-system]

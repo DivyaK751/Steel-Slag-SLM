@@ -6,11 +6,15 @@ import pytest
 from steel_slag_slm.data.drive_storage import (
     build_drive_service,
     build_file_name,
+    download_pdf,
+    drive_file_id_from_link,
+    ensure_subfolder,
     has_paper,
     list_paper_files,
     parse_openalex_id,
     read_id_list,
     read_text_file,
+    write_file,
 )
 from steel_slag_slm.schemas import Paper
 
@@ -65,3 +69,70 @@ def test_read_text_file_is_empty_when_the_file_does_not_exist_yet() -> None:
     service.files().list().execute.return_value = {"files": []}
     assert read_text_file(service, "F", "_fetcher_queue_ids.txt") == ""
     assert read_id_list(service, "F", "_fetcher_queue_ids.txt") == set()
+
+
+def test_download_pdf_returns_file_bytes() -> None:
+    service = MagicMock()
+    service.files().get_media().execute.return_value = b"%PDF-data"
+
+    assert download_pdf(service, "pdf-file-id") == b"%PDF-data"
+
+
+def test_ensure_subfolder_returns_existing_folder() -> None:
+    service = MagicMock()
+    service.files().list().execute.return_value = {
+        "files": [{"id": "existing-id", "name": "_parsed"}]
+    }
+
+    assert ensure_subfolder(service, "parent-id", "_parsed") == "existing-id"
+    service.files().create.assert_not_called()
+
+
+def test_ensure_subfolder_creates_missing_folder() -> None:
+    service = MagicMock()
+    service.files().list().execute.return_value = {"files": []}
+    service.files().create().execute.return_value = {"id": "new-id"}
+
+    assert ensure_subfolder(service, "parent-id", "_parsed") == "new-id"
+
+
+@pytest.mark.parametrize(
+    ("link", "expected"),
+    [
+        ("https://drive.google.com/file/d/FILE_123/view", "FILE_123"),
+        ("https://drive.google.com/open?id=FILE-456", "FILE-456"),
+    ],
+)
+def test_drive_file_id_from_link_extracts_file_id(link: str, expected: str) -> None:
+    assert drive_file_id_from_link(link) == expected
+
+
+def test_drive_file_id_from_link_rejects_non_drive_urls() -> None:
+    with pytest.raises(ValueError, match="Invalid Google Drive link"):
+        drive_file_id_from_link("https://example.com/file/d/FILE123/view")
+
+
+def test_write_file_creates_a_missing_file() -> None:
+    service = MagicMock()
+    service.files().list().execute.return_value = {"files": []}
+    service.files().create.return_value.execute.return_value = {"id": "created-id"}
+
+    file_id = write_file(service, "folder-id", "W123.json", b"{}", "application/json")
+
+    assert file_id == "created-id"
+    service.files().create.assert_called_once()
+
+
+def test_write_file_replaces_a_file_with_the_same_name() -> None:
+    service = MagicMock()
+    service.files().list().execute.return_value = {
+        "files": [{"id": "existing-id", "name": "W123.json"}]
+    }
+
+    file_id = write_file(
+        service, "folder-id", "W123.json", b'{"updated": true}', "application/json"
+    )
+
+    assert file_id == "existing-id"
+    service.files().update.assert_called_once()
+    service.files().create.assert_not_called()
