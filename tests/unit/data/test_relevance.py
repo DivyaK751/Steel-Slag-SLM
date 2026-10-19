@@ -81,6 +81,24 @@ def test_is_relevant_skips_steel_slag_for_wastewater_treatment(rules: RelevanceR
     assert not is_relevant(paper, rules)
 
 
+def test_is_relevant_keeps_leaching_studies_of_slag_binders(rules: RelevanceRules) -> None:
+    assert is_relevant(_paper("Leaching behaviour of steel slag-blended cement"), rules)
+
+
+def test_is_relevant_skips_ceramic_tile_and_freshwater_papers(rules: RelevanceRules) -> None:
+    for title in (
+        "Glass-ceramics prepared from steel slag",
+        "Steel slag ceramic tiles with low water absorption",
+        "Effect of steel slag on freshwater aquatic organisms",
+    ):
+        assert not is_relevant(_paper(title, abstract="steel slag cement"), rules)
+
+
+def test_is_relevant_accepts_new_slag_names_and_activation_routes(rules: RelevanceRules) -> None:
+    assert is_relevant(_paper("KR desulfurization slag as a supersulfated binder"), rules)
+    assert is_relevant(_paper("Thermal activation of air-cooled steel slag"), rules)
+
+
 def test_normalize_for_matching_treats_dashes_as_spaces() -> None:
     assert normalize_for_matching("Steel  Slag–Asphalt") == "steel slag asphalt"
 
