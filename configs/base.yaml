@@ -48,6 +48,39 @@ fetch:
     - '"steel slag binder"'
     - '"alkaline industrial wastes" carbonation'
     - '"high performance cementing materials" slag'
+    # Slag names the relevance rules accept but no search asked for
+    - '"white slag"'
+    - '"black slag"'
+    - '"LF slag"'
+    - '"electric furnace slag"'
+    - '"ladle metallurgy slag"'
+    - '"secondary metallurgy slag"'
+    - '"dephosphorization slag"'
+    - '"argon oxygen decarburization slag"'
+    # Names common in Chinese papers, a large share of this literature
+    - '"steel slag powder"'
+    - '"steel slag micropowder"'
+    - '"converter steel slag"'
+    - '"desulfurization slag"'  # KR hot-metal desulfurization slag
+    - '"steel slag" "composite cement"'
+    - '"steel slag" "cementitious material"'
+    # Processing, activation and carbon uptake routes (workbook tabs 3, 5 and 8)
+    - '"steel slag" "carbonation curing"'
+    - '"steel slag" "CO2 curing"'
+    - '"steel slag" "accelerated carbonation"'
+    - '"steel slag" "activity index"'
+    - '"steel slag" "thermal activation"'
+    - '"steel slag" "chemical activation"'
+    - '"steel slag" "supersulfated"'
+    - '"steel slag" phosphogypsum'
+    - '"steel slag" "hot stage"'  # hot-state / molten modification
+    - '"steel slag" "reconstruction"'  # Chinese term for molten modification
+    - '"steel slag" "water quenched"'
+    - '"steel slag" "air cooled"'
+    - '"steel slag" "belite"'
+    - '"steel slag" "raw meal"'
+    - '"steel slag" autoclave'
+    - '"steel slag" "ternary"'
   search_filter: "is_oa:true,language:en"
   # Citation sort surfaces famous off-topic papers; relevance keeps results on steel slag
   sort: "relevance_score:desc"
@@ -90,6 +123,8 @@ relevance:
     - aod slag
     - argon oxygen decarburization slag
     - dephosphorization slag
+    - desulfurization slag
+    - desulphurization slag
     - induction furnace slag
   # Title or abstract must touch a use case we extract (cementitious, stability or CO2) ...
   # "cement" also covers cementitious/SCM wording, "pozzolan" covers pozzolanic/pozzolana,
@@ -119,6 +154,21 @@ relevance:
     - co2
     - sequestration
     - carbon capture
+    # Processing and activation routes; the paper must still name a steel slag
+    - activity index
+    - thermal activation
+    - chemical activation
+    - supersulfated
+    - supersulphated
+    - phosphogypsum
+    - belite
+    - raw meal
+    - autoclave
+    - ternary
+    - hot stage
+    - quench  # also water-quenched, quenching
+    - air cooled  # "air-cooled" after hyphens become spaces
+    - reconstruction
   # ... or the title must signal a characterization or utilization study. These words are
   # title-only because nearly every abstract says "utilization" or "characterization".
   include_title_terms:
@@ -169,9 +219,16 @@ relevance:
     - heavy metal removal
     - acid mine drainage
     - catalyst
-    - leaching
-    - heavy metal
     - agricultur
+    - ceramic  # also glass-ceramic
+    - tile
+    - sintered
+    - pavement
+    - microwave
+    - freshwater
+    - aquatic
+    - phytoplankton
+    - sediment
   # Other slags skip a title only when it names no steel slag, so blends such as
   # "steel slag-GGBFS-cement" stay in
   other_slag_title_terms:
