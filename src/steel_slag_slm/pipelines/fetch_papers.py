@@ -70,11 +70,12 @@ def run_fetch(
 ) -> Counter[str]:
     """Download queued papers into Drive until max_new_papers or the budget runs out.
 
-    The queue is a text file of OpenAlex IDs in Drive. Whenever it runs dry, every search
-    reads its next pages to refill it; once every search has been read to its end with
-    nothing new, the run stops. Searches newly added to the config are read first, even
-    if the queue isn't empty. With a BigQuery client, each uploaded paper also gets a
-    registry row.
+    The queue is a text file of OpenAlex IDs in Drive. Whenever it runs dry, the searches
+    read their next pages to refill it. A round of searching that queues nothing new ends
+    searching for the day: today's date is saved in Drive, so later runs that day (the other
+    members' keys, or a manual run) only download what is already queued instead of paying
+    to search deeper for nothing. Searches newly added to the config are read first, even
+    then. With a BigQuery client, each uploaded paper also gets a registry row.
 
     Returns:
         Counts: queued, added_free, added_openalex, already_known, not_found, no_pdf,
@@ -94,6 +95,11 @@ def run_fetch(
     # Searches removed from the config are dropped; ones added since the last run start now
     progress = {query: page for query, page in saved_progress.items() if query in queries}
     new_queries = [query for query in queries if query not in progress]
+    today = datetime.now(UTC).date().isoformat()
+    searched_dry_today = (
+        drive_storage.read_text_file(drive_service, folder_id, names.no_new_papers_name).strip()
+        == today
+    )
     logger.info(
         "%d papers in Drive, %d with no PDF, %d queued", len(known_ids), len(no_pdf_ids), len(queue)
     )
@@ -128,14 +134,23 @@ def run_fetch(
         while max_new_papers is None or _count_added(outcomes) < max_new_papers:
             pending = sorted(queue - retry_tomorrow)
             if not pending:
-                if finished_searches >= set(queries):
-                    logger.info("Every search was read to its end with nothing new; stopping")
+                if searched_dry_today:
+                    logger.info("Searching found nothing new earlier today; stopping")
                     break
                 queued_before = len(queue)
+                # A search read to its end this run starts over tomorrow, not again today
+                unfinished = [query for query in queries if query not in finished_searches]
                 finished_searches |= discover_papers(
-                    settings, client, queries, progress, known_ids | no_pdf_ids, queue
+                    settings, client, unfinished, progress, known_ids | no_pdf_ids, queue
                 )
                 outcomes["queued"] += len(queue) - queued_before
+                if len(queue) == queued_before:
+                    logger.info("No new papers in this round of searching; stopping for today")
+                    drive_storage.write_text_file(
+                        drive_service, folder_id, names.no_new_papers_name, today
+                    )
+                    searched_dry_today = True
+                    break
                 continue
 
             batch = pending[:MAX_IDS_PER_LOOKUP]

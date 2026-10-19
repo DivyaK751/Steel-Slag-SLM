@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -214,3 +215,57 @@ def test_run_fetch_keeps_a_paper_queued_when_the_drive_upload_times_out(
     outcomes = _run(settings, client)
     assert outcomes["upload_error"] == 1 and outcomes["added_free"] == 1
     assert drive.ids(settings.drive.queue_list_name) == {"W2"}
+
+
+def _today() -> str:
+    return datetime.now(UTC).date().isoformat()
+
+
+def test_run_fetch_stops_searching_for_the_day_after_a_round_with_nothing_new(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    drive = FakeDrive(settings, queue=set())
+    drive.install(monkeypatch)
+    # Deeper pages exist (next_page 6), but this round found only papers already in Drive
+    client = _client({"q1": [SearchPages([_paper("W1")], 6)], "q2": [SearchPages([], 6)]})
+    _run(settings, client)
+    assert client.read_search_pages.call_count == 2  # one round, not page after page
+    assert drive.files[settings.drive.no_new_papers_name] == _today()
+
+
+def test_run_fetch_skips_searching_when_it_already_came_up_empty_today(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    drive = FakeDrive(settings, queue={"W2"})
+    drive.files[settings.drive.no_new_papers_name] = _today()
+    drive.install(monkeypatch)
+    client = _client()
+    _run(settings, client)
+    assert drive.uploaded == ["W2"]  # what was queued is still downloaded
+    client.read_search_pages.assert_not_called()
+
+
+def test_run_fetch_searches_again_on_a_new_day(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    drive = FakeDrive(settings, queue=set())
+    drive.files[settings.drive.no_new_papers_name] = "2000-01-01"
+    drive.install(monkeypatch)
+    client = _client({"q1": [SearchPages([_paper("W2")], 6)], "q2": [SearchPages([], 6)]})
+    _run(settings, client, max_new_papers=1)
+    assert drive.uploaded == ["W2"]
+
+
+def test_run_fetch_does_not_reread_a_search_that_reached_its_end_this_run(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    drive = FakeDrive(settings, queue=set())
+    drive.install(monkeypatch)
+    client = _client(
+        {
+            "q1": [SearchPages([_paper("W2")], 1)],  # read to its end in round one
+            "q2": [SearchPages([_paper("W3")], 6), SearchPages([], 11)],
+        }
+    )
+    _run(settings, client)
+    assert [call.args[0] for call in client.read_search_pages.call_args_list] == ["q1", "q2", "q2"]

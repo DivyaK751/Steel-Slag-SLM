@@ -16,7 +16,9 @@ member's OpenAlex key. Each run:
    pages (where each search left off is kept in `_fetcher_search_progress.txt`), filters them
    with the relevance rules from the team's paper feedback, and queues papers that aren't in the
    folder, in `Rejected`, or known to have no PDF. A search that reaches its last page starts
-   over from page 1, which picks up newly published papers.
+   over from page 1 on the next run, which picks up newly published papers. If a round of
+   searching finds nothing new, searching stops for the day: the date is saved in
+   `_fetcher_no_new_papers_date.txt`, and later runs that day only download what is queued.
 3. **Downloads queued papers**, trying the free publisher copy first and OpenAlex's paid copy
    ($0.01) only if that fails, and uploads each as `<OpenAlex ID> - <title>.pdf`.
 4. **Stops** when that member's daily budget (about $1) is used up, saving what's left in the
