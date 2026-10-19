@@ -198,6 +198,8 @@ drive:
   queue_list_name: _fetcher_queue_ids.txt
   # The next result page each search reads, so runs go deeper instead of repeating page 1
   search_progress_name: _fetcher_search_progress.txt
+  # The date searching last found nothing new; later runs that day skip searching
+  no_new_papers_name: _fetcher_no_new_papers_date.txt
 
 registry:
   # One row per paper in the Drive folder, with its abstract, keywords and language

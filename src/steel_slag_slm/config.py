@@ -44,6 +44,7 @@ class DriveSettings(BaseModel):
     no_pdf_list_name: str
     queue_list_name: str
     search_progress_name: str
+    no_new_papers_name: str
 
 
 class DriveConnectionSettings(BaseModel):
