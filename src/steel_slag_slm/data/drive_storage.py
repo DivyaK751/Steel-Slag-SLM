@@ -279,3 +279,35 @@ def read_id_list(service: Any, folder_id: str, file_name: str) -> set[str]:
 def write_id_list(service: Any, folder_id: str, file_name: str, ids: set[str]) -> None:
     """Save IDs one per line to a text file in the folder, replacing its previous contents."""
     write_text_file(service, folder_id, file_name, "\n".join(sorted(ids)))
+
+
+def download_file(service: Any, file_id: str) -> bytes:
+    """Return the raw bytes of any file stored in Drive."""
+    content: bytes = (
+        service.files().get_media(fileId=file_id, **_ALL_DRIVES).execute(num_retries=DRIVE_RETRIES)
+    )
+    return content
+
+
+def read_file_bytes(service: Any, folder_id: str, file_name: str) -> bytes | None:
+    """Read a file in the folder as bytes; None if the file doesn't exist yet."""
+    file_id = _find_child_id(service, folder_id, file_name)
+    return download_file(service, file_id) if file_id else None
+
+
+def find_subfolder_id(service: Any, parent_id: str, name: str) -> str | None:
+    """Return the ID of the named subfolder if it exists; never creates it."""
+    return _find_child_id(service, parent_id, name, f" and mimeType = '{FOLDER_MIME_TYPE}'")
+
+
+def list_file_names(service: Any, folder_id: str) -> dict[str, str]:
+    """Map each non-folder file name in the folder to its Drive file ID."""
+    return {
+        item["name"]: item["id"]
+        for item in _list_children(service, folder_id, f" and mimeType != '{FOLDER_MIME_TYPE}'")
+    }
+
+
+def delete_file(service: Any, file_id: str) -> None:
+    """Permanently remove a Drive file."""
+    service.files().delete(fileId=file_id, **_ALL_DRIVES).execute(num_retries=DRIVE_RETRIES)
