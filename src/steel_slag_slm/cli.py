@@ -6,7 +6,7 @@ import logging
 import os
 import subprocess
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from google.adk.runners import Runner
 from google.cloud import bigquery
@@ -19,22 +19,34 @@ from steel_slag_slm.config import (
     Settings,
     load_abstract_extraction_settings,
     load_drive_connection_settings,
+    load_embedding_settings,
     load_evaluation_settings,
     load_gcp_settings,
     load_pdf_parsing_settings,
+    load_retrieval_eval_settings,
     load_screening_settings,
     load_settings,
 )
-from steel_slag_slm.data.drive_storage import build_drive_service
+from steel_slag_slm.data.drive_storage import build_drive_service, find_subfolder_id
 from steel_slag_slm.data.openalex import OpenAlexClient
 from steel_slag_slm.data.paper_registry import build_bigquery_client
+from steel_slag_slm.evaluation.retrieval_metrics import (
+    abstain_rate,
+    hit_rate,
+    mean_reciprocal_rank,
+)
 from steel_slag_slm.llm.prompts import PromptTemplate, load_prompt
+from steel_slag_slm.pipelines.build_index import run_build_index
+from steel_slag_slm.pipelines.evaluate_retrieval import run_retrieval_eval
 from steel_slag_slm.pipelines.evaluate_screening import run_evaluation
 from steel_slag_slm.pipelines.fetch_papers import run_fetch
 from steel_slag_slm.pipelines.fill_abstracts import run_fill_abstracts
 from steel_slag_slm.pipelines.parse_pdfs import run_pdf_parsing
 from steel_slag_slm.pipelines.screen_papers import run_screening
+from steel_slag_slm.pipelines.search_index import run_search
 from steel_slag_slm.pipelines.sync_registry import run_registry_sync
+from steel_slag_slm.rag.embeddings import Embedder
+from steel_slag_slm.schemas import ChunkKind
 
 logger = logging.getLogger(__name__)
 
@@ -266,3 +278,99 @@ def fill_abstracts() -> None:
         )
     )
     print("Summary:", dict(outcomes))
+
+
+def _connect_to_parsed_folder() -> tuple[Any, str]:
+    """Sign in to Drive and find the _parsed folder inside DRIVE_FOLDER_ID."""
+    drive_settings = load_drive_connection_settings()
+    drive_service = build_drive_service(
+        drive_settings.service_account_file,
+        drive_settings.oauth_client_file,
+        drive_settings.oauth_token_file,
+    )
+    parsed_folder_id = find_subfolder_id(
+        drive_service, drive_settings.folder_id, load_pdf_parsing_settings().output_folder_name
+    )
+    if parsed_folder_id is None:
+        raise SystemExit("No _parsed folder in DRIVE_FOLDER_ID yet; run parse-pdfs first")
+    return drive_service, parsed_folder_id
+
+
+def build_index() -> None:
+    """Embed every parsed paper and save the search index to the _parsed Drive folder."""
+    parser = argparse.ArgumentParser(description=build_index.__doc__)
+    parser.add_argument(
+        "--max-papers",
+        type=int,
+        default=None,
+        help="stop after indexing this many papers (default: all unindexed papers)",
+    )
+    args = parser.parse_args()
+    if args.max_papers is not None and args.max_papers <= 0:
+        parser.error("--max-papers must be greater than zero")
+
+    _setup_logging()
+    settings = load_embedding_settings()
+    outcomes = run_build_index(
+        settings,
+        load_pdf_parsing_settings(),
+        *_connect_to_parsed_folder(),
+        Embedder(settings.model),
+        args.max_papers,
+    )
+    print("Summary:", dict(outcomes))
+
+
+def search_index() -> None:
+    """Search the saved index for passages that match a query."""
+    parser = argparse.ArgumentParser(description=search_index.__doc__)
+    parser.add_argument("query", help="what to look for, in plain language")
+    parser.add_argument("--top-k", type=int, default=None, help="how many results to show")
+    parser.add_argument(
+        "--kind",
+        action="append",
+        choices=["text", "table", "figure_caption"],
+        help="only show this kind of chunk; repeat to allow several",
+    )
+    args = parser.parse_args()
+
+    _setup_logging()
+    settings = load_embedding_settings()
+    kinds = cast(set[ChunkKind], set(args.kind)) if args.kind else None
+    hits = run_search(
+        settings,
+        *_connect_to_parsed_folder(),
+        Embedder(settings.model),
+        args.query,
+        args.top_k,
+        kinds,
+    )
+    for rank, hit in enumerate(hits, start=1):
+        chunk = hit.chunk
+        print(f"{rank}. [{hit.score:.3f}] {chunk.paper_id} · {chunk.kind} · {chunk.section}")
+        print(f"   {' '.join(chunk.text.split())[:300]}")
+
+
+def evaluate_retrieval() -> None:
+    """Score the saved index against the labelled queries in configs/base.yaml."""
+    argparse.ArgumentParser(description=evaluate_retrieval.__doc__).parse_args()
+    _setup_logging()
+    settings = load_embedding_settings()
+    evaluation = load_retrieval_eval_settings()
+    results = run_retrieval_eval(
+        settings,
+        evaluation,
+        *_connect_to_parsed_folder(),
+        Embedder(settings.model),
+    )
+    for result in results:
+        if result.answerable:
+            outcome = "miss" if result.rank is None else f"rank {result.rank}"
+        else:
+            outcome = f"score {result.top_score:.3f}" if result.top_score is not None else "no hits"
+            outcome += " (abstained)" if result.abstained else " (answered)"
+        print(f"{outcome:>22}  {result.query}")
+    print(f"Hit rate @{evaluation.top_k} (answerable): {hit_rate(results, evaluation.top_k):.0%}")
+    print(f"Mean reciprocal rank (answerable): {mean_reciprocal_rank(results):.3f}")
+    threshold = evaluation.abstain_below_score
+    print(f"Abstained (unanswerable, below {threshold}): {abstain_rate(results):.0%}")

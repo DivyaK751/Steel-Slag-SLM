@@ -2,11 +2,11 @@
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from dotenv import load_dotenv
-from pydantic import BaseModel, SecretStr
+from pydantic import BaseModel, SecretStr, model_validator
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CONFIGS_DIR = PROJECT_ROOT / "configs"
@@ -70,6 +70,44 @@ class PdfParsingSettings(BaseModel):
     source_table: str
     output_folder_name: str
     index_file_name: str
+
+
+class EmbeddingSettings(BaseModel):
+    """How parsed papers are chunked, embedded and stored in Drive."""
+
+    model: str
+    query_prefix: str
+    chunk_max_chars: int
+    table_max_chars: int
+    papers_per_save: int
+    top_k: int
+
+
+class RetrievalQuery(BaseModel):
+    """One question a user might ask, and where its answer is (or that it is absent)."""
+
+    query: str
+    answerable: bool
+    paper_id: str | None = None  # the paper that answers it
+    source: Literal["text", "table"] | None = None  # the kind of chunk that answers it
+    expected_text: str | None = None  # a passage from that chunk, copied from the paper
+
+    @model_validator(mode="after")
+    def _answerable_needs_an_answer(self) -> "RetrievalQuery":
+        if self.answerable and not (self.paper_id and self.source and self.expected_text):
+            raise ValueError(
+                f"answerable query needs paper_id, source and expected_text: {self.query!r}"
+            )
+        return self
+
+
+class RetrievalEvalSettings(BaseModel):
+    """Labelled questions used to score retrieval quality."""
+
+    top_k: int
+    # An unanswerable question counts as handled when its best score is below this
+    abstain_below_score: float
+    queries: list[RetrievalQuery]
 
 
 class GcpSettings(BaseModel):
@@ -255,3 +293,15 @@ def load_drive_connection_settings() -> DriveConnectionSettings:
             os.environ.get("GOOGLE_OAUTH_TOKEN_FILE", "").strip() or DEFAULT_GOOGLE_TOKEN_PATH
         ).expanduser(),
     )
+
+
+def load_embedding_settings(config_path: Path = BASE_CONFIG_PATH) -> EmbeddingSettings:
+    """Build chunking and embedding settings from the YAML config."""
+    raw_config = _read_base_config(config_path)
+    return EmbeddingSettings(**raw_config["embedding"])
+
+
+def load_retrieval_eval_settings(config_path: Path = BASE_CONFIG_PATH) -> RetrievalEvalSettings:
+    """Build the labelled retrieval queries from the YAML config."""
+    raw_config = _read_base_config(config_path)
+    return RetrievalEvalSettings(**raw_config["retrieval_eval"])

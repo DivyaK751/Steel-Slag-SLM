@@ -58,6 +58,29 @@ class ParsedDocument:
 
 
 @dataclass(frozen=True, slots=True)
+class ParsedPaper:
+    """The text and tables of one paper, read back from its parsed.json in Drive."""
+
+    openalex_id: str
+    markdown: str
+    tables: tuple[str, ...]
+
+
+ChunkKind = Literal["text", "table", "figure_caption"]
+
+
+@dataclass(frozen=True, slots=True)
+class Chunk:
+    """One retrievable piece of a paper, with the section it came from."""
+
+    paper_id: str
+    kind: ChunkKind
+    section: str  # heading the text sits under; "" before the first heading
+    text: str
+    position: int  # order within the paper, so neighbours can be found
+
+
+@dataclass(frozen=True, slots=True)
 class PaperForScreening:
     """One row of the BigQuery papers table, reduced to what the screening agent reads."""
 

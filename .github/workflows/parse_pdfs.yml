@@ -64,3 +64,14 @@ jobs:
           else
             uv run parse-pdfs
           fi
+
+      # Keeps the embedding model between runs so each run doesn't download it again
+      - name: Cache embedding model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: embedding-model-bge-small-en-v1.5
+
+      # Embeds the papers parsed above (and any others still unindexed) into the Drive index
+      - name: Build search index
+        run: uv run build-index
