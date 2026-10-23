@@ -102,7 +102,7 @@ def test_run_pdf_parsing_uploads_paper_folder_images_and_index(monkeypatch) -> N
     paper_record = json.loads(uploads[(paper_folder, "parsed.json")])
     assert paper_record["markdown"] == "# Sample"
     assert paper_record["tables"] == ["table"]
-    assert paper_record["content_schema_version"] == 2
+    assert paper_record["content_schema_version"] == 3
     assert paper_record["content_blocks"] == [
         {
             "kind": "text",
@@ -128,7 +128,7 @@ def test_run_pdf_parsing_uploads_paper_folder_images_and_index(monkeypatch) -> N
         "json_file_id": f"{paper_folder}:parsed.json",
         "image_folder_id": image_folder,
         "image_file_ids": [f"{image_folder}:image_001.png"],
-        "content_schema_version": 2,
+        "content_schema_version": 3,
     }
 
 
@@ -139,7 +139,7 @@ def test_run_pdf_parsing_skips_papers_already_in_the_new_layout(monkeypatch) -> 
             "schema_version": 1,
             "papers": {
                 "W123": {
-                    "content_schema_version": 2,
+                    "content_schema_version": 3,
                     "source_drive_link": source.drive_link,
                     "paper_folder_id": "paper-folder",
                     "json_file_id": "existing-json",
@@ -232,7 +232,7 @@ def test_run_pdf_parsing_reprocesses_legacy_index_entries(monkeypatch) -> None:
     assert uploads[(paper_folder, "parsed.json")]
     updated_index = json.loads(uploads[("source-folder/_parsed", "index.json")])
     assert updated_index["papers"]["W123"]["paper_folder_id"] == paper_folder
-    assert updated_index["papers"]["W123"]["content_schema_version"] == 2
+    assert updated_index["papers"]["W123"]["content_schema_version"] == 3
 
 
 def test_run_pdf_parsing_limits_papers_and_counts_deferred(monkeypatch) -> None:
