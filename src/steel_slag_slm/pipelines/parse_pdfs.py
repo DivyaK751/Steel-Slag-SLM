@@ -17,7 +17,7 @@ from steel_slag_slm.schemas import ParsedDocument
 logger = logging.getLogger(__name__)
 
 _PAPER_ID_PATTERN = re.compile(r"^W\d+$")
-_CONTENT_SCHEMA_VERSION = 2
+_CONTENT_SCHEMA_VERSION = 3
 
 
 def _serialize_document(
@@ -102,7 +102,10 @@ def run_pdf_parsing(
         source_file_id = drive_storage.drive_file_id_from_link(source.drive_link)
         pdf_bytes = drive_storage.download_pdf(drive_service, source_file_id)
         parsed = pdf_parsing.parse_pdf(pdf_bytes, converter)
-
+        if not parsed.markdown.strip() and not parsed.tables and not parsed.content_blocks:
+            raise ValueError(
+                f"Docling extracted no text or tables from paper {source.openalex_id}"
+            )
         paper_folder_id = drive_storage.ensure_subfolder(
             drive_service, output_folder_id, source.openalex_id
         )

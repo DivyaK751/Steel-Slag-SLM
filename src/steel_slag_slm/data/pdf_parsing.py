@@ -21,7 +21,7 @@ from steel_slag_slm.schemas import (
 def build_docling_converter() -> DocumentConverter:
     """Create a Docling converter configured for text and table extraction."""
     pipeline_options = PdfPipelineOptions(
-        do_ocr=False,
+        do_ocr=True,
         do_table_structure=True,
     )
     return DocumentConverter(
