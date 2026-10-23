@@ -88,10 +88,11 @@ def test_evaluation_table_sits_next_to_papers_table() -> None:
     assert settings.output_dir.name == "evaluation"
 
 
-def test_pdf_parsing_settings_use_trial_table_and_drive_names() -> None:
+def test_pdf_parsing_settings_use_screening_evaluation_table_and_drive_names() -> None:
     settings = config.load_pdf_parsing_settings()
-
-    assert settings.source_table == "capstone-project-511200.steel_slag.papers_trial"
+    assert settings.source_table == (
+        "capstone-project-511200.steel_slag.screening_evaluation"
+    )
     assert settings.output_folder_name == "_parsed"
     assert settings.index_file_name == "index.json"
 

@@ -74,7 +74,7 @@ and is retried on the next run. Settings: the `abstract_extraction:` section of
 ## PDF parsing
 
 The `parse-pdfs` command reads paper IDs and Drive links from
-`capstone-project-511200.steel_slag.papers_trial`. It downloads source PDFs from the configured
+`capstone-project-511200.steel_slag.screening_evaluation`. It downloads source PDFs from the configured
 Drive folder, parses text and tables with Docling and embedded image resources with PyMuPDF, then
 stores each paper under `_parsed/<paper_id>/`, with its parsed content in `parsed.json` and extracted images in an `images/` subfolder. The root `_parsed/index.json` registry records the Drive file and folder IDs for each paper. The six PDFs used in the exploratory notebook are not production inputs.
 

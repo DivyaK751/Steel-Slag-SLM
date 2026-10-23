@@ -45,7 +45,7 @@ def run_pdf_parsing(
     source_folder_id: str,
     max_papers: int | None = None,
 ) -> Counter[str]:
-    """Parse unprocessed trial papers and save their artifacts and index to Drive."""
+    """Parse unprocessed screened papers and save their artifacts and index to Drive."""
     if max_papers is not None and max_papers <= 0:
         raise ValueError("max_papers must be greater than zero")
 

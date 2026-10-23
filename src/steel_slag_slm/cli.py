@@ -197,7 +197,7 @@ def evaluate_screening() -> None:
 
 
 def parse_pdfs() -> None:
-    """Parse unprocessed trial-paper PDFs and save results to Drive."""
+    """Parse unprocessed screened-paper PDFs and save results to Drive."""
     parser = argparse.ArgumentParser(description=parse_pdfs.__doc__)
     parser.add_argument(
         "--max-papers",
