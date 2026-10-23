@@ -46,6 +46,25 @@ class ParsedImage:
 
 
 @dataclass(frozen=True, slots=True)
+class ContentPlacement:
+    """Locate a parsed text or table block on a source PDF page."""
+
+    page_number: int
+    bbox: tuple[float, float, float, float]
+    coordinate_origin: str
+
+
+@dataclass(frozen=True, slots=True)
+class ParsedContentBlock:
+    """Store one parsed text or table item with its source-page placements."""
+
+    kind: Literal["text", "table"]
+    label: str
+    text: str
+    placements: tuple[ContentPlacement, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class ParsedDocument:
     """Store text, tables, and image resources parsed from one PDF."""
 
@@ -55,6 +74,7 @@ class ParsedDocument:
     markdown: str
     tables: tuple[str, ...]
     images: tuple[ParsedImage, ...]
+    content_blocks: tuple[ParsedContentBlock, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

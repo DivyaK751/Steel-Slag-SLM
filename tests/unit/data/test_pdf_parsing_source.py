@@ -19,16 +19,16 @@ def test_list_pdf_sources_returns_rows_from_the_configured_table(
 
     sources = pdf_parsing_source.list_pdf_sources(
         MagicMock(),
-        "capstone-project-511200.steel_slag.papers_trial",
+        "capstone-project-511200.steel_slag.screening_evaluation",
     )
 
     assert [(source.openalex_id, source.drive_link) for source in sources] == [
         ("W123", "https://drive.google.com/file/d/F123/view")
     ]
-    assert "`capstone-project-511200.steel_slag.papers_trial`" in queries[0]
+    assert "`capstone-project-511200.steel_slag.screening_evaluation`" in queries[0]
     assert "drive_link IS NOT NULL" in queries[0]
 
 
 def test_list_pdf_sources_rejects_invalid_table_id() -> None:
     with pytest.raises(ValueError, match="Invalid BigQuery table ID"):
-        pdf_parsing_source.list_pdf_sources(MagicMock(), "papers_trial; DROP TABLE papers")
+        pdf_parsing_source.list_pdf_sources(MagicMock(), "screening_evaluation; DROP TABLE papers")

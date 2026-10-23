@@ -265,7 +265,7 @@ registry:
   location: US
 
 pdf_parsing:
-  source_table: capstone-project-511200.steel_slag.papers_trial
+  source_table: capstone-project-511200.steel_slag.screening_evaluation
   output_folder_name: _parsed
   index_file_name: index.json
 

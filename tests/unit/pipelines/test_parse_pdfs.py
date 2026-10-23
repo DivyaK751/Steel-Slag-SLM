@@ -8,7 +8,13 @@ from steel_slag_slm.config import PdfParsingSettings
 from steel_slag_slm.data import drive_storage, pdf_parsing, pdf_parsing_source
 from steel_slag_slm.data.pdf_parsing_source import PdfSource
 from steel_slag_slm.pipelines import parse_pdfs
-from steel_slag_slm.schemas import ImagePlacement, ParsedDocument, ParsedImage
+from steel_slag_slm.schemas import (
+    ContentPlacement,
+    ParsedContentBlock,
+    ImagePlacement,
+    ParsedDocument,
+    ParsedImage,
+)
 
 
 def _settings() -> PdfParsingSettings:
@@ -34,6 +40,20 @@ def _parsed_document() -> ParsedDocument:
                 height=2,
                 placements=(ImagePlacement(page_number=1, bbox=(1.0, 2.0, 3.0, 4.0)),),
                 image_bytes=b"png-bytes",
+            ),
+        ),
+        content_blocks=(
+            ParsedContentBlock(
+                kind="text",
+                label="paragraph",
+                text="Sample text",
+                placements=(
+                    ContentPlacement(
+                        page_number=1,
+                        bbox=(10.0, 20.0, 100.0, 40.0),
+                        coordinate_origin="TOPLEFT",
+                    ),
+                ),
             ),
         ),
     )
@@ -82,6 +102,21 @@ def test_run_pdf_parsing_uploads_paper_folder_images_and_index(monkeypatch) -> N
     paper_record = json.loads(uploads[(paper_folder, "parsed.json")])
     assert paper_record["markdown"] == "# Sample"
     assert paper_record["tables"] == ["table"]
+    assert paper_record["content_schema_version"] == 2
+    assert paper_record["content_blocks"] == [
+        {
+            "kind": "text",
+            "label": "paragraph",
+            "text": "Sample text",
+            "placements": [
+                {
+                    "page_number": 1,
+                    "bbox": [10.0, 20.0, 100.0, 40.0],
+                    "coordinate_origin": "TOPLEFT",
+                }
+            ],
+        }
+    ]
     assert paper_record["images"][0]["file_id"] == f"{image_folder}:image_001.png"
     assert "image_bytes" not in paper_record["images"][0]
     assert uploads[(image_folder, "image_001.png")] == b"png-bytes"
@@ -93,6 +128,7 @@ def test_run_pdf_parsing_uploads_paper_folder_images_and_index(monkeypatch) -> N
         "json_file_id": f"{paper_folder}:parsed.json",
         "image_folder_id": image_folder,
         "image_file_ids": [f"{image_folder}:image_001.png"],
+        "content_schema_version": 2,
     }
 
 
@@ -103,6 +139,7 @@ def test_run_pdf_parsing_skips_papers_already_in_the_new_layout(monkeypatch) -> 
             "schema_version": 1,
             "papers": {
                 "W123": {
+                    "content_schema_version": 2,
                     "source_drive_link": source.drive_link,
                     "paper_folder_id": "paper-folder",
                     "json_file_id": "existing-json",
@@ -139,7 +176,10 @@ def test_run_pdf_parsing_reprocesses_legacy_index_entries(monkeypatch) -> None:
             "schema_version": 1,
             "papers": {
                 "W123": {
+                    "source_drive_link": source.drive_link,
+                    "paper_folder_id": "old-paper-folder",
                     "json_file_id": "old-json",
+                    "image_folder_id": "old-image-folder",
                     "image_file_ids": ["old-image"],
                 }
             },
@@ -192,6 +232,7 @@ def test_run_pdf_parsing_reprocesses_legacy_index_entries(monkeypatch) -> None:
     assert uploads[(paper_folder, "parsed.json")]
     updated_index = json.loads(uploads[("source-folder/_parsed", "index.json")])
     assert updated_index["papers"]["W123"]["paper_folder_id"] == paper_folder
+    assert updated_index["papers"]["W123"]["content_schema_version"] == 2
 
 
 def test_run_pdf_parsing_limits_papers_and_counts_deferred(monkeypatch) -> None:
