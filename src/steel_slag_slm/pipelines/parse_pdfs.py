@@ -56,6 +56,37 @@ def _serialize_document(
     return json.dumps(record, ensure_ascii=False, indent=2).encode("utf-8")
 
 
+def _record_skipped_paper(
+    source: PdfSource,
+    reason: str,
+    papers: dict[str, dict[str, str | int | list[str]]],
+    drive_service: Any,
+    output_folder_id: str,
+    index_file_name: str,
+) -> None:
+    """Record a paper that should not be retried automatically."""
+    papers[source.openalex_id] = {
+        "status": "skipped",
+        "skip_reason": reason,
+        "source_drive_link": source.drive_link,
+        "json_file_id": "",
+        "image_file_ids": [],
+    }
+    index_bytes = json.dumps(
+        {"schema_version": parsed_index.INDEX_SCHEMA_VERSION, "papers": papers},
+        ensure_ascii=False,
+        indent=2,
+    ).encode("utf-8")
+    drive_storage.write_file(
+        drive_service,
+        output_folder_id,
+        index_file_name,
+        index_bytes,
+        "application/json",
+    )
+    logger.warning("Skipped paper %s: %s", source.openalex_id, reason)
+
+
 def run_pdf_parsing(
     settings: PdfParsingSettings,
     bigquery_client: bigquery.Client,
@@ -78,15 +109,25 @@ def run_pdf_parsing(
     papers = parsed_index.load_index(drive_service, output_folder_id, settings.index_file_name)
     converter = None
 
+    skipped_sources = [
+        source
+        for source in sources
+        if papers.get(source.openalex_id, {}).get("status") == "skipped"
+    ]
     pending_sources = [
         source
         for source in sources
-        if not papers.get(source.openalex_id, {}).get("paper_folder_id")
-        or not papers.get(source.openalex_id, {}).get("image_folder_id")
-        or papers.get(source.openalex_id, {}).get("content_schema_version")
-        != _CONTENT_SCHEMA_VERSION
+        if papers.get(source.openalex_id, {}).get("status") != "skipped"
+        and (
+            not papers.get(source.openalex_id, {}).get("paper_folder_id")
+            or not papers.get(source.openalex_id, {}).get("image_folder_id")
+            or papers.get(source.openalex_id, {}).get("content_schema_version")
+            != _CONTENT_SCHEMA_VERSION
+        )
     ]
-    outcomes["already_parsed"] = len(sources) - len(pending_sources)
+    if skipped_sources:
+        outcomes["skipped"] = len(skipped_sources)
+    outcomes["already_parsed"] = len(sources) - len(pending_sources) - len(skipped_sources)
 
     if max_papers is not None:
         outcomes["deferred"] = max(0, len(pending_sources) - max_papers)
@@ -96,16 +137,37 @@ def run_pdf_parsing(
         if not _PAPER_ID_PATTERN.fullmatch(source.openalex_id):
             raise ValueError(f"Invalid OpenAlex paper ID: {source.openalex_id!r}")
 
+        source_file_id = drive_storage.drive_file_id_from_link(source.drive_link)
+        pdf_bytes = drive_storage.download_pdf(drive_service, source_file_id)
+
+        if not pdf_bytes:
+            _record_skipped_paper(
+                source,
+                "empty_pdf_file",
+                papers,
+                drive_service,
+                output_folder_id,
+                settings.index_file_name,
+            )
+            outcomes["skipped"] += 1
+            continue
+
         if converter is None:
             converter = pdf_parsing.build_docling_converter()
 
-        source_file_id = drive_storage.drive_file_id_from_link(source.drive_link)
-        pdf_bytes = drive_storage.download_pdf(drive_service, source_file_id)
         parsed = pdf_parsing.parse_pdf(pdf_bytes, converter)
         if not parsed.markdown.strip() and not parsed.tables and not parsed.content_blocks:
-            raise ValueError(
-                f"Docling extracted no text or tables from paper {source.openalex_id}"
+            _record_skipped_paper(
+                source,
+                "no_extracted_text_tables_or_content_blocks",
+                papers,
+                drive_service,
+                output_folder_id,
+                settings.index_file_name,
             )
+            outcomes["skipped"] += 1
+            continue
+
         paper_folder_id = drive_storage.ensure_subfolder(
             drive_service, output_folder_id, source.openalex_id
         )
