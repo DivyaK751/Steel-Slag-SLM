@@ -12,7 +12,7 @@ def load_index(
     drive_service: Any,
     output_folder_id: str,
     index_file_name: str,
-) -> dict[str, dict[str, str | list[str]]]:
+) -> dict[str, dict[str, str | int | list[str]]]:
     """Read and validate the existing Drive index."""
     index_text = drive_storage.read_text_file(drive_service, output_folder_id, index_file_name)
     if not index_text:
@@ -30,7 +30,7 @@ def load_index(
     ):
         raise ValueError(f"Drive index {index_file_name!r} has an unsupported structure")
 
-    papers: dict[str, dict[str, str | list[str]]] = {}
+    papers: dict[str, dict[str, str | int | list[str]]] = {}
     for paper_id, entry in stored_index["papers"].items():
         if not isinstance(paper_id, str) or not isinstance(entry, dict):
             raise ValueError(f"Drive index {index_file_name!r} contains an invalid paper entry")
@@ -57,5 +57,13 @@ def load_index(
                         f"Drive index {index_file_name!r} contains an invalid paper entry"
                     )
                 papers[paper_id][key] = value
+
+        content_schema_version = entry.get("content_schema_version")
+        if content_schema_version is not None:
+            if not isinstance(content_schema_version, int) or isinstance(
+                content_schema_version, bool
+            ):
+                raise ValueError(f"Drive index {index_file_name!r} contains an invalid paper entry")
+            papers[paper_id]["content_schema_version"] = content_schema_version
 
     return papers

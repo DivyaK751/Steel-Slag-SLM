@@ -1,14 +1,21 @@
 """Parse PDF bytes into text, tables, and embedded image resources."""
 
 from io import BytesIO
+from typing import Literal
 
 import pymupdf
 from docling.datamodel.base_models import DocumentStream, InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.document_converter import DocumentConverter, PdfFormatOption
-from docling_core.types.doc import TableItem
+from docling_core.types.doc import TableItem, TextItem
 
-from steel_slag_slm.schemas import ImagePlacement, ParsedDocument, ParsedImage
+from steel_slag_slm.schemas import (
+    ContentPlacement,
+    ImagePlacement,
+    ParsedContentBlock,
+    ParsedDocument,
+    ParsedImage,
+)
 
 
 def build_docling_converter() -> DocumentConverter:
@@ -31,11 +38,41 @@ def parse_pdf(pdf_bytes: bytes, converter: DocumentConverter) -> ParsedDocument:
         DocumentStream(name="paper.pdf", stream=BytesIO(pdf_bytes))
     ).document
     markdown = document.export_to_markdown()
-    tables = tuple(
-        item.export_to_markdown(document)
-        for item, _ in document.iterate_items()
-        if isinstance(item, TableItem)
-    )
+    tables: list[str] = []
+    content_blocks: list[ParsedContentBlock] = []
+
+    for item, _ in document.iterate_items():
+        if isinstance(item, TableItem):
+            block_text = item.export_to_markdown(document)
+            kind: Literal["text", "table"] = "table"
+            tables.append(block_text)
+        elif isinstance(item, TextItem):
+            block_text = item.text
+            kind = "text"
+        else:
+            continue
+
+        content_placements = tuple(
+            ContentPlacement(
+                page_number=provenance.page_no,
+                bbox=(
+                    float(provenance.bbox.l),
+                    float(provenance.bbox.t),
+                    float(provenance.bbox.r),
+                    float(provenance.bbox.b),
+                ),
+                coordinate_origin=provenance.bbox.coord_origin.value,
+            )
+            for provenance in item.prov
+        )
+        content_blocks.append(
+            ParsedContentBlock(
+                kind=kind,
+                label=item.label.value,
+                text=block_text,
+                placements=content_placements,
+            )
+        )
 
     placements_by_xref: dict[int, list[ImagePlacement]] = {}
     with pymupdf.open(stream=pdf_bytes, filetype="pdf") as pdf:
@@ -77,6 +114,7 @@ def parse_pdf(pdf_bytes: bytes, converter: DocumentConverter) -> ParsedDocument:
         image_parser="PyMuPDF",
         page_count=page_count,
         markdown=markdown,
-        tables=tables,
+        tables=tuple(tables),
+        content_blocks=tuple(content_blocks),
         images=tuple(images),
     )

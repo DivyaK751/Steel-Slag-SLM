@@ -17,6 +17,7 @@ from steel_slag_slm.schemas import ParsedDocument
 logger = logging.getLogger(__name__)
 
 _PAPER_ID_PATTERN = re.compile(r"^W\d+$")
+_CONTENT_SCHEMA_VERSION = 2
 
 
 def _serialize_document(
@@ -28,11 +29,28 @@ def _serialize_document(
     record = {
         "openalex_id": source.openalex_id,
         "source_drive_link": source.drive_link,
+        "content_schema_version": _CONTENT_SCHEMA_VERSION,
         "text_parser": parsed.text_parser,
         "image_parser": parsed.image_parser,
         "page_count": parsed.page_count,
         "markdown": parsed.markdown,
         "tables": list(parsed.tables),
+        "content_blocks": [
+            {
+                "kind": block.kind,
+                "label": block.label,
+                "text": block.text,
+                "placements": [
+                    {
+                        "page_number": placement.page_number,
+                        "bbox": list(placement.bbox),
+                        "coordinate_origin": placement.coordinate_origin,
+                    }
+                    for placement in block.placements
+                ],
+            }
+            for block in parsed.content_blocks
+        ],
         "images": image_references,
     }
     return json.dumps(record, ensure_ascii=False, indent=2).encode("utf-8")
@@ -65,6 +83,8 @@ def run_pdf_parsing(
         for source in sources
         if not papers.get(source.openalex_id, {}).get("paper_folder_id")
         or not papers.get(source.openalex_id, {}).get("image_folder_id")
+        or papers.get(source.openalex_id, {}).get("content_schema_version")
+        != _CONTENT_SCHEMA_VERSION
     ]
     outcomes["already_parsed"] = len(sources) - len(pending_sources)
 
@@ -128,7 +148,9 @@ def run_pdf_parsing(
             "json_file_id": json_file_id,
             "image_folder_id": image_folder_id,
             "image_file_ids": image_file_ids,
+            "content_schema_version": _CONTENT_SCHEMA_VERSION,
         }
+
         index_bytes = json.dumps(
             {"schema_version": parsed_index.INDEX_SCHEMA_VERSION, "papers": papers},
             ensure_ascii=False,
