@@ -35,17 +35,24 @@ def run_build_index(
     store = embedding_store.load_store(
         drive_service, parsed_folder_id, settings.model, encoder.dimension
     )
-    pending = [paper_id for paper_id in papers if paper_id not in store.paper_ids]
-
+    indexable_papers = {
+        paper_id: entry
+        for paper_id, entry in papers.items()
+        if entry.get("status") != "skipped"
+    }
+    pending = [paper_id for paper_id in indexable_papers if paper_id not in store.paper_ids]
     outcomes: Counter[str] = Counter()
-    outcomes["already_indexed"] = len(papers) - len(pending)
+    skipped_count = len(papers) - len(indexable_papers)
+    if skipped_count:
+        outcomes["skipped"] = skipped_count
+    outcomes["already_indexed"] = len(indexable_papers) - len(pending)
     if max_papers is not None:
         outcomes["deferred"] = max(0, len(pending) - max_papers)
         pending = pending[:max_papers]
 
     unsaved = 0
     for paper_id in pending:
-        json_file_id = str(papers[paper_id]["json_file_id"])
+        json_file_id = str(indexable_papers[paper_id]["json_file_id"])
         try:
             paper = parse_parsed_json(drive_storage.download_file(drive_service, json_file_id))
         except ValueError as error:

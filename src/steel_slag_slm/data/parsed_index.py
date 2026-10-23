@@ -49,6 +49,24 @@ def load_index(
             "image_file_ids": image_file_ids,
         }
 
+        status = entry.get("status")
+        skip_reason = entry.get("skip_reason")
+        if status is not None and (
+            not isinstance(status, str) or status not in {"parsed", "skipped"}
+        ):
+            raise ValueError(f"Drive index {index_file_name!r} contains an invalid paper entry")
+        if skip_reason is not None and not isinstance(skip_reason, str):
+            raise ValueError(f"Drive index {index_file_name!r} contains an invalid paper entry")
+        if status == "skipped" and not skip_reason:
+            raise ValueError(f"Drive index {index_file_name!r} contains an invalid paper entry")
+        if status != "skipped" and skip_reason is not None:
+            raise ValueError(f"Drive index {index_file_name!r} contains an invalid paper entry")
+
+        if status is not None:
+            papers[paper_id]["status"] = status
+        if skip_reason is not None:
+            papers[paper_id]["skip_reason"] = skip_reason
+
         for key in ("paper_folder_id", "image_folder_id", "source_drive_link"):
             value = entry.get(key)
             if value is not None:
@@ -58,6 +76,7 @@ def load_index(
                     )
                 papers[paper_id][key] = value
 
+        
         content_schema_version = entry.get("content_schema_version")
         if content_schema_version is not None:
             if not isinstance(content_schema_version, int) or isinstance(
