@@ -107,15 +107,18 @@ uv run build-index --max-papers 1       # index one new paper first
 uv run build-index                      # index every remaining paper
 uv run search-index "free lime volume stability" --top-k 5
 uv run search-index "chemical composition" --kind table
-uv run evaluate-retrieval               # score the labelled queries in configs/base.yaml
+uv run evaluate-retrieval               # score the fixed test set in configs/retrieval_eval.yaml
 ```
 
 - Model, chunk sizes and save frequency: the `embedding:` section of `configs/base.yaml`.
   Changing the model means deleting `_parsed/_embeddings/` and rebuilding.
-- Labelled queries: the `retrieval_eval:` section. A query counts as a hit when a top-k chunk
-  from the given paper contains the expected text.
 - Figures are indexed only through their captions; image contents are not analysed.
-- Text and table results carry their section, not a page number. See
+- `evaluate-retrieval` reports Hit@5/20, Recall@5/20, MRR and nDCG@10 for the fixed questions in
+  `configs/retrieval_eval.yaml`. Each question lists its evidence as text copied from a paper,
+  so the labels survive rebuilds; evidence no longer in the index is printed as `STALE LABEL`.
+  The labels are a draft and need expert review.
+- Results show their section and the PDF pages they sit on. Pages come from the parser's content
+  blocks; papers parsed before content blocks show a section only. See
   [docs/adr/003-semantic-search-index.md](docs/adr/003-semantic-search-index.md).
 - Code: `src/steel_slag_slm/rag/` (chunking, embeddings, vector store, search),
   `data/embedding_store.py` (Drive storage) and `pipelines/build_index.py`.

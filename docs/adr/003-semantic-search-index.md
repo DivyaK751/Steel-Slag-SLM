@@ -21,6 +21,16 @@ machine's local files.
     A run that stops midway leaves the store pointing at a complete earlier index.
 - Index only the text the parser produced. Image resources are not analysed, so figures enter the
   index only as their caption paragraphs (`Fig. N ...`), marked as `figure_caption`.
+- Chunk from the paper's content blocks when present, using the labels: `caption` marks figure
+  captions, and page furniture (`page_header`, `page_footer`) is skipped. Papers without blocks
+  fall back to their Markdown.
+- A `section_header` starts a section only if it is numbered ("3.2 Utilization…") or a standard
+  name (Abstract, Introduction, Results, References…). Other headers, such as a title on the
+  cover page, are body text, so text is not labelled with a title. Section titles are capped at
+  150 characters.
+- Publisher and repository notices ("accepted manuscript", repository footers) are dropped.
+- `build-index` logs every paper it leaves out and exits with an error when a parsed paper
+  could not be read or produced no chunks. Papers the parser skipped on purpose do not fail the run.
 - Chunk each section's paragraphs into passages of at most `chunk_max_chars`, never splitting a
   paragraph. Each table is one chunk, split by row groups only when it is longer than
   `table_max_chars`; every piece repeats the table caption and header.
@@ -32,10 +42,10 @@ machine's local files.
 
 ## Consequences
 
-- Page references are not stored for text or tables. `parsed.json` keeps page numbers only for
-  image placements, and the parser discards Docling's per-item page provenance. Chunks carry the
-  section instead. Adding page numbers means changing the parser and re-parsing every paper,
-  which is a separate decision.
+- Page numbers come from each paper's content blocks, which carry a page and bounding box per
+  text or table item. Each chunk records the pages it sits on, and search results show them.
+  Papers parsed before content blocks existed have no pages, so their chunks show a section only.
+  Bounding boxes are stored in the blocks but not used yet.
 - The sentence-transformers library caches the model weights in the user's Hugging Face cache on
   the machine that runs it (about 130 MB). That cache holds model files, not paper data.
 - The whole index is loaded into memory for each search. A flat index is exact and simple, and
@@ -43,6 +53,7 @@ machine's local files.
   what one machine can hold.
 - Papers are added incrementally: a run indexes only papers that are not yet in `chunks.json`.
   Changing the chunking or the model means rebuilding the index from scratch.
-- Retrieval quality is measured by `evaluate-retrieval` against labelled queries in
-  `configs/base.yaml`. Those queries currently cover one paper, so they are a smoke test until
-  more papers are indexed.
+- Retrieval quality is measured with a fixed test set (`configs/retrieval_eval.yaml`): each question
+  lists graded evidence passages matched by text, and `evaluate-retrieval` reports Hit@K,
+  Recall@5/20, MRR and nDCG@10. The labels were drafted by pooling embedding and keyword
+  results, so they still need expert review, and passages the pool missed lower measured recall.
