@@ -6,11 +6,12 @@ from typing import Any, Literal
 
 import yaml
 from dotenv import load_dotenv
-from pydantic import BaseModel, SecretStr, model_validator
+from pydantic import BaseModel, Field, SecretStr
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CONFIGS_DIR = PROJECT_ROOT / "configs"
 BASE_CONFIG_PATH = CONFIGS_DIR / "base.yaml"
+RETRIEVAL_EVAL_PATH = CONFIGS_DIR / "retrieval_eval.yaml"
 # Kept outside the repo so a personal Google login can never be committed
 DEFAULT_GOOGLE_TOKEN_PATH = Path.home() / ".config" / "steel_slag_slm" / "google_token.json"
 
@@ -83,31 +84,28 @@ class EmbeddingSettings(BaseModel):
     top_k: int
 
 
-class RetrievalQuery(BaseModel):
-    """One question a user might ask, and where its answer is (or that it is absent)."""
+class EvidenceSpan(BaseModel):
+    """A passage that answers a test question, identified by text copied from the paper."""
 
+    paper_id: str
+    kind: Literal["text", "table", "figure_caption"]
+    text: str  # matched inside chunk text, ignoring case and spacing
+    grade: Literal[1, 2] = 2  # 2 answers the question directly, 1 answers it in part
+
+
+class EvalQuestion(BaseModel):
+    """One fixed test question and every passage known to answer it."""
+
+    id: str
     query: str
-    answerable: bool
-    paper_id: str | None = None  # the paper that answers it
-    source: Literal["text", "table"] | None = None  # the kind of chunk that answers it
-    expected_text: str | None = None  # a passage from that chunk, copied from the paper
-
-    @model_validator(mode="after")
-    def _answerable_needs_an_answer(self) -> "RetrievalQuery":
-        if self.answerable and not (self.paper_id and self.source and self.expected_text):
-            raise ValueError(
-                f"answerable query needs paper_id, source and expected_text: {self.query!r}"
-            )
-        return self
+    evidence: list[EvidenceSpan] = Field(min_length=1)
 
 
-class RetrievalEvalSettings(BaseModel):
-    """Labelled questions used to score retrieval quality."""
+class RetrievalEvalSet(BaseModel):
+    """The fixed set of questions used to score retrieval."""
 
-    top_k: int
-    # An unanswerable question counts as handled when its best score is below this
-    abstain_below_score: float
-    queries: list[RetrievalQuery]
+    depth: int  # how many results to retrieve per question; the largest K that is reported
+    questions: list[EvalQuestion]
 
 
 class GcpSettings(BaseModel):
@@ -301,7 +299,7 @@ def load_embedding_settings(config_path: Path = BASE_CONFIG_PATH) -> EmbeddingSe
     return EmbeddingSettings(**raw_config["embedding"])
 
 
-def load_retrieval_eval_settings(config_path: Path = BASE_CONFIG_PATH) -> RetrievalEvalSettings:
-    """Build the labelled retrieval queries from the YAML config."""
-    raw_config = _read_base_config(config_path)
-    return RetrievalEvalSettings(**raw_config["retrieval_eval"])
+def load_retrieval_eval_set(path: Path = RETRIEVAL_EVAL_PATH) -> RetrievalEvalSet:
+    """Read the fixed retrieval test set from configs/retrieval_eval.yaml."""
+    raw: dict[str, Any] = yaml.safe_load(path.read_text(encoding="utf-8"))
+    return RetrievalEvalSet(**raw)

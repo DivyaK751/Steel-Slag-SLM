@@ -4,12 +4,9 @@ from typing import Any
 from steel_slag_slm.config import (
     EmbeddingSettings,
     PdfParsingSettings,
-    RetrievalEvalSettings,
-    RetrievalQuery,
 )
 from steel_slag_slm.data import embedding_store
 from steel_slag_slm.pipelines.build_index import run_build_index
-from steel_slag_slm.pipelines.evaluate_retrieval import run_retrieval_eval
 from steel_slag_slm.rag.search import search_store
 from steel_slag_slm.rag.vector_store import VectorStore
 
@@ -158,44 +155,3 @@ def test_build_index_saves_after_every_n_papers(fake_drive, keyword_encoder, mon
     run_build_index(_settings(papers_per_save=2), _parsing(), None, PARSED_FOLDER, keyword_encoder)
 
     assert len(saves) == 2  # after the second paper, and at the end for the third
-
-
-def test_run_retrieval_eval_ranks_answerable_and_abstains_on_unanswerable(
-    fake_drive, keyword_encoder
-):
-    _write_index(
-        fake_drive,
-        {
-            "W1": _add_paper(fake_drive, "W1", "## Results\n\nFree lime drives volume change."),
-            "W2": _add_paper(fake_drive, "W2", "## Intro\n\nBlended cement uses slag."),
-        },
-    )
-    run_build_index(_settings(), _parsing(), None, PARSED_FOLDER, keyword_encoder)
-    evaluation = RetrievalEvalSettings(
-        top_k=2,
-        abstain_below_score=0.5,
-        queries=[
-            RetrievalQuery(
-                query="lime",
-                answerable=True,
-                paper_id="W1",
-                source="text",
-                expected_text="free lime",
-            ),
-            RetrievalQuery(
-                query="lime",
-                answerable=True,
-                paper_id="W2",
-                source="text",
-                expected_text="free lime",
-            ),
-            RetrievalQuery(query="table", answerable=False),
-        ],
-    )
-
-    results = run_retrieval_eval(_settings(), evaluation, None, PARSED_FOLDER, keyword_encoder)
-
-    assert results[0].rank == 1
-    assert results[1].rank is None
-    assert results[2].answerable is False
-    assert results[2].abstained is True

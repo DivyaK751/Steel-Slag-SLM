@@ -21,30 +21,41 @@ def run_build_index(
     parsed_folder_id: str,
     encoder: TextEncoder,
     max_papers: int | None = None,
+    rebuild: bool = False,
 ) -> Counter[str]:
     """Index each parsed paper that is not in the saved store yet.
 
     Papers already in the store are skipped, so new papers can be added to the index later
-    without re-embedding the others. A paper whose parsed.json is unreadable is left out and
-    retried on the next run.
+    without re-embedding the others. Chunking changes do not trigger this, so pass rebuild=True
+    to re-chunk and re-embed every paper from scratch. A paper whose parsed.json is unreadable
+    is left out and retried on the next run.
     """
     if max_papers is not None and max_papers <= 0:
         raise ValueError("max_papers must be greater than zero")
 
     papers = parsed_index.load_index(drive_service, parsed_folder_id, parsing.index_file_name)
-    store = embedding_store.load_store(
-        drive_service, parsed_folder_id, settings.model, encoder.dimension
-    )
+    if rebuild:
+        store = VectorStore.empty(encoder.dimension)
+    else:
+        store = embedding_store.load_store(
+            drive_service, parsed_folder_id, settings.model, encoder.dimension
+        )
     indexable_papers = {
-        paper_id: entry
-        for paper_id, entry in papers.items()
-        if entry.get("status") != "skipped"
+        paper_id: entry for paper_id, entry in papers.items() if entry.get("status") != "skipped"
     }
     pending = [paper_id for paper_id in indexable_papers if paper_id not in store.paper_ids]
     outcomes: Counter[str] = Counter()
     skipped_count = len(papers) - len(indexable_papers)
     if skipped_count:
         outcomes["skipped"] = skipped_count
+    for paper_id, entry in papers.items():
+        if entry.get("status") == "skipped":
+            # Flagged on every run, so a paper missing from the search is never silent
+            logger.warning(
+                "Not indexed, parser skipped %s: %s",
+                paper_id,
+                entry.get("skip_reason", "no reason recorded"),
+            )
     outcomes["already_indexed"] = len(indexable_papers) - len(pending)
     if max_papers is not None:
         outcomes["deferred"] = max(0, len(pending) - max_papers)
@@ -62,6 +73,7 @@ def run_build_index(
 
         chunks = build_chunks(paper, settings.chunk_max_chars, settings.table_max_chars)
         if not chunks:
+            logger.warning("Not indexed, %s produced no chunks", paper_id)
             outcomes["empty"] += 1
             continue
         vectors = encoder.encode([passage_for_embedding(chunk) for chunk in chunks])

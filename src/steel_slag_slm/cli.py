@@ -23,18 +23,14 @@ from steel_slag_slm.config import (
     load_evaluation_settings,
     load_gcp_settings,
     load_pdf_parsing_settings,
-    load_retrieval_eval_settings,
+    load_retrieval_eval_set,
     load_screening_settings,
     load_settings,
 )
 from steel_slag_slm.data.drive_storage import build_drive_service, find_subfolder_id
 from steel_slag_slm.data.openalex import OpenAlexClient
 from steel_slag_slm.data.paper_registry import build_bigquery_client
-from steel_slag_slm.evaluation.retrieval_metrics import (
-    abstain_rate,
-    hit_rate,
-    mean_reciprocal_rank,
-)
+from steel_slag_slm.evaluation.retrieval_metrics import mean_scores
 from steel_slag_slm.llm.prompts import PromptTemplate, load_prompt
 from steel_slag_slm.pipelines.build_index import run_build_index
 from steel_slag_slm.pipelines.evaluate_retrieval import run_retrieval_eval
@@ -305,6 +301,11 @@ def build_index() -> None:
         default=None,
         help="stop after indexing this many papers (default: all unindexed papers)",
     )
+    parser.add_argument(
+        "--rebuild",
+        action="store_true",
+        help="re-chunk and re-embed every paper, for example after a chunking change",
+    )
     args = parser.parse_args()
     if args.max_papers is not None and args.max_papers <= 0:
         parser.error("--max-papers must be greater than zero")
@@ -317,8 +318,15 @@ def build_index() -> None:
         *_connect_to_parsed_folder(),
         Embedder(settings.model),
         args.max_papers,
+        args.rebuild,
     )
     print("Summary:", dict(outcomes))
+    # Papers the parser skipped on purpose are expected; anything else missing fails the run
+    unindexed = outcomes["failed"] + outcomes["empty"]
+    if unindexed:
+        raise SystemExit(
+            f"{unindexed} parsed paper(s) could not be indexed; see the warnings above"
+        )
 
 
 def search_index() -> None:
@@ -347,30 +355,36 @@ def search_index() -> None:
     )
     for rank, hit in enumerate(hits, start=1):
         chunk = hit.chunk
-        print(f"{rank}. [{hit.score:.3f}] {chunk.paper_id} · {chunk.kind} · {chunk.section}")
+        pages = f" · pages {', '.join(str(page) for page in chunk.pages)}" if chunk.pages else ""
+        print(f"{rank}. [{hit.score:.3f}] {chunk.paper_id} · {chunk.kind} · {chunk.section}{pages}")
         print(f"   {' '.join(chunk.text.split())[:300]}")
 
 
 def evaluate_retrieval() -> None:
-    """Score the saved index against the labelled queries in configs/base.yaml."""
+    """Score the saved index against the fixed test set in configs/retrieval_eval.yaml."""
     argparse.ArgumentParser(description=evaluate_retrieval.__doc__).parse_args()
     _setup_logging()
     settings = load_embedding_settings()
-    evaluation = load_retrieval_eval_settings()
-    results = run_retrieval_eval(
+    report = run_retrieval_eval(
         settings,
-        evaluation,
+        load_retrieval_eval_set(),
         *_connect_to_parsed_folder(),
         Embedder(settings.model),
     )
-    for result in results:
-        if result.answerable:
-            outcome = "miss" if result.rank is None else f"rank {result.rank}"
-        else:
-            outcome = f"score {result.top_score:.3f}" if result.top_score is not None else "no hits"
-            outcome += " (abstained)" if result.abstained else " (answered)"
-        print(f"{outcome:>22}  {result.query}")
-    print(f"Hit rate @{evaluation.top_k} (answerable): {hit_rate(results, evaluation.top_k):.0%}")
-    print(f"Mean reciprocal rank (answerable): {mean_reciprocal_rank(results):.3f}")
-    threshold = evaluation.abstain_below_score
-    print(f"Abstained (unanswerable, below {threshold}): {abstain_rate(results):.0%}")
+    print(f"{'question':<10} hit@5 hit@20 rec@5 rec@20    RR ndcg@10")
+    for s in report.scores:
+        print(
+            f"{s.question_id:<10} {s.hit_at_5:5.0f} {s.hit_at_20:6.0f} {s.recall_at_5:5.2f} "
+            f"{s.recall_at_20:6.2f} {s.reciprocal_rank:5.2f} {s.ndcg_at_10:7.2f}"
+        )
+    means = mean_scores(report.scores)
+    print(
+        f"{'MEAN':<10} {means['hit_at_5']:5.2f} {means['hit_at_20']:6.2f} "
+        f"{means['recall_at_5']:5.2f} {means['recall_at_20']:6.2f} "
+        f"{means['reciprocal_rank']:5.2f} {means['ndcg_at_10']:7.2f}"
+    )
+    for question_id, stale in report.missing.items():
+        for evidence in stale:
+            print(
+                f"STALE LABEL {question_id}: {evidence.paper_id} {evidence.kind} {evidence.text!r}"
+            )
