@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from steel_slag_slm.data import embedding_store
@@ -71,3 +73,27 @@ def test_load_rejects_a_chunks_file_with_the_wrong_schema(fake_drive):
 
     with pytest.raises(ValueError, match="unsupported structure"):
         embedding_store.load_store(None, "parsed", "model-a", dimension=4)
+
+
+def test_save_then_load_keeps_the_pages_of_each_chunk(fake_drive, keyword_encoder):
+    chunks = [Chunk("W1", "text", "Results", "Free lime.", 0, pages=(3, 4))]
+    store = VectorStore.empty(keyword_encoder.dimension)
+    store.add(chunks, keyword_encoder.encode([chunk.text for chunk in chunks]))
+    embedding_store.save_store(None, "parsed", "model-a", store)
+
+    loaded = embedding_store.load_store(None, "parsed", "model-a", keyword_encoder.dimension)
+
+    assert loaded.chunks[0].pages == (3, 4)
+
+
+def test_chunks_saved_before_pages_existed_load_with_no_pages(fake_drive, keyword_encoder):
+    embedding_store.save_store(None, "parsed", "model-a", _filled_store(keyword_encoder))
+    store_folder = fake_drive.find_subfolder_id(None, "parsed", embedding_store.STORE_FOLDER_NAME)
+    record = json.loads(fake_drive.read_file_bytes(None, store_folder, "chunks.json"))
+    for entry in record["chunks"]:
+        del entry["pages"]
+    fake_drive.write_file(None, store_folder, "chunks.json", json.dumps(record).encode(), "")
+
+    loaded = embedding_store.load_store(None, "parsed", "model-a", keyword_encoder.dimension)
+
+    assert [chunk.pages for chunk in loaded.chunks] == [(), ()]

@@ -84,6 +84,8 @@ class ParsedPaper:
     openalex_id: str
     markdown: str
     tables: tuple[str, ...]
+    # Empty for papers parsed before content blocks existed; the Markdown is used then
+    content_blocks: tuple[ParsedContentBlock, ...] = ()
 
 
 ChunkKind = Literal["text", "table", "figure_caption"]
@@ -91,13 +93,15 @@ ChunkKind = Literal["text", "table", "figure_caption"]
 
 @dataclass(frozen=True, slots=True)
 class Chunk:
-    """One retrievable piece of a paper, with the section it came from."""
+    """One retrievable piece of a paper, with the section and pages it came from."""
 
     paper_id: str
     kind: ChunkKind
     section: str  # heading the text sits under; "" before the first heading
     text: str
     position: int  # order within the paper, so neighbours can be found
+    pages: tuple[int, ...] = ()  # PDF pages the text sits on; () when unknown
+    figure_captions: tuple[str, ...] = ()  # captions of the figures this text mentions
 
 
 @dataclass(frozen=True, slots=True)
