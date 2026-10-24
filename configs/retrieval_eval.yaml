@@ -1,0 +1,177 @@
+# Fixed retrieval test set for evaluate-retrieval.
+#
+# Each question lists every passage known to answer it. A retrieved chunk counts when it comes
+# from the same paper and chunk kind and contains the evidence text (case and spacing ignored),
+# so these labels survive index rebuilds. grade 2 = states the answer; grade 1 = partial or
+# supporting (a table pointer, a related mechanism, a partial value).
+#
+# Status: DRAFT. Labels were drafted from the 46 papers indexed on 2026-10-23 by pooling each
+# question's top 10 embedding results with keyword matches, then reading them. They need review
+# by someone who knows the papers before the scores are treated as reliable. Passages that the
+# pool did not surface may be missing, which makes recall look lower than it is.
+depth: 20
+questions:
+  - id: q01
+    query: "What is the 28-day compressive strength of concrete made with steel slag aggregate?"
+    evidence:
+      - {paper_id: W1920861073, kind: text, grade: 2, text: "28-day compressive strength of concrete containing 25 and 50% slag"}
+      - {paper_id: W1920861073, kind: text, grade: 2, text: "the 28-day strength of natural aggregate concrete (0% SS) was 91% of that of 25% SS"}
+      - {paper_id: W1920861073, kind: table, grade: 2, text: "Table 4: Compressive and Flexural Strength of Steel Slag Fine Aggregate Concrete"}
+      - {paper_id: W2063141088, kind: text, grade: 2, text: "This value of 43.88MPa for the 100% steel slag aggregate mix"}
+      - {paper_id: W2063141088, kind: text, grade: 1, text: "Compressive strengths of different concrete mixes after 7, 28 and 90 days of curing"}
+      - {paper_id: W2063141088, kind: text, grade: 1, text: "The 7, 28 and 90-day compressive strength, splitting tensile strength and flexural strength data"}
+
+  - id: q02
+    query: "How does steel slag affect the flexural strength of concrete?"
+    evidence:
+      - {paper_id: W1920861073, kind: text, grade: 2, text: "The flexural strength of normal concrete and SS concrete increased with age"}
+      - {paper_id: W2063141088, kind: text, grade: 2, text: "flexural strength data obtained for concrete prepared using 100% steel slag aggregates yielded better results"}
+      - {paper_id: W2063141088, kind: table, grade: 2, text: "Table 7 Flexural data for hardened concrete made with steel slag"}
+      - {paper_id: W1920861073, kind: table, grade: 1, text: "Table 4: Compressive and Flexural Strength of Steel Slag Fine Aggregate Concrete"}
+      - {paper_id: W1920861073, kind: text, grade: 1, text: "the flexural strengths obtained were still acceptable"}
+
+  - id: q03
+    query: "What is the chemical composition of BOF slag?"
+    evidence:
+      - {paper_id: W1592864571, kind: table, grade: 2, text: "Table 2 Chemical composition of BOF steelmaking slag (mass%)"}
+      - {paper_id: W2170257698, kind: table, grade: 2, text: "Table 3: Chemical composition of BOF slag."}
+      - {paper_id: W2170257698, kind: text, grade: 2, text: "the CaO content of BOF slag is typically very high (CaO >35%)"}
+      - {paper_id: W2032268766, kind: text, grade: 1, text: "BOF slag contains calcium silicates and ferrite with oxides of aluminum, manganese, calcium and magnesium"}
+      - {paper_id: W2170257698, kind: text, grade: 1, text: "the chemical and mineralogical compositions of BOF and EAF slags are similar"}
+      - {paper_id: W2015458783, kind: text, grade: 1, text: "The chemical composition of the BOF slag and the slag modified with the additions of bauxite and lime"}
+      - {paper_id: W1603805666, kind: table, grade: 1, text: "Table 3.1. Elemental Chemical Composition of Slag by Furnace Type"}
+
+  - id: q04
+    query: "What is the chemical composition of EAF slag?"
+    evidence:
+      - {paper_id: W1993251967, kind: table, grade: 2, text: "Table 3: The chemical composition of the EAF slag (wt. pct)"}
+      - {paper_id: W2047417462, kind: table, grade: 2, text: "Table 4. Composition of EAF slag used for the investigation."}
+      - {paper_id: W2021731431, kind: table, grade: 2, text: "Chemical composition of the single slags (EAFS 1-4 and LS)"}
+      - {paper_id: W1603805666, kind: text, grade: 2, text: "Slag #1 is from an EAF mill and contains 32.1 wt.% CaO"}
+      - {paper_id: W2170257698, kind: table, grade: 1, text: "Table 5: Chemical composition of EAF(L) slag."}
+      - {paper_id: W2170257698, kind: text, grade: 1, text: "EAF slag has a chemical composition"}
+      - {paper_id: W2170257698, kind: text, grade: 1, text: "EAF slags also contain free CaO and MgO along with other complex minerals"}
+      - {paper_id: W2103905583, kind: text, grade: 1, text: "The chemical composition of the EAF slag used, expressed in terms of oxides"}
+
+  - id: q05
+    query: "Why does steel slag expand and become volumetrically unstable?"
+    evidence:
+      - {paper_id: W2068066265, kind: text, grade: 2, text: "free CaO and MgO in steel slag will react to hydroxides"}
+      - {paper_id: W2103905583, kind: text, grade: 2, text: "hydration of free calcium and magnesium oxides contained in steel slag is known to be responsible for its volumetric instability"}
+      - {paper_id: W2170257698, kind: text, grade: 2, text: "Other expansive compounds, such as free MgO, may also be present in steel slag"}
+      - {paper_id: W1915547726, kind: text, grade: 2, text: "This expansion is caused by the presence of free CaO and MgO and Mg-rich wustite (RO phase)"}
+      - {paper_id: W1525329850, kind: text, grade: 2, text: "The content in free CaO and MgO is the cause of potential volume changes"}
+      - {paper_id: W2170257698, kind: text, grade: 1, text: "This transformation produces volumetric expansion"}
+      - {paper_id: W2032268766, kind: text, grade: 1, text: "The reason for the high ASR expansion value is thought to be the ratio of CaO an MgO in BOF"}
+
+  - id: q06
+    query: "What free lime content is acceptable for steel slag in road construction?"
+    evidence:
+      - {paper_id: W2068066265, kind: text, grade: 2, text: "steel slags with a free lime content up to 7% may be used in unbound"}
+      - {paper_id: W1525329850, kind: text, grade: 1, text: "presents a very low free CaO content and a total magnesium content only occasionally over 5%"}
+
+  - id: q07
+    query: "How much CO2 can steel slag sequester through carbonation?"
+    evidence:
+      - {paper_id: W1603805666, kind: text, grade: 2, text: "steel slag was able to sequester 115 g CO2 per kg slag"}
+      - {paper_id: W1603805666, kind: text, grade: 2, text: "has the potential of sequestering 5.0-10% of the BF-BOF CO2 emissions and 28-34% of EAF carbon dioxide emissions"}
+      - {paper_id: W1603805666, kind: text, grade: 2, text: "Thus the total sequestration potential for steelmaking slag is 6-11% of the CO 2 emitted from integrated mills"}
+      - {paper_id: W1603805666, kind: text, grade: 1, text: "1000 kg of CaO will capture 785 kg of CO2"}
+      - {paper_id: W1603805666, kind: text, grade: 1, text: "Assuming full stoichiometric conversion of CaO and MgO to carbonate, steelmaking slag has the potential to"}
+      - {paper_id: W2284653934, kind: text, grade: 1, text: "the aqueous carbonation degree of steel slag is 26.4% under the following conditions"}
+
+  - id: q08
+    query: "How does reaction time affect the carbonation degree of steel slag?"
+    evidence:
+      - {paper_id: W2284653934, kind: text, grade: 2, text: "Our results indicate that it increases with the reaction time"}
+      - {paper_id: W2284653934, kind: figure_caption, grade: 2, text: "Fig. 2. The effect of reaction time on the carbonation degree of steel slag"}
+      - {paper_id: W2284653934, kind: figure_caption, grade: 1, text: "Fig. 11. Carbonation degree of steel slag versus reaction time fitted by two kinds of kinetics equations"}
+      - {paper_id: W2284653934, kind: text, grade: 1, text: "the aqueous carbonation degree of steel slag is 26.4% under the following conditions: reaction time of 3 h"}
+      - {paper_id: W2014482815, kind: text, grade: 1, text: "BOFII benefitted more from increased reaction time"}
+      - {paper_id: W1603805666, kind: figure_caption, grade: 1, text: "Figure 7 Analysis of the time required to achieve the same carbonization rate (8%)"}
+
+  - id: q09
+    query: "What is the density or specific gravity of steel slag?"
+    evidence:
+      - {paper_id: W2068066265, kind: text, grade: 2, text: "The density of steel slag lies between 3.3-3.6g/cm 3"}
+      - {paper_id: W2103905583, kind: text, grade: 2, text: "the average specific gravities of the soil and steel slag samples were determined to be 2.65 and 3.58"}
+      - {paper_id: W2014482815, kind: text, grade: 2, text: "Specific densities of the slags were found to be 3.69 and 3.78 g/cm 3"}
+      - {paper_id: W1920861073, kind: text, grade: 2, text: "Tests results show that the relative densities were 2480, 2530 and 2710 kg/m3"}
+      - {paper_id: W1913961715, kind: table, grade: 2, text: "Apparent density (kg/m 3 ) | 3854"}
+      - {paper_id: W1603805666, kind: table, grade: 2, text: "Bulk Density Dry (kg/m 3 ) | True Density (g/cm 3 )"}
+      - {paper_id: W1603805666, kind: text, grade: 1, text: "Comparison to standard construction aggregates show a higher bulk density and specific gravity"}
+
+  - id: q10
+    query: "What is the water absorption of steel slag aggregate?"
+    evidence:
+      - {paper_id: W1913961715, kind: table, grade: 2, text: "Table 1 Main physical properties of the aggregates"}
+      - {paper_id: W1920861073, kind: text, grade: 1, text: "sand has higher water absorption capacity than steel slag"}
+      - {paper_id: W1920861073, kind: text, grade: 1, text: "The physical properties of sand, steel slag and granite were evaluated and the results are summarized in Table 2"}
+      - {paper_id: W2059404348, kind: text, grade: 1, text: "Pore continuity in steel slag aggregate may improve"}
+
+  - id: q11
+    query: "Can steel slag be used as aggregate in asphalt mixtures?"
+    evidence:
+      - {paper_id: W2985324803, kind: text, grade: 2, text: "This British laboratory studied the application of steel slag as an aggregate in asphalt mixtures"}
+      - {paper_id: W2985324803, kind: text, grade: 2, text: "Chen [18] studied the application of steel slag as an aggregate in asphalt pavement"}
+      - {paper_id: W2059404348, kind: text, grade: 2, text: "the examined steel slag has equally good physical and mechanical properties"}
+      - {paper_id: W1603805666, kind: text, grade: 2, text: "Steel slag used in asphaltic concrete is less susceptible to swelling"}
+      - {paper_id: W2068066265, kind: text, grade: 2, text: "test roads were built using steel slag as an aggregate for unbound and bituminous bound mixtures"}
+      - {paper_id: W2059404348, kind: text, grade: 1, text: "The results indicated a good potential"}
+      - {paper_id: W2059404348, kind: text, grade: 1, text: "steel slag aggregate was reported to exhibit higher porosity, superior adhesion with binder"}
+
+  - id: q12
+    query: "What mineral phases are present in steel slag?"
+    evidence:
+      - {paper_id: W2170257698, kind: text, grade: 2, text: "The common mineral phases present in steel slags include merwinite"}
+      - {paper_id: W2056529733, kind: text, grade: 2, text: "main mineral components in steel slag were C 3 S, C 2 S, C 2 F, CFS, RO-phase"}
+      - {paper_id: W1603805666, kind: table, grade: 2, text: "Table 3.4. Predominant Minerals Found in Steel Slag, by Source"}
+      - {paper_id: W1603805666, kind: text, grade: 2, text: "Good agreement exists between researchers on the predominate minerals found in steelmaking slag"}
+      - {paper_id: W2170257698, kind: table, grade: 2, text: "Table 4: Mineralogical phases identified in BOF slag based on XRD analyses."}
+      - {paper_id: W2170257698, kind: table, grade: 2, text: "Table 2: Mineralogical phases of BOF, EAF, and ladle slags."}
+      - {paper_id: W2985324803, kind: text, grade: 2, text: "The main mineral composition was ferroferric oxide, the RO phase"}
+      - {paper_id: W2058014779, kind: text, grade: 2, text: "Mineralogical phases in BOF slags were observed to be dicalcium silicate"}
+      - {paper_id: W1603805666, kind: text, grade: 1, text: "Untreated slag contained a solid solution of dicalcium silicates, magnesiowustite, calcium ferrite, and free lime"}
+
+  - id: q13
+    query: "How is iron recovered from steel slag by magnetic separation?"
+    evidence:
+      - {paper_id: W2068066265, kind: text, grade: 2, text: "developed a sorting-grinding-precise reduction-magnetic separation process of waste steel reclamation"}
+      - {paper_id: W2068066265, kind: text, grade: 2, text: "Anshan Iron and Steel Company recycles 0.28 Million tons of grained steel"}
+      - {paper_id: W1603805666, kind: text, grade: 2, text: "of the magnetic particles were >106"}
+      - {paper_id: W2003206060, kind: text, grade: 2, text: "then undergo to a magnetic separation to recover the ferrous fraction"}
+      - {paper_id: W1603805666, kind: text, grade: 1, text: "After cooling, it is loaded into the processing system for magnetic separation, screening, and crushing"}
+      - {paper_id: W1603805666, kind: text, grade: 1, text: "front-end loaders put it in the processing system magnetic separation and screening"}
+
+  - id: q14
+    query: "Does steel slag leach heavy metals such as chromium?"
+    evidence:
+      - {paper_id: W2014482815, kind: text, grade: 2, text: "vanadium and chromium leaching increased"}
+      - {paper_id: W2014482815, kind: text, grade: 2, text: "Vanadium leaching, on the other hand, increases after carbonation"}
+      - {paper_id: W1524771606, kind: text, grade: 2, text: "the concentration of some elements, such as Cr and Zn, are low because of the high temperatures"}
+      - {paper_id: W2068066265, kind: text, grade: 2, text: "the pollution risks of the heavy metals in the stainless steel slag were very low"}
+      - {paper_id: W1979259398, kind: text, grade: 2, text: "the concentrations of Ni and Cu eluted from the slag were lower than 0.005 mg/L"}
+      - {paper_id: W1603805666, kind: text, grade: 1, text: "sought to determine the potential for slag to leach chemicals into the soil or groundwater"}
+      - {paper_id: W1524771606, kind: text, grade: 1, text: "Cr is originated from ore"}
+
+  - id: q15
+    query: "How does the cooling rate affect steel slag disintegration or its phases?"
+    evidence:
+      - {paper_id: W1915547726, kind: text, grade: 2, text: "The phases formed in slags with higher basicity (1.4 and 3.8) were less affected by cooling rate"}
+      - {paper_id: W2170257698, kind: text, grade: 2, text: "Crystal formation is a function of both the chemical composition of the melt and its cooling rate"}
+      - {paper_id: W2057934396, kind: text, grade: 2, text: "disintegrates after treatment by slow cooling"}
+      - {paper_id: W2057934396, kind: text, grade: 2, text: "was quenched from molten slag by the water-cooled rolls, the dicalcium silicate was a"}
+      - {paper_id: W2170257698, kind: text, grade: 2, text: "the rapidly cooled (granulated) BOF and EAF slag samples showed very complex crystalline structures"}
+      - {paper_id: W2058014779, kind: text, grade: 1, text: "To prevent the disintegration of BOF slags or to promote the aging rate"}
+      - {paper_id: W1603805666, kind: text, grade: 1, text: "self-disintegrated into a powder during cooling"}
+      - {paper_id: W1603805666, kind: text, grade: 1, text: "along with the cooling history, will lead to an equilibrium set of minerals in the slag"}
+
+  - id: q16
+    query: "How is phosphorus removed using dephosphorization slag?"
+    evidence:
+      - {paper_id: W2068066265, kind: text, grade: 2, text: "in which dephosphorization and decarbonization are conducted in the same converter"}
+      - {paper_id: W2068066265, kind: text, grade: 2, text: "decarbonization slag and LDS are recycled and applied to dephosphorization"}
+      - {paper_id: W1524771606, kind: text, grade: 2, text: "most of the phosphorous is transferred from the slag to the hot metal"}
+      - {paper_id: W2058014779, kind: text, grade: 1, text: "The hot metal dephosphorization slags"}
+      - {paper_id: W1603805666, kind: text, grade: 1, text: "Hot metal dephosphorization slag has high P2O5 content"}
+      - {paper_id: W1524771606, kind: figure_caption, grade: 1, text: "Fig. 5. Proposed method of converter slag utilization"}
