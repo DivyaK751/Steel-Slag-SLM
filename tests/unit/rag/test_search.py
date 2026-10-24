@@ -36,6 +36,13 @@ def test_search_can_keep_only_some_kinds_of_chunk(keyword_encoder):
     assert len(hits) == 2
 
 
+def test_search_can_keep_only_one_paper(keyword_encoder):
+    hits = search_store(
+        _store(keyword_encoder), keyword_encoder, "cement", 3, query_prefix="", paper_id="W1"
+    )
+    assert [hit.chunk.paper_id for hit in hits] == ["W1", "W1"]
+
+
 def test_search_rejects_a_blank_query(keyword_encoder):
     with pytest.raises(ValueError, match="blank"):
         search_store(_store(keyword_encoder), keyword_encoder, "   ", 1, "")

@@ -1,82 +1,99 @@
+import math
+
 import pytest
 
-from steel_slag_slm.config import RetrievalQuery
+from steel_slag_slm.config import EvalQuestion, EvidenceSpan
 from steel_slag_slm.evaluation.retrieval_metrics import (
-    RetrievalResult,
-    abstain_rate,
-    first_relevant_rank,
-    hit_rate,
-    is_relevant,
-    mean_reciprocal_rank,
+    hit_at_k,
+    matches,
+    mean_scores,
+    missing_evidence,
+    ndcg_at_k,
+    recall_at_k,
+    reciprocal_rank,
+    score_question,
 )
 from steel_slag_slm.schemas import Chunk
 
 
-def _chunk(paper_id: str, text: str, kind: str = "text") -> Chunk:
+def _chunk(text: str, paper_id: str = "W1", kind: str = "text") -> Chunk:
     return Chunk(paper_id=paper_id, kind=kind, section="", text=text, position=0)
 
 
-def _question(text: str = "free lime", source: str = "text") -> RetrievalQuery:
-    return RetrievalQuery(
-        query="q", answerable=True, paper_id="W1", source=source, expected_text=text
-    )
+def _question(*evidence: EvidenceSpan) -> EvalQuestion:
+    return EvalQuestion(id="q1", query="q", evidence=list(evidence))
 
 
-def test_is_relevant_needs_the_paper_kind_and_text_ignoring_case_and_spacing():
-    chunk = _chunk("W1", "Free   LIME\ndrives volume change.")
-    assert is_relevant(chunk, _question("free lime drives"))
-    assert not is_relevant(_chunk("W2", "Free lime"), _question("free lime"))
-    assert not is_relevant(chunk, _question("sinter"))
+STRENGTH = EvidenceSpan(paper_id="W1", kind="text", text="51.9 MPa after 28 days", grade=2)
+PARTIAL = EvidenceSpan(paper_id="W2", kind="table", text="compressive strength", grade=1)
 
 
-def test_is_relevant_requires_the_source_kind():
-    table_chunk = _chunk("W1", "BOFS | 45-60", kind="table")
-    assert is_relevant(table_chunk, _question("bofs | 45-60", source="table"))
-    assert not is_relevant(table_chunk, _question("bofs | 45-60", source="text"))
+def _ranked_with_answer_at(rank: int, total: int = 20) -> list[Chunk]:
+    ranked = [_chunk(f"unrelated passage {i}") for i in range(total)]
+    ranked[rank - 1] = _chunk("The concrete reached 51.9 MPa after 28 days of curing.")
+    return ranked
 
 
-def test_first_relevant_rank_is_one_based_and_none_when_absent():
-    ranked = [_chunk("W2", "x"), _chunk("W1", "free lime"), _chunk("W1", "free lime again")]
-    assert first_relevant_rank(ranked, _question("free lime")) == 2
-    assert first_relevant_rank(ranked, _question("sinter")) is None
+def test_match_needs_the_paper_kind_and_text_ignoring_case_and_spacing():
+    assert matches(_chunk("reached 51.9  MPa\nafter 28 DAYS"), STRENGTH)
+    assert not matches(_chunk("51.9 MPa after 28 days", paper_id="W2"), STRENGTH)
+    assert not matches(_chunk("51.9 MPa after 28 days", kind="table"), STRENGTH)
 
 
-def test_answerable_question_needs_its_answer_fields():
-    with pytest.raises(ValueError, match="needs paper_id"):
-        RetrievalQuery(query="q", answerable=True)
+def test_answer_at_rank_7_misses_top_5_but_is_found_in_top_20():
+    question = _question(STRENGTH)
+    ranked = _ranked_with_answer_at(7)
+    assert hit_at_k(ranked, question, 5) == 0
+    assert recall_at_k(ranked, question, 5) == 0
+    assert hit_at_k(ranked, question, 20) == 1
+    assert recall_at_k(ranked, question, 20) == 1
+    assert reciprocal_rank(ranked, question) == pytest.approx(1 / 7)
 
 
-def test_hit_rate_counts_answerable_questions_found_within_top_k():
-    results = [
-        RetrievalResult("a", answerable=True, rank=1),
-        RetrievalResult("b", answerable=True, rank=4),
-        RetrievalResult("c", answerable=True, rank=None),
-        RetrievalResult("d", answerable=False, top_score=0.1, abstained=True),
+def test_recall_is_the_share_of_evidence_items_found():
+    question = _question(STRENGTH, PARTIAL)
+    ranked = _ranked_with_answer_at(1)
+    assert recall_at_k(ranked, question, 5) == pytest.approx(0.5)
+
+
+def test_ndcg_is_one_when_the_best_evidence_is_ranked_first():
+    question = _question(STRENGTH)
+    assert ndcg_at_k(_ranked_with_answer_at(1), question, 10) == pytest.approx(1.0)
+
+
+def test_ndcg_falls_with_lower_rank_and_ignores_results_beyond_k():
+    question = _question(STRENGTH)
+    at_3 = ndcg_at_k(_ranked_with_answer_at(3), question, 10)
+    assert at_3 == pytest.approx(1 / math.log2(4))
+    assert ndcg_at_k(_ranked_with_answer_at(12), question, 10) == 0
+
+
+def test_ndcg_rewards_ranking_full_answers_above_partial_ones():
+    question = _question(STRENGTH, PARTIAL)
+    full = _chunk("reached 51.9 MPa after 28 days")
+    partial = _chunk("compressive strength by age", paper_id="W2", kind="table")
+    assert ndcg_at_k([full, partial], question, 10) == pytest.approx(1.0)
+    assert ndcg_at_k([partial, full], question, 10) < 1.0
+
+
+def test_missing_evidence_lists_labels_no_chunk_contains():
+    question = _question(STRENGTH, PARTIAL)
+    assert missing_evidence([_chunk("reached 51.9 MPa after 28 days")], question) == [PARTIAL]
+
+
+def test_mean_scores_averages_each_metric():
+    question = _question(STRENGTH)
+    scores = [
+        score_question(_ranked_with_answer_at(1), question),
+        score_question(_ranked_with_answer_at(7), question),
     ]
-    assert hit_rate(results, top_k=3) == pytest.approx(1 / 3)
-    assert hit_rate(results, top_k=5) == pytest.approx(2 / 3)
+    means = mean_scores(scores)
+    assert means["hit_at_5"] == pytest.approx(0.5)
+    assert means["recall_at_20"] == pytest.approx(1.0)
+    assert means["reciprocal_rank"] == pytest.approx((1 + 1 / 7) / 2)
 
 
-def test_mean_reciprocal_rank_scores_misses_as_zero_and_ignores_unanswerable():
-    results = [
-        RetrievalResult("a", answerable=True, rank=1),
-        RetrievalResult("b", answerable=True, rank=2),
-        RetrievalResult("c", answerable=True, rank=None),
-        RetrievalResult("d", answerable=False, top_score=0.1, abstained=True),
-    ]
-    assert mean_reciprocal_rank(results) == pytest.approx((1 + 0.5 + 0) / 3)
-
-
-def test_abstain_rate_counts_unanswerable_questions_below_the_threshold():
-    results = [
-        RetrievalResult("a", answerable=False, top_score=0.3, abstained=True),
-        RetrievalResult("b", answerable=False, top_score=0.8, abstained=False),
-        RetrievalResult("c", answerable=True, rank=1),
-    ]
-    assert abstain_rate(results) == pytest.approx(1 / 2)
-
-
-def test_metrics_return_zero_when_there_are_no_questions_of_that_kind():
-    assert hit_rate([], top_k=3) == 0.0
-    assert mean_reciprocal_rank([]) == 0.0
-    assert abstain_rate([]) == 0.0
+def test_ndcg_credits_each_evidence_once_even_if_several_chunks_contain_it():
+    question = _question(STRENGTH)
+    repeated = [_chunk("reached 51.9 MPa after 28 days") for _ in range(3)]
+    assert ndcg_at_k(repeated, question, 10) == pytest.approx(1.0)

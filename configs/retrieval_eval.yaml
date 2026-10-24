@@ -1,0 +1,125 @@
+# Fixed retrieval test set for evaluate-retrieval.
+#
+# A retrieved chunk counts when it comes from the same paper and chunk kind and contains the
+# evidence text (case and spacing ignored), so labels survive index rebuilds.
+#
+# Paper: W2068066265, "An overview of utilization of steel slag" (Procedia Environmental
+# Sciences 16, 2012). Search is limited to this paper's chunks.
+#
+# Written answer-first: the questions and answers were taken from the paper's parsed source
+# text (parsed.json content blocks) before any search was run, so no label comes from search
+# results. Each answer is stated in exactly one place in the paper; the evidence text is copied
+# verbatim from that place. Questions are worded differently from the answer text, so a match
+# is not just shared words.
+depth: 20
+paper_id: W2068066265
+questions:
+  - id: s01
+    query: "What is the density of steel slag?"
+    evidence:
+      - {paper_id: W2068066265, kind: text, text: "The density of steel slag lies between 3.3-3.6g/cm 3"}
+
+  - id: s02
+    query: "How easy is steel slag to grind compared with blast furnace slag?"
+    evidence:
+      - {paper_id: W2068066265, kind: text, text: "The grindability index of steel slag is 0.7"}
+
+  - id: s03
+    query: "What is the CaO content range of electric arc furnace slag?"
+    evidence:
+      - {paper_id: W2068066265, kind: table, text: "EAFS | 30-50"}
+
+  - id: s04
+    query: "How much metallic steel is left inside steel slag that could be recovered?"
+    evidence:
+      - {paper_id: W2068066265, kind: text, text: "Steel slag contains approximately 10% waste steel"}
+
+  - id: s05
+    query: "How much iron can be recovered per tonne of slag with the sorting, grinding and reduction process?"
+    evidence:
+      - {paper_id: W2068066265, kind: text, text: "29.8kg iron particle and 152.1kg iron-rich material could be obtained from one ton of slag"}
+
+  - id: s06
+    query: "What lime content does slag need to replace limestone flux in sintering?"
+    evidence:
+      - {paper_id: W2068066265, kind: text, text: "Steel slag with CaO content above 50% can be used as sinter ore fluxing agent"}
+
+  - id: s07
+    query: "What share of steel slag goes to sintering in the United States and Germany?"
+    evidence:
+      - {paper_id: W2068066265, kind: text, text: "More than 56% and 24% of the produced steel slag have been utilized as sinter material"}
+
+  - id: s08
+    query: "In the MURC converter process, what fraction of slag is kept for the next heat?"
+    evidence:
+      - {paper_id: W2068066265, kind: text, text: "approximately 50% of decarbonization slag stays in the converter"}
+
+  - id: s09
+    query: "How many tonnes of slag does Germany use each year to protect river banks from erosion?"
+    evidence:
+      - {paper_id: W2068066265, kind: text, text: "about 400,000 tons per year is used as aggregate for the stabilization of rive bankers"}
+
+  - id: s10
+    query: "Which slag dosage gave asphalt the best skid resistance?"
+    evidence:
+      - {paper_id: W2068066265, kind: text, text: "asphalt concrete mixes containing 30% steel slag had the highest skid number"}
+
+  - id: s11
+    query: "What expansion limit must slag meet to be used in roads in China?"
+    evidence:
+      - {paper_id: W2068066265, kind: text, text: "The immersion expansion ratio is limited to 2% for road construction"}
+
+  - id: s12
+    query: "How much free lime is allowed in slag for unbound and asphalt layers in Germany?"
+    evidence:
+      - {paper_id: W2068066265, kind: text, text: "free lime content up to 7% may be used in unbound layers and up to 4% in asphaltic layers"}
+
+  - id: s13
+    query: "What is the leaching limit for total chromium from slag aggregates?"
+    evidence:
+      - {paper_id: W2068066265, kind: text, text: "The concentration of Crtotal is limited to 3 mg/L"}
+
+  - id: s14
+    query: "How much ground slag can be added to cement while still meeting the Turkish Portland cement standard?"
+    evidence:
+      - {paper_id: W2068066265, kind: text, text: "the cement with 30% steel slag fine powder addition qualified the Turkish standard"}
+
+  - id: s15
+    query: "How much does carbonation raise the activity index of steel slag?"
+    evidence:
+      - {paper_id: W2068066265, kind: text, text: "activity indexes of carbonated steel slag could be increased by 97% and 16%"}
+
+  - id: s16
+    query: "How much stronger is concrete when slag replaces the fine aggregate?"
+    evidence:
+      - {paper_id: W2068066265, kind: text, text: "1.1 to 1.3 times of common concrete"}
+
+  - id: s17
+    query: "How well does steel slag remove arsenic from water?"
+    evidence:
+      - {paper_id: W2068066265, kind: text, text: "showing 95-100% removal efficiency near initial pH=2"}
+
+  - id: s18
+    query: "What is the maximum amount of carbon dioxide one tonne of steel slag can capture?"
+    evidence:
+      - {paper_id: W2068066265, kind: text, text: "211kg CO2/ton steel slag"}
+
+  - id: s19
+    query: "What does mineral carbonation of steel slag cost per tonne of CO2?"
+    evidence:
+      - {paper_id: W2068066265, kind: text, text: "the results is 77 €/ton CO2"}
+
+  - id: s20
+    query: "How many tonnes of slag are consumed to capture one tonne of CO2?"
+    evidence:
+      - {paper_id: W2068066265, kind: text, text: "4.7 tons of steel slag were consumed for one ton CO2 capture"}
+
+  - id: s21
+    query: "What desulfurization efficiency can wet flue gas treatment with slag reach?"
+    evidence:
+      - {paper_id: W2068066265, kind: text, text: "the steel slag used in wet desulfurization rate could reach more than 60%"}
+
+  - id: s22
+    query: "Who started China's first steel slag fertilizer project, and when?"
+    evidence:
+      - {paper_id: W2068066265, kind: text, text: "Taiyuan Steel Group and Harsco Corporation of USA started building in 2011"}

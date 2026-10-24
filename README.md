@@ -98,24 +98,23 @@ The command skips papers already recorded in the index. If a run fails before up
 
 ## Semantic search
 
-`build-index` embeds the text and tables of every paper in `_parsed/index.json` and saves the
-search index to `_parsed/_embeddings/` in Drive. Nothing is written to your machine except the
-embedding model's cache. Papers already in the index are skipped, so each run only adds new ones.
+Semantic search lets you ask a question in plain language and get back the passages from the
+papers that answer it, each with its paper, section and page.
+
+Each parsed paper is split into short passages (paragraphs, tables and figure captions). An
+embedding model turns each passage into numbers that capture its meaning, and the result is saved
+as a search index in Drive (`_parsed/_embeddings/`). A search finds the passages closest in meaning
+to the question.
 
 ```bash
-uv run build-index --max-papers 1       # index one new paper first
-uv run build-index                      # index every remaining paper
-uv run search-index "free lime volume stability" --top-k 5
-uv run search-index "chemical composition" --kind table
-uv run evaluate-retrieval               # score the labelled queries in configs/base.yaml
+uv run build-index                      # add newly parsed papers to the index
+uv run build-index --rebuild            # rebuild everything, e.g. after changing how papers are split
+uv run search-index "free lime volume stability"
+uv run evaluate-retrieval               # score search quality on a fixed test
 ```
 
-- Model, chunk sizes and save frequency: the `embedding:` section of `configs/base.yaml`.
-  Changing the model means deleting `_parsed/_embeddings/` and rebuilding.
-- Labelled queries: the `retrieval_eval:` section. A query counts as a hit when a top-k chunk
-  from the given paper contains the expected text.
-- Figures are indexed only through their captions; image contents are not analysed.
-- Text and table results carry their section, not a page number. See
+- The parse workflow runs `build-index` after parsing, so new papers are added automatically.
+- `evaluate-retrieval` asks 22 fixed questions about one paper, whose answers were found by
+  reading the paper, and reports how high the right passage ranks.
+- Settings are in the `embedding:` section of `configs/base.yaml`. Design notes are in
   [docs/adr/003-semantic-search-index.md](docs/adr/003-semantic-search-index.md).
-- Code: `src/steel_slag_slm/rag/` (chunking, embeddings, vector store, search),
-  `data/embedding_store.py` (Drive storage) and `pipelines/build_index.py`.

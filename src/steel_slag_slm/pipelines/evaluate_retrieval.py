@@ -1,40 +1,51 @@
-"""Run the labelled questions against the saved index and score the results."""
+"""Score the saved index against the fixed retrieval test set."""
 
+from dataclasses import dataclass
 from typing import Any
 
-from steel_slag_slm.config import EmbeddingSettings, RetrievalEvalSettings
+from steel_slag_slm.config import EmbeddingSettings, EvidenceSpan, RetrievalEvalSet
 from steel_slag_slm.data import embedding_store
-from steel_slag_slm.evaluation.retrieval_metrics import RetrievalResult, first_relevant_rank
+from steel_slag_slm.evaluation.retrieval_metrics import (
+    QuestionScores,
+    missing_evidence,
+    score_question,
+)
 from steel_slag_slm.rag.embeddings import TextEncoder
 from steel_slag_slm.rag.search import search_store
 
 
+@dataclass(frozen=True, slots=True)
+class RetrievalEvalReport:
+    """Per-question scores, plus evidence the index no longer contains."""
+
+    scores: list[QuestionScores]
+    missing: dict[str, list[EvidenceSpan]]  # question id -> stale evidence
+
+
 def run_retrieval_eval(
     settings: EmbeddingSettings,
-    evaluation: RetrievalEvalSettings,
+    eval_set: RetrievalEvalSet,
     drive_service: Any,
     parsed_folder_id: str,
     encoder: TextEncoder,
-) -> list[RetrievalResult]:
-    """Ask every question and record where its answer ranked, or how low the best score was."""
+) -> RetrievalEvalReport:
+    """Ask every test question and score the top results against its known evidence."""
     store = embedding_store.load_store(
         drive_service, parsed_folder_id, settings.model, encoder.dimension
     )
-    results: list[RetrievalResult] = []
-    for question in evaluation.queries:
-        hits = search_store(store, encoder, question.query, evaluation.top_k, settings.query_prefix)
-        if question.answerable:
-            rank = first_relevant_rank([hit.chunk for hit in hits], question)
-            results.append(RetrievalResult(query=question.query, answerable=True, rank=rank))
-            continue
-        top_score = hits[0].score if hits else None
-        abstained = top_score is None or top_score < evaluation.abstain_below_score
-        results.append(
-            RetrievalResult(
-                query=question.query,
-                answerable=False,
-                top_score=top_score,
-                abstained=abstained,
-            )
+    scores: list[QuestionScores] = []
+    missing: dict[str, list[EvidenceSpan]] = {}
+    for question in eval_set.questions:
+        hits = search_store(
+            store,
+            encoder,
+            question.query,
+            eval_set.depth,
+            settings.query_prefix,
+            paper_id=eval_set.paper_id,
         )
-    return results
+        scores.append(score_question([hit.chunk for hit in hits], question))
+        stale = missing_evidence(store.chunks, question)
+        if stale:
+            missing[question.id] = stale
+    return RetrievalEvalReport(scores=scores, missing=missing)
