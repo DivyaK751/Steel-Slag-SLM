@@ -49,3 +49,23 @@ def test_run_retrieval_eval_scores_questions_and_flags_stale_labels(fake_drive, 
     assert lime.reciprocal_rank == 1
     assert gone.hit_at_20 == 0
     assert list(report.missing) == ["gone"]
+
+
+def test_run_retrieval_eval_searches_only_the_sets_paper(fake_drive, keyword_encoder):
+    _save_store(keyword_encoder)
+    eval_set = RetrievalEvalSet(
+        depth=20,
+        paper_id="W2",
+        questions=[
+            EvalQuestion(
+                id="lime",
+                query="lime",
+                evidence=[EvidenceSpan(paper_id="W1", kind="text", text="free lime causes")],
+            )
+        ],
+    )
+
+    report = run_retrieval_eval(SETTINGS, eval_set, None, "parsed", keyword_encoder)
+
+    # The only answer is in W1, which a search limited to W2 must not return
+    assert report.scores[0].hit_at_20 == 0

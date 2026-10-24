@@ -106,6 +106,7 @@ class RetrievalEvalSet(BaseModel):
 
     depth: int  # how many results to retrieve per question; the largest K that is reported
     questions: list[EvalQuestion]
+    paper_id: str | None = None  # when set, search only this paper's chunks
 
 
 class GcpSettings(BaseModel):

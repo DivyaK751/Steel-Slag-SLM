@@ -23,8 +23,10 @@ def search_store(
     top_k: int,
     query_prefix: str,
     kinds: Collection[ChunkKind] | None = None,
+    paper_id: str | None = None,
 ) -> list[SearchHit]:
-    """Return the top_k chunks closest to the query, optionally only of the given kinds.
+    """Return the top_k chunks closest to the query, optionally only of the given kinds or
+    from one paper.
 
     Raises:
         ValueError: If the query is blank or top_k is not positive.
@@ -35,13 +37,14 @@ def search_store(
         raise ValueError("top_k must be greater than zero")
 
     query_vector = encoder.encode([f"{query_prefix}{query}"])[0]
-    if kinds is None:
+    if kinds is None and paper_id is None:
         pairs = store.search(query_vector, top_k)
     else:
-        # Filter after the search, over every vector, so a kind is never starved of hits
+        # Filter after the search, over every vector, so a filter is never starved of hits
         pairs = [
             (score, chunk)
             for score, chunk in store.search(query_vector, store.size)
-            if chunk.kind in kinds
+            if (kinds is None or chunk.kind in kinds)
+            and (paper_id is None or chunk.paper_id == paper_id)
         ][:top_k]
     return [SearchHit(score=score, chunk=chunk) for score, chunk in pairs]

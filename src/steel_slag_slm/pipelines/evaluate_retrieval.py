@@ -36,7 +36,14 @@ def run_retrieval_eval(
     scores: list[QuestionScores] = []
     missing: dict[str, list[EvidenceSpan]] = {}
     for question in eval_set.questions:
-        hits = search_store(store, encoder, question.query, eval_set.depth, settings.query_prefix)
+        hits = search_store(
+            store,
+            encoder,
+            question.query,
+            eval_set.depth,
+            settings.query_prefix,
+            paper_id=eval_set.paper_id,
+        )
         scores.append(score_question([hit.chunk for hit in hits], question))
         stale = missing_evidence(store.chunks, question)
         if stale:
