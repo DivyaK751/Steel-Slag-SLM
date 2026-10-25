@@ -264,6 +264,28 @@ registry:
   table: papers
   location: US
 
+data_extraction:
+  prompt_name: extract_data_v4
+  # Strongest Gemini this project can call; 3.8 and 3.5 Pro return 404 here (2026-10-23)
+  model: gemini-3.1-pro-preview
+  # One table per data sheet of the CNS input workbook, joined to papers on source_id
+  dataset: steel_slag_extraction
+  location: US
+  # export-extraction writes one workbook per run here; git-ignored
+  export_dir: reports/extraction
+  # Gemini calls in flight at once; the Pro preview often answers 503 under load
+  max_concurrency: 2
+  # A whole paper with thinking can take minutes; a slower call is retried on the next run
+  call_timeout_s: 600
+  # Vertex list prices of `model` above (US$ per 1M tokens, prompts under 200k tokens), for
+  # the cost logged per paper; change them together with the model
+  prices:
+    input: 2.00
+    cached_input: 0.20
+    output: 12.00
+  # BigQuery on-demand query price; the load jobs that write the rows are free
+  bigquery_usd_per_tib: 6.25
+
 pdf_parsing:
   source_table: capstone-project-511200.steel_slag.screening_evaluation
   output_folder_name: _parsed
