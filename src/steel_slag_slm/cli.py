@@ -201,6 +201,12 @@ def parse_pdfs() -> None:
         default=None,
         help="stop after parsing this many unindexed papers (default: all)",
     )
+    parser.add_argument(
+        "--paper-ids",
+        nargs="+",
+        default=None,
+        help="parse only these OpenAlex IDs from the source table (default: every paper)",
+    )
     args = parser.parse_args()
     if args.max_papers is not None and args.max_papers <= 0:
         parser.error("--max-papers must be greater than zero")
@@ -225,6 +231,7 @@ def parse_pdfs() -> None:
         drive_service,
         drive_settings.folder_id,
         args.max_papers,
+        args.paper_ids,
     )
     print("Summary:", dict(outcomes))
 

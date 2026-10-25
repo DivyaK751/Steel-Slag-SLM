@@ -96,6 +96,11 @@ uv run parse-pdfs
 
 The command skips papers already recorded in the index. If a run fails before updating the index, rerunning it can replace same-named partial output files.
 
+To parse particular papers from the source table, add `--paper-ids W123 W456` (the "Parse trial
+PDFs" workflow has a matching `paper_ids` input). On macOS, prefix the command with
+`OMP_NUM_THREADS=1`: Docling's PyTorch and faiss each bundle OpenMP, and running both in one
+process segfaults there.
+
 ## Semantic search
 
 Semantic search lets you ask a question in plain language and get back the passages from the

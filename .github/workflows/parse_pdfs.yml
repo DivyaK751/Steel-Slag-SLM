@@ -8,6 +8,11 @@ on:
         required: false
         default: "1"
         type: string
+      paper_ids:
+        description: "OpenAlex IDs to parse, space-separated (e.g. W123 W456); max_papers still applies"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -58,12 +63,17 @@ jobs:
       - name: Parse PDFs
         env:
           MAX_PAPERS: ${{ inputs.max_papers }}
+          PAPER_IDS: ${{ inputs.paper_ids }}
         run: |
+          args=()
           if [ -n "$MAX_PAPERS" ]; then
-            uv run parse-pdfs --max-papers "$MAX_PAPERS"
-          else
-            uv run parse-pdfs
+            args+=(--max-papers "$MAX_PAPERS")
           fi
+          if [ -n "$PAPER_IDS" ]; then
+            # Unquoted on purpose: one argument per space-separated ID
+            args+=(--paper-ids $PAPER_IDS)
+          fi
+          uv run parse-pdfs "${args[@]}"
 
       # Keeps the embedding model between runs so each run doesn't download it again
       - name: Cache embedding model
