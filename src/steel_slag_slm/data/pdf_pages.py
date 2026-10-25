@@ -1,6 +1,11 @@
-"""Cut a PDF down to its first pages and read their text layer."""
+"""Cut a PDF down to its first pages, read their text layer, and render page regions."""
 
 import pymupdf
+
+from steel_slag_slm.schemas import PageBox
+
+# PDF coordinates are in points: 72 per inch
+POINTS_PER_INCH = 72
 
 
 def first_pages(pdf: bytes, page_count: int) -> bytes:
@@ -18,3 +23,23 @@ def page_text(pdf: bytes) -> str:
     """Return the text layer of every page, which is empty for scanned (image-only) pages."""
     with pymupdf.open(stream=pdf, filetype="pdf") as document:
         return "\n".join(page.get_text() for page in document)
+
+
+def render_regions(pdf: bytes, regions: list[tuple[int, PageBox]], dpi: int) -> list[bytes]:
+    """Render each (page number, box) region of the PDF as PNG bytes, in the order given.
+
+    Rendering from the page, rather than copying embedded image files, also captures vector
+    plots and keeps multi-part figures whole. Page numbers start at 1; boxes use a top-left
+    origin in points.
+
+    Raises:
+        pymupdf.FileDataError: If the bytes are not a readable PDF.
+    """
+    zoom = dpi / POINTS_PER_INCH
+    with pymupdf.open(stream=pdf, filetype="pdf") as document:
+        return [
+            document[page_number - 1]
+            .get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), clip=pymupdf.Rect(*bbox))
+            .tobytes("png")
+            for page_number, bbox in regions
+        ]
