@@ -154,7 +154,7 @@ class FigureExtractionSettings(BaseModel):
     min_side_pt: float
     min_split_height_pt: float
     drop_types: list[str]
-    keep_uncaptioned: bool
+    min_uncaptioned_side_pt: float
 
 
 class EvaluationSettings(BaseModel):

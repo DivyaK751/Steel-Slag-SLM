@@ -319,7 +319,7 @@ figure_extraction:
   output_dir: data/interim/figures
   # Crops are re-rendered from the page, so vector plots come out sharp at any size
   render_dpi: 200
-  # A caption counts as a figure's own when it starts within this distance above or below it
+  # A caption counts as a figure's own when it is within this distance below, beside or above it
   caption_max_gap_pt: 60
   # Regions narrower or shorter than this (1 inch) are logos, icons or rules, not figures
   min_side_pt: 72
@@ -327,5 +327,6 @@ figure_extraction:
   min_split_height_pt: 50
   # Docling classifier labels that are never figures worth keeping
   drop_types: [logo, icon, signature, stamp, qr_code, bar_code]
-  # Uncaptioned regions are mostly ads, author photos and decorations at the end of papers
-  keep_uncaptioned: false
+  # Uncaptioned regions are kept only this large (some papers print the caption inside the
+  # image); smaller ones are author photos, ads and journal artwork
+  min_uncaptioned_side_pt: 150

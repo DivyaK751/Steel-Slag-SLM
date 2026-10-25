@@ -11,6 +11,8 @@ from steel_slag_slm.schemas import CaptionBlock, Figure, PageBox
 _CAPTION_START = re.compile(r"^\s*(?:fig(?:ure)?\.?)\s*(\d+[a-z]?)\b", re.IGNORECASE)
 # Rounding slack when comparing edges, in PDF points
 _EDGE_TOLERANCE_PT = 2.0
+# Lower wins when a caption could belong to two figures
+_PREFER_BELOW, _PREFER_SIDE, _PREFER_ABOVE = 0, 1, 2
 
 
 def parse_figure_number(text: str) -> str | None:
@@ -64,31 +66,49 @@ def split_merged_figures(
     return result
 
 
-def _caption_gap(figure: Figure, caption: CaptionBlock) -> float | None:
-    """Vertical distance from a figure to a caption beside it, or None if it can't be its own."""
+def _vertical_overlap(first: PageBox, second: PageBox) -> float:
+    return min(first[3], second[3]) - max(first[1], second[1])
+
+
+def _caption_distance(figure: Figure, caption: CaptionBlock) -> tuple[int, float] | None:
+    """Rank a caption's position next to a figure as (preference, gap), or None if it can't be its.
+
+    Below the figure is the usual journal layout, so it is preferred over a caption beside it
+    (e.g. Springer's narrow left column), which is preferred over one above it.
+    """
     if caption.page_number != figure.page_number:
         return None
-    if not _overlaps_horizontally(figure.bbox, caption.bbox):
+    if _overlaps_horizontally(figure.bbox, caption.bbox):
+        below = caption.bbox[1] - figure.bbox[3]
+        if below >= -_EDGE_TOLERANCE_PT:
+            return _PREFER_BELOW, max(below, 0.0)
+        above = figure.bbox[1] - caption.bbox[3]
+        if above >= -_EDGE_TOLERANCE_PT:
+            return _PREFER_ABOVE, max(above, 0.0)
         return None
-    below = caption.bbox[1] - figure.bbox[3]
-    above = figure.bbox[1] - caption.bbox[3]
-    gap = below if below >= -_EDGE_TOLERANCE_PT else above
-    return max(gap, 0.0) if gap >= -_EDGE_TOLERANCE_PT else None
+    if _vertical_overlap(figure.bbox, caption.bbox) <= 0:
+        return None
+    left = figure.bbox[0] - caption.bbox[2]
+    right = caption.bbox[0] - figure.bbox[2]
+    side = left if left >= -_EDGE_TOLERANCE_PT else right
+    return (_PREFER_SIDE, max(side, 0.0)) if side >= -_EDGE_TOLERANCE_PT else None
 
 
 def match_captions(
     figures: list[Figure], captions: list[CaptionBlock], max_gap_pt: float
 ) -> list[Figure]:
-    """Give each figure the nearest caption directly above or below it, each caption used once.
+    """Give each figure the caption below, beside or above it, each caption used once.
 
-    Pairs are taken closest first, so a caption between two figures goes to the nearer one.
-    Figures left without a caption keep an empty caption and no figure number.
+    Pairs are taken by preferred position first, then closest first, so a caption between two
+    figures goes to the one it sits under. Figures left without a caption keep an empty caption
+    and no figure number.
     """
     candidates = sorted(
-        (gap, figure_index, caption_index)
+        (distance, figure_index, caption_index)
         for figure_index, figure in enumerate(figures)
         for caption_index, caption in enumerate(captions)
-        if (gap := _caption_gap(figure, caption)) is not None and gap <= max_gap_pt
+        if (distance := _caption_distance(figure, caption)) is not None
+        and distance[1] <= max_gap_pt
     )
     caption_for_figure: dict[int, CaptionBlock] = {}
     used_captions: set[int] = set()
@@ -107,14 +127,15 @@ def match_captions(
 
 
 def is_kept(figure: Figure, settings: FigureExtractionSettings) -> bool:
-    """Whether a region is a real figure rather than a logo, icon or uncaptioned decoration."""
-    width = figure.bbox[2] - figure.bbox[0]
-    height = figure.bbox[3] - figure.bbox[1]
-    if min(width, height) < settings.min_side_pt:
+    """Whether a region is a real figure rather than a logo, icon or small decoration.
+
+    Uncaptioned regions are kept only when large: some papers print the caption inside the
+    figure image, while small uncaptioned ones are author photos, ads and journal artwork.
+    """
+    shortest_side = min(figure.bbox[2] - figure.bbox[0], figure.bbox[3] - figure.bbox[1])
+    if shortest_side < settings.min_side_pt or figure.figure_type in settings.drop_types:
         return False
-    if figure.figure_type in settings.drop_types:
-        return False
-    return bool(figure.caption) or settings.keep_uncaptioned
+    return bool(figure.caption) or shortest_side >= settings.min_uncaptioned_side_pt
 
 
 def clean_figures(

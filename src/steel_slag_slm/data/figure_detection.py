@@ -14,6 +14,8 @@ from docling_core.types.doc.items.text import TextItem
 from steel_slag_slm.data.figure_cleanup import parse_figure_number
 from steel_slag_slm.schemas import CaptionBlock, Figure, PageBox
 
+CAPTION_LABEL = "caption"
+
 
 @dataclass(frozen=True, slots=True)
 class DetectedLayout:
@@ -57,7 +59,12 @@ def detect_figures(pdf_bytes: bytes, converter: DocumentConverter) -> DetectedLa
                 Figure(page_number, bbox, figure_type, confidence)
                 for page_number, bbox in _placements(item, document)
             )
-        elif isinstance(item, TextItem) and (number := parse_figure_number(item.text)):
+        # Body sentences such as "Figure 6 shows ..." are labelled text, not caption
+        elif (
+            isinstance(item, TextItem)
+            and item.label.value == CAPTION_LABEL
+            and (number := parse_figure_number(item.text))
+        ):
             captions.extend(
                 CaptionBlock(page_number, bbox, item.text.strip(), number)
                 for page_number, bbox in _placements(item, document)

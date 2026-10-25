@@ -19,7 +19,7 @@ SETTINGS = FigureExtractionSettings(
     min_side_pt=72,
     min_split_height_pt=50,
     drop_types=["logo", "icon"],
-    keep_uncaptioned=False,
+    min_uncaptioned_side_pt=150,
 )
 
 
@@ -78,6 +78,20 @@ def test_match_captions_uses_each_caption_once() -> None:
     assert sorted(str(figure.figure_number) for figure in matched) == ["1", "None"]
 
 
+def test_match_captions_accepts_a_caption_in_the_column_beside_the_figure() -> None:
+    figures = [_figure((164, 60, 500, 314))]
+    captions = [_caption((47, 60, 136, 89), "Fig. 3 Particle size distribution")]
+    assert match_captions(figures, captions, max_gap_pt=60)[0].figure_number == "3"
+
+
+def test_match_captions_prefers_the_figure_a_caption_sits_under() -> None:
+    # The caption is 11 pt under the first figure and 6 pt above the second
+    figures = [_figure((129, 336, 490, 471)), _figure((77, 495, 540, 745))]
+    captions = [_caption((129, 482, 444, 489), "Figure 2. SEM images")]
+    matched = match_captions(figures, captions, max_gap_pt=60)
+    assert [figure.figure_number for figure in matched] == ["2", None]
+
+
 def test_split_merged_figures_splits_at_a_caption_inside_the_region() -> None:
     merged = _figure((50, 100, 400, 700))
     inner_caption = _caption((50, 380, 400, 400), "Figure 5. XRD of slag")
@@ -91,12 +105,17 @@ def test_split_merged_figures_keeps_regions_whose_caption_sits_at_the_edge() -> 
     assert split_merged_figures([figure], [caption_at_bottom], min_part_height_pt=50) == [figure]
 
 
-def test_is_kept_drops_logos_tiny_regions_and_uncaptioned_figures() -> None:
+def test_is_kept_drops_logos_and_tiny_regions() -> None:
     captioned = Figure(1, (0, 0, 300, 300), "line_chart", 0.9, caption="Fig. 1", figure_number="1")
     assert is_kept(captioned, SETTINGS)
     assert not is_kept(Figure(1, (0, 0, 300, 300), "logo", 0.9, "Fig. 1", "1"), SETTINGS)
     assert not is_kept(Figure(1, (0, 0, 40, 50), "line_chart", 0.9, "Fig. 1", "1"), SETTINGS)
-    assert not is_kept(_figure((0, 0, 300, 300)), SETTINGS)
+
+
+def test_is_kept_keeps_only_large_uncaptioned_regions() -> None:
+    # Some papers print the caption inside the image; author photos are small and uncaptioned
+    assert is_kept(_figure((0, 0, 400, 250)), SETTINGS)
+    assert not is_kept(_figure((0, 0, 95, 125), figure_type="photograph"), SETTINGS)
 
 
 def test_clean_figures_returns_split_captioned_figures_in_reading_order() -> None:
