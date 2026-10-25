@@ -24,7 +24,10 @@ dependencies = [
 [project.scripts]
 fetch-papers = "steel_slag_slm.cli:fetch_papers"
 sync-registry = "steel_slag_slm.cli:sync_registry"
+create-extraction-tables = "steel_slag_slm.cli:create_extraction_tables"
 fill-abstracts = "steel_slag_slm.cli:fill_abstracts"
+extract-data = "steel_slag_slm.cli:extract_data"
+export-extraction = "steel_slag_slm.cli:export_extraction"
 screen-papers = "steel_slag_slm.cli:screen_papers"
 evaluate-screening = "steel_slag_slm.cli:evaluate_screening"
 parse-pdfs = "steel_slag_slm.cli:parse_pdfs"
