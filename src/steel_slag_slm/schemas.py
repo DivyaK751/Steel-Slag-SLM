@@ -88,6 +88,32 @@ class ParsedPaper:
     content_blocks: tuple[ParsedContentBlock, ...] = ()
 
 
+# x0, y0, x1, y1 in PDF points, measured from the page's top-left corner
+PageBox = tuple[float, float, float, float]
+
+
+@dataclass(frozen=True, slots=True)
+class CaptionBlock:
+    """A "Fig. N ..." text block on a page, used to name the figure above or below it."""
+
+    page_number: int
+    bbox: PageBox
+    text: str
+    figure_number: str  # as printed after "Fig."/"Figure", e.g. "3" or "3a"
+
+
+@dataclass(frozen=True, slots=True)
+class Figure:
+    """A figure region on a page, with the caption matched to it once cleanup has run."""
+
+    page_number: int
+    bbox: PageBox
+    figure_type: str  # Docling classifier's top class, e.g. "line_chart"; "" when unknown
+    type_confidence: float
+    caption: str = ""
+    figure_number: str | None = None
+
+
 ChunkKind = Literal["text", "table", "figure_caption"]
 
 

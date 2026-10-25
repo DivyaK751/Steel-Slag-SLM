@@ -145,6 +145,18 @@ class AbstractExtractionSettings(AgentSettings):
     papers_table: str  # fully qualified: project.dataset.table
 
 
+class FigureExtractionSettings(BaseModel):
+    """How figures are found, cleaned up and rendered from parsed PDFs."""
+
+    output_dir: Path
+    render_dpi: int
+    caption_max_gap_pt: float
+    min_side_pt: float
+    min_split_height_pt: float
+    drop_types: list[str]
+    keep_uncaptioned: bool
+
+
 class EvaluationSettings(BaseModel):
     """Where the human-labelled papers live and where run reports are saved."""
 
@@ -291,6 +303,16 @@ def load_drive_connection_settings() -> DriveConnectionSettings:
         oauth_token_file=Path(
             os.environ.get("GOOGLE_OAUTH_TOKEN_FILE", "").strip() or DEFAULT_GOOGLE_TOKEN_PATH
         ).expanduser(),
+    )
+
+
+def load_figure_extraction_settings(
+    config_path: Path = BASE_CONFIG_PATH,
+) -> FigureExtractionSettings:
+    """Build figure-extraction settings; the output folder is resolved from the project root."""
+    raw_config = _read_base_config(config_path)["figure_extraction"]
+    return FigureExtractionSettings(
+        **{**raw_config, "output_dir": PROJECT_ROOT / raw_config["output_dir"]}
     )
 
 
