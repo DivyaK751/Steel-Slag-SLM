@@ -118,3 +118,28 @@ uv run evaluate-retrieval               # score search quality on a fixed test
   reading the paper, and reports how high the right passage ranks.
 - Settings are in the `embedding:` section of `configs/base.yaml`. Design notes are in
   [docs/adr/003-semantic-search-index.md](docs/adr/003-semantic-search-index.md).
+
+## Figure extraction (local)
+
+`extract-figures` pulls the figures (plots, charts, process diagrams, micrographs) out of PDFs on
+your machine. Nothing is read from or written to Drive yet.
+
+```bash
+uv run extract-figures path/to/W2114885577.pdf     # one paper
+uv run extract-figures path/to/pdf_folder/          # every PDF in a folder
+uv run extract-figures papers/ --out-dir /tmp/figs  # somewhere other than data/interim/figures
+```
+
+Each paper gets a folder named after its PDF, with `figure_01.png`, `figure_02.png`, ... and a
+`figures.json` listing each figure's number, caption, page, position and type.
+
+How it works:
+
+1. Docling's layout model finds figure regions, including vector plots that aren't image files,
+   and labels each one (`line_chart`, `bar_chart`, `flow_chart`, `photograph`, ...).
+2. Cleanup matches each figure to the "Fig. N" caption below, beside or above it, splits regions
+   that hold two stacked figures, and drops logos, icons and small uncaptioned images.
+3. PyMuPDF renders each region from the page, so crops are sharp at any size.
+
+Settings: the `figure_extraction:` section of `configs/base.yaml`. A figure whose caption is
+printed inside the image keeps an empty caption and no figure number.

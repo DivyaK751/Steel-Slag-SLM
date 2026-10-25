@@ -6,6 +6,7 @@ import logging
 import os
 import subprocess
 from datetime import datetime
+from pathlib import Path
 from typing import Any, cast
 
 from google.adk.runners import Runner
@@ -21,6 +22,7 @@ from steel_slag_slm.config import (
     load_drive_connection_settings,
     load_embedding_settings,
     load_evaluation_settings,
+    load_figure_extraction_settings,
     load_gcp_settings,
     load_pdf_parsing_settings,
     load_retrieval_eval_set,
@@ -28,6 +30,7 @@ from steel_slag_slm.config import (
     load_settings,
 )
 from steel_slag_slm.data.drive_storage import build_drive_service, find_subfolder_id
+from steel_slag_slm.data.figure_detection import build_figure_converter
 from steel_slag_slm.data.openalex import OpenAlexClient
 from steel_slag_slm.data.paper_registry import build_bigquery_client
 from steel_slag_slm.evaluation.retrieval_metrics import mean_scores
@@ -35,6 +38,7 @@ from steel_slag_slm.llm.prompts import PromptTemplate, load_prompt
 from steel_slag_slm.pipelines.build_index import run_build_index
 from steel_slag_slm.pipelines.evaluate_retrieval import run_retrieval_eval
 from steel_slag_slm.pipelines.evaluate_screening import run_evaluation
+from steel_slag_slm.pipelines.extract_figures import collect_pdf_paths, run_figure_extraction
 from steel_slag_slm.pipelines.fetch_papers import run_fetch
 from steel_slag_slm.pipelines.fill_abstracts import run_fill_abstracts
 from steel_slag_slm.pipelines.parse_pdfs import run_pdf_parsing
@@ -388,3 +392,25 @@ def evaluate_retrieval() -> None:
             print(
                 f"STALE LABEL {question_id}: {evidence.paper_id} {evidence.kind} {evidence.text!r}"
             )
+
+
+def extract_figures() -> None:
+    """Extract the figures of local PDFs into PNGs plus a figures.json per paper."""
+    settings = load_figure_extraction_settings()
+    parser = argparse.ArgumentParser(description=extract_figures.__doc__)
+    parser.add_argument("paths", nargs="+", type=Path, help="PDF files or folders of PDFs")
+    parser.add_argument(
+        "--out-dir",
+        type=Path,
+        default=settings.output_dir,
+        help=f"where each paper's folder is written (default: {settings.output_dir})",
+    )
+    args = parser.parse_args()
+    pdf_paths = collect_pdf_paths(args.paths)
+    if not pdf_paths:
+        parser.error("no PDF files found in the given paths")
+
+    _setup_logging()
+    outcomes = run_figure_extraction(pdf_paths, args.out_dir, build_figure_converter(), settings)
+    print("Summary:", dict(outcomes))
+    print(f"Figures written to {args.out_dir}")
