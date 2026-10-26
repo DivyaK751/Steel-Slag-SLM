@@ -14,7 +14,11 @@ from google.genai.errors import APIError
 from steel_slag_slm.agents.figure_reader import figure_label, read_figure
 from steel_slag_slm.agents.runner import gather_bounded
 from steel_slag_slm.config import FigureReadingSettings
-from steel_slag_slm.evaluation.figure_checks import FigureCheck, check_reading
+from steel_slag_slm.evaluation.figure_checks import (
+    FigureCheck,
+    check_reading,
+    figure_body_text,
+)
 from steel_slag_slm.exceptions import AgentOutputError
 from steel_slag_slm.llm.costs import estimate_cost_usd
 from steel_slag_slm.llm.prompts import PromptTemplate
@@ -102,7 +106,7 @@ async def _read_paper(
         result = FigureResult(
             figure=figure,
             reading=reading,
-            check=check_reading(reading, figure.pdf_text),
+            check=check_reading(reading, figure_body_text(figure.pdf_text, figure.caption)),
             usage=usage,
             cost_usd=estimate_cost_usd(usage, settings.prices),
         )

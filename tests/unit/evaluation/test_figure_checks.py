@@ -1,6 +1,7 @@
 from steel_slag_slm.evaluation.figure_checks import (
     check_reading,
     count_out_of_range,
+    figure_body_text,
     reading_labels,
     total_checks,
     unsupported_labels,
@@ -79,3 +80,10 @@ def test_total_checks_adds_up_each_count() -> None:
     totals = total_checks([first, second])
     assert (totals.figures_with_pdf_text, totals.values_checked) == (1, 2)
     assert (totals.values_out_of_range, totals.rows_malformed) == (1, 1)
+
+
+def test_figure_body_text_drops_the_caption_so_caption_only_figures_are_not_checked() -> None:
+    caption = "Figure 3. Mineralogical composition of un-reacted OPC."
+    assert figure_body_text(f"{caption}", caption) == ""
+    assert figure_body_text(f"0 10 20 MPa {caption}", caption) == "0 10 20 MPa"
+    assert figure_body_text("0 10 20 MPa", "") == "0 10 20 MPa"

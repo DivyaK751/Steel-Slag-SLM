@@ -41,6 +41,15 @@ def _squash(text: str) -> str:
     return re.sub(r"[\W_]+", "", text.lower())
 
 
+def figure_body_text(pdf_text: str, caption: str) -> str:
+    """The figure's PDF text without its caption, which says nothing about the drawn labels.
+
+    A figure whose legend and axes are part of a pasted-in picture can still carry its caption
+    as text; with the caption removed it correctly counts as having no text to check against.
+    """
+    return pdf_text.replace(caption, " ").strip() if caption else pdf_text
+
+
 def _as_number(cell: str) -> float | None:
     try:
         return float(cell.replace(",", ""))
