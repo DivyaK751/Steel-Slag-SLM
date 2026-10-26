@@ -3,11 +3,13 @@
 import re
 from dataclasses import dataclass
 
-from steel_slag_slm.schemas import FigureReading
+from steel_slag_slm.schemas import FigureReading, TableColumn
 
 # A value this share of the axis span outside the first/last tick still counts as in range,
 # since curves often run a little past the last labelled tick
 _RANGE_SLACK = 0.05
+# What prompts/read_figure.yaml tells the model to call a legend that has no printed title
+UNTITLED_LEGEND = "Legend"
 
 
 @dataclass(frozen=True, slots=True)
@@ -17,8 +19,21 @@ class FigureCheck:
     has_pdf_text: bool  # False for pasted-in pictures, where labels can't be checked
     labels_checked: int
     unsupported_labels: tuple[str, ...]  # read by the model but absent from the PDF text
-    points_checked: int
-    points_out_of_range: int  # outside the axis range the model itself reported
+    values_checked: int
+    values_out_of_range: int  # outside the axis range the model itself reported
+    rows_malformed: int  # rows without exactly one cell per column
+
+
+@dataclass(frozen=True, slots=True)
+class CheckTotals:
+    """Automatic checks summed over a run."""
+
+    figures_with_pdf_text: int
+    labels_checked: int
+    labels_unsupported: int
+    values_checked: int
+    values_out_of_range: int
+    rows_malformed: int
 
 
 def _squash(text: str) -> str:
@@ -26,19 +41,32 @@ def _squash(text: str) -> str:
     return re.sub(r"[\W_]+", "", text.lower())
 
 
+def _as_number(cell: str) -> float | None:
+    try:
+        return float(cell.replace(",", ""))
+    except ValueError:
+        return None
+
+
+def _well_formed_rows(reading: FigureReading) -> list[list[str]]:
+    return [row for row in reading.rows if len(row) == len(reading.columns)]
+
+
 def reading_labels(reading: FigureReading) -> list[str]:
-    """Every printed label the model claims to have read: axes, units, series, phases, steps."""
+    """Every printed text the model claims to have read: columns, units, categories, phases, steps.
+
+    Each distinct category (non-numeric cell) is listed once.
+    """
     labels = [
-        value
-        for axis in (reading.x_axis, reading.y_axis)
-        if axis is not None
-        for value in (axis.label, axis.unit)
-        if value
+        column.label
+        for column in reading.columns
+        if not (column.source == "legend" and column.label == UNTITLED_LEGEND)
     ]
-    labels += [series.name for series in reading.series if series.name]
-    labels += [
-        point.x_category for series in reading.series for point in series.points if point.x_category
+    labels += [column.unit for column in reading.columns if column.unit]
+    categories = [
+        cell for row in _well_formed_rows(reading) for cell in row if _as_number(cell) is None
     ]
+    labels += list(dict.fromkeys(cell for cell in categories if cell.strip()))
     labels += reading.phases
     labels += [step.label for step in reading.steps]
     return labels
@@ -50,28 +78,24 @@ def unsupported_labels(labels: list[str], pdf_text: str) -> list[str]:
     return [label for label in labels if _squash(label) not in squashed_text]
 
 
-def _in_range(value: float, low: float | None, high: float | None) -> bool:
-    if low is None or high is None:
+def _in_range(value: float, column: TableColumn) -> bool:
+    if column.axis_min is None or column.axis_max is None:
         return True
-    low, high = min(low, high), max(low, high)
+    low, high = sorted((column.axis_min, column.axis_max))
     slack = (high - low) * _RANGE_SLACK
     return low - slack <= value <= high + slack
 
 
 def count_out_of_range(reading: FigureReading) -> tuple[int, int]:
-    """Return (points checked, points outside the reported axis ranges) for a plot."""
-    x_axis, y_axis = reading.x_axis, reading.y_axis
+    """Return (numeric cells checked, cells outside their column's axis range)."""
     checked = out_of_range = 0
-    for series in reading.series:
-        for point in series.points:
+    for row in _well_formed_rows(reading):
+        for cell, column in zip(row, reading.columns, strict=True):
+            value = _as_number(cell)
+            if value is None or column.axis_min is None or column.axis_max is None:
+                continue
             checked += 1
-            x_ok = (
-                point.x is None
-                or x_axis is None
-                or _in_range(point.x, x_axis.min_value, x_axis.max_value)
-            )
-            y_ok = y_axis is None or _in_range(point.y, y_axis.min_value, y_axis.max_value)
-            out_of_range += not (x_ok and y_ok)
+            out_of_range += not _in_range(value, column)
     return checked, out_of_range
 
 
@@ -79,25 +103,15 @@ def check_reading(reading: FigureReading, pdf_text: str) -> FigureCheck:
     """Run every automatic check on one reading."""
     labels = reading_labels(reading)
     has_pdf_text = bool(pdf_text.strip())
-    points_checked, points_out_of_range = count_out_of_range(reading)
+    values_checked, values_out_of_range = count_out_of_range(reading)
     return FigureCheck(
         has_pdf_text=has_pdf_text,
         labels_checked=len(labels) if has_pdf_text else 0,
         unsupported_labels=tuple(unsupported_labels(labels, pdf_text)) if has_pdf_text else (),
-        points_checked=points_checked,
-        points_out_of_range=points_out_of_range,
+        values_checked=values_checked,
+        values_out_of_range=values_out_of_range,
+        rows_malformed=len(reading.rows) - len(_well_formed_rows(reading)),
     )
-
-
-@dataclass(frozen=True, slots=True)
-class CheckTotals:
-    """Automatic checks summed over a run."""
-
-    figures_with_pdf_text: int
-    labels_checked: int
-    labels_unsupported: int
-    points_checked: int
-    points_out_of_range: int
 
 
 def total_checks(checks: list[FigureCheck]) -> CheckTotals:
@@ -106,6 +120,7 @@ def total_checks(checks: list[FigureCheck]) -> CheckTotals:
         figures_with_pdf_text=sum(check.has_pdf_text for check in checks),
         labels_checked=sum(check.labels_checked for check in checks),
         labels_unsupported=sum(len(check.unsupported_labels) for check in checks),
-        points_checked=sum(check.points_checked for check in checks),
-        points_out_of_range=sum(check.points_out_of_range for check in checks),
+        values_checked=sum(check.values_checked for check in checks),
+        values_out_of_range=sum(check.values_out_of_range for check in checks),
+        rows_malformed=sum(check.rows_malformed for check in checks),
     )

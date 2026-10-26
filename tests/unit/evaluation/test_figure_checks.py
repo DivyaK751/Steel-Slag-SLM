@@ -2,68 +2,80 @@ from steel_slag_slm.evaluation.figure_checks import (
     check_reading,
     count_out_of_range,
     reading_labels,
+    total_checks,
     unsupported_labels,
 )
-from steel_slag_slm.schemas import (
-    AxisReading,
-    FigureReading,
-    PointReading,
-    ProcessStep,
-    SeriesReading,
-)
+from steel_slag_slm.schemas import FigureReading, ProcessStep, TableColumn
 
-PDF_TEXT = "0 10 20 30 40 50 Compressive strength (MPa) Curing age (days) OPC 30% BOF"
+PDF_TEXT = "0 5 10 15 Mix Weight Loss (%) O 30G 30L 12-Hour 180-Day"
 
 
-def _plot(points: list[PointReading], series_name: str = "30% BOF") -> FigureReading:
+def _bar_chart(rows: list[list[str]]) -> FigureReading:
     return FigureReading(
         figure_type="data_plot",
-        summary="Strength rises with curing age.",
-        x_axis=AxisReading(label="Curing age", unit="days", min_value=0, max_value=90),
-        y_axis=AxisReading(label="Compressive strength", unit="MPa", min_value=0, max_value=50),
-        series=[SeriesReading(name=series_name, points=points)],
+        summary="Weight loss by mix and curing time.",
+        columns=[
+            TableColumn(label="Mix", source="x_axis"),
+            TableColumn(label="Legend", source="legend"),
+            TableColumn(label="Weight Loss", unit="%", source="y_axis", axis_min=0, axis_max=15),
+        ],
+        rows=rows,
     )
 
 
-def test_reading_labels_collects_axes_units_series_phases_and_steps() -> None:
-    reading = _plot([PointReading(x_category="7 d", y=20)])
+def test_reading_labels_collects_columns_units_categories_phases_and_steps() -> None:
+    reading = _bar_chart([["O", "12-Hour", "2.4"], ["30G", "12-Hour", "1.3"]])
     reading.phases.append("Merwinite")
     reading.steps.append(ProcessStep(id="s1", label="Grinding"))
+    # The untitled legend's placeholder name is not a printed label, so it isn't checked
     assert reading_labels(reading) == [
-        "Curing age",
-        "days",
-        "Compressive strength",
-        "MPa",
-        "30% BOF",
-        "7 d",
+        "Mix",
+        "Weight Loss",
+        "%",
+        "O",
+        "12-Hour",
+        "30G",
         "Merwinite",
         "Grinding",
     ]
 
 
 def test_unsupported_labels_ignores_case_spacing_and_punctuation() -> None:
-    assert unsupported_labels(["compressive  STRENGTH", "30 % BOF", "GGBS"], PDF_TEXT) == ["GGBS"]
+    assert unsupported_labels(["weight  LOSS", "12 hour", "GGBS"], PDF_TEXT) == ["GGBS"]
 
 
-def test_count_out_of_range_flags_values_beyond_the_reported_axes() -> None:
-    reading = _plot(
+def test_count_out_of_range_checks_numeric_cells_of_axis_columns_only() -> None:
+    reading = _bar_chart(
         [
-            PointReading(x=28, y=42.3),
-            PointReading(x=90, y=52.0),  # within 5% slack of the 50 MPa top tick
-            PointReading(x=28, y=80.0),  # far above the axis
+            ["O", "180-Day", "8.9"],
+            ["30G", "180-Day", "15.5"],  # within 5% slack of the 15 % top tick
+            ["30L", "180-Day", "40"],  # far above the axis
         ]
     )
     assert count_out_of_range(reading) == (3, 1)
 
 
+def test_check_reading_counts_rows_without_one_cell_per_column() -> None:
+    check = check_reading(_bar_chart([["O", "12-Hour", "2.4"], ["30G", "1.3"]]), PDF_TEXT)
+    assert check.rows_malformed == 1
+    assert check.values_checked == 1
+
+
 def test_check_reading_skips_label_checks_for_pictures_without_pdf_text() -> None:
-    check = check_reading(_plot([PointReading(x=28, y=42.3)], series_name="Made up"), "")
+    check = check_reading(_bar_chart([["Made up", "12-Hour", "2.4"]]), "")
     assert not check.has_pdf_text
     assert check.labels_checked == 0 and check.unsupported_labels == ()
-    assert check.points_checked == 1
+    assert check.values_checked == 1
 
 
 def test_check_reading_reports_labels_missing_from_the_pdf_text() -> None:
-    check = check_reading(_plot([PointReading(x=28, y=42.3)], series_name="Made up"), PDF_TEXT)
+    check = check_reading(_bar_chart([["Made up", "12-Hour", "2.4"]]), PDF_TEXT)
     assert check.unsupported_labels == ("Made up",)
-    assert check.labels_checked == 5
+
+
+def test_total_checks_adds_up_each_count() -> None:
+    first = check_reading(_bar_chart([["O", "12-Hour", "2.4"]]), PDF_TEXT)
+    second = check_reading(_bar_chart([["O", "12-Hour", "40"], ["bad"]]), "")
+    totals = total_checks([first, second])
+    assert (totals.figures_with_pdf_text, totals.values_checked) == (1, 2)
+    assert (totals.values_out_of_range, totals.rows_malformed) == (1, 1)

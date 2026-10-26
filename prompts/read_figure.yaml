@@ -1,5 +1,5 @@
 name: read_figure
-version: 1
+version: 2
 description: Read one figure from a steel slag paper into structured data (plots, diagrams, photos).
 variables: [paper_id, figure_label, caption, pdf_text]
 
@@ -24,22 +24,31 @@ instruction: |
   - other: anything else (maps, tables drawn as images, chemical structures).
 
   RULES
-  - Copy axis titles, units, legend names, phase names and box labels exactly as printed.
-    When PDF_TEXT contains the word, use its spelling.
+  - Extract the data exactly as printed. Copy column names, units, legend entries, category
+    names, phase names and box labels character for character. When PDF_TEXT contains the
+    word, use its spelling. Do not rename, translate, combine or convert anything: "12-Hour"
+    stays "12-Hour", "30G" stays "30G".
   - Never guess. Leave a field null or a list empty when you cannot read it clearly.
   - Numbers read off a plot are approximate: read them as precisely as the gridlines and
     ticks allow, and never extrapolate beyond the plotted data.
 
   WHAT TO FILL
-  - data_plot: x_axis and y_axis (label, unit, linear or log scale, first and last tick
-    values as min_value and max_value). One series per legend entry. Points: every marker or
-    bar; for a continuous line without markers, its value at each labelled x tick it spans.
-    For bar charts put the bar's label in x_category and leave x null.
-  - xrd_pattern: x_axis and y_axis, and every phase labelled on the pattern in phases. No
-    points.
+  - data_plot: read the plot into a table.
+    - columns: one per printed dimension, in this order: the x axis, then the legend (when
+      series are distinguished by a legend), then the y axis. label and unit exactly as
+      printed (unit null when none is printed). source says where the label was printed:
+      x_axis, y_axis, legend (use the legend title, or "Legend" when it has none), label
+      (text written on the plot) or other. For numeric axes give the first and last tick
+      values as axis_min and axis_max.
+    - rows: one row per value, one cell per column, written as text exactly as printed
+      for categories and as the number read for values (e.g. ["30G", "180-Day", "10.3"]).
+      Bars and markers: one row each. Continuous lines without markers: only the values at
+      the labelled x ticks the line spans.
+  - xrd_pattern: columns for the two axes (no rows), and every phase labelled on the
+    pattern in phases.
   - process_diagram: steps for each box or stage (ids s1, s2, ... in reading order; label
-    as printed; conditions such as temperature, pressure, time or ratios exactly as printed),
-    and flows for each arrow between steps.
+    and conditions such as temperature, pressure, time or ratios exactly as printed), and
+    flows for each arrow between steps.
   - micrograph_or_photo and other: summary only.
   - summary (always): one or two sentences on what the figure shows, including any scale
     bar for micrographs.
@@ -48,9 +57,8 @@ instruction: |
   Return only a JSON object with these keys:
   {"figure_type": one of the types above,
    "summary": text,
-   "x_axis": {"label", "unit", "scale", "min_value", "max_value"} or null,
-   "y_axis": same shape or null,
-   "series": [{"name", "points": [{"x", "x_category", "y"}]}],
+   "columns": [{"label", "unit", "source", "axis_min", "axis_max"}],
+   "rows": [[cell text, ...]],
    "phases": [text],
    "steps": [{"id", "label", "conditions": [text]}],
    "flows": [{"source", "target", "label"}]}

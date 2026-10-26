@@ -476,7 +476,8 @@ def read_figures() -> None:
     print(
         f"Checks: {checks.labels_unsupported} of {checks.labels_checked} labels not in the PDF "
         f"text ({checks.figures_with_pdf_text} figures had text to check); "
-        f"{checks.points_out_of_range} of {checks.points_checked} points outside their axes"
+        f"{checks.values_out_of_range} of {checks.values_checked} values outside their axes; "
+        f"{checks.rows_malformed} rows with missing cells"
     )
     rows = [
         ReviewRow(

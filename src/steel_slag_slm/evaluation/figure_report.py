@@ -64,33 +64,34 @@ def _check_html(check: FigureCheck | None) -> str:
         labels = f"<span class=warn>⚠️ not in PDF text: {missing}</span>"
     else:
         labels = f"<span class=ok>✅ all {check.labels_checked} labels found in PDF text</span>"
-    if check.points_out_of_range:
-        points = (
-            f"<span class=warn>⚠️ {check.points_out_of_range} of {check.points_checked} "
-            "points outside the axes</span>"
+    if check.values_out_of_range:
+        values = (
+            f"<span class=warn>⚠️ {check.values_out_of_range} of {check.values_checked} "
+            "values outside the axes</span>"
         )
-    elif check.points_checked:
-        points = f"<span class=ok>✅ {check.points_checked} points inside the axes</span>"
+    elif check.values_checked:
+        values = f"<span class=ok>✅ {check.values_checked} values inside the axes</span>"
     else:
-        points = ""
-    return f"<p>{labels}<br>{points}</p>"
+        values = ""
+    if check.rows_malformed:
+        values += f"<br><span class=warn>⚠️ {check.rows_malformed} rows with missing cells</span>"
+    return f"<p>{labels}<br>{values}</p>"
 
 
 def _reading_html(reading: FigureReading) -> str:
     parts = [f"<p><b>{reading.figure_type}</b>: {html.escape(reading.summary)}</p>"]
-    for name, axis in (("x", reading.x_axis), ("y", reading.y_axis)):
-        if axis is not None:
-            parts.append(
-                f"<div>{name}: {html.escape(axis.label or '?')} "
-                f"[{html.escape(axis.unit or '')}] {axis.scale or ''} "
-                f"{axis.min_value}–{axis.max_value}</div>"
-            )
-    for series in reading.series:
-        points = ", ".join(
-            f"({html.escape(point.x_category) if point.x_category else point.x}, {point.y})"
-            for point in series.points
+    if reading.columns:
+        header = "".join(
+            f"<th>{html.escape(column.label)}"
+            f"{f' [{html.escape(column.unit)}]' if column.unit else ''}"
+            f"<br><span class=muted>{column.source}</span></th>"
+            for column in reading.columns
         )
-        parts.append(f"<div><b>{html.escape(series.name or 'series')}</b>: {points}</div>")
+        body = "".join(
+            "<tr>" + "".join(f"<td>{html.escape(cell)}</td>" for cell in row) + "</tr>"
+            for row in reading.rows
+        )
+        parts.append(f"<table><tr>{header}</tr>{body}</table>")
     if reading.phases:
         parts.append(f"<div>phases: {html.escape(', '.join(reading.phases))}</div>")
     for step in reading.steps:
@@ -110,7 +111,8 @@ def write_review_page(
         "<div class=summary>"
         + "<br>".join(html.escape(line) for line in summary_lines)
         + f"<br>Labels not in PDF text: {checks.labels_unsupported} of {checks.labels_checked}"
-        + f" · points outside axes: {checks.points_out_of_range} of {checks.points_checked}"
+        + f" · values outside axes: {checks.values_out_of_range} of {checks.values_checked}"
+        + f" · rows with missing cells: {checks.rows_malformed}"
         + "</div>"
     ]
     for row in rows:

@@ -217,29 +217,19 @@ class FigureToRead:
 FigureKind = Literal["data_plot", "xrd_pattern", "process_diagram", "micrograph_or_photo", "other"]
 
 
-class AxisReading(BaseModel):
-    """One axis of a plot, as printed."""
+# Where in the figure a table column's name was printed
+ColumnSource = Literal["x_axis", "y_axis", "legend", "label", "other"]
 
-    label: str | None = None
+
+class TableColumn(BaseModel):
+    """One column of the values read off a figure, named exactly as printed."""
+
+    label: str
     unit: str | None = None
-    scale: Literal["linear", "log"] | None = None
-    min_value: float | None = None  # first tick value
-    max_value: float | None = None  # last tick value
-
-
-class PointReading(BaseModel):
-    """One value read off a plot; x is a number, or a category name for bar charts."""
-
-    x: float | None = None
-    x_category: str | None = None
-    y: float
-
-
-class SeriesReading(BaseModel):
-    """One line, marker set or bar group, named as in the legend."""
-
-    name: str | None = None
-    points: list[PointReading] = Field(default_factory=list)
+    source: ColumnSource
+    # First and last tick values when the column is a numeric axis; None otherwise
+    axis_min: float | None = None
+    axis_max: float | None = None
 
 
 class ProcessStep(BaseModel):
@@ -259,13 +249,16 @@ class ProcessFlow(BaseModel):
 
 
 class FigureReading(BaseModel):
-    """Gemini's reading of one figure; values read off plots are approximate."""
+    """Gemini's reading of one figure as printed; values read off plots are approximate.
+
+    Plots are read as a table: columns named as on the axes and legend, one row per value.
+    """
 
     figure_type: FigureKind
     summary: str
-    x_axis: AxisReading | None = None
-    y_axis: AxisReading | None = None
-    series: list[SeriesReading] = Field(default_factory=list)
+    columns: list[TableColumn] = Field(default_factory=list)
+    # One list per row, a cell per column, copied as printed (e.g. "12-Hour", "10.3")
+    rows: list[list[str]] = Field(default_factory=list)
     phases: list[str] = Field(default_factory=list)  # phases labelled on an XRD pattern
     steps: list[ProcessStep] = Field(default_factory=list)
     flows: list[ProcessFlow] = Field(default_factory=list)

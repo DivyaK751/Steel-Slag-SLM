@@ -10,7 +10,7 @@ from steel_slag_slm.config import FigureReadingSettings, ModelPrices
 from steel_slag_slm.evaluation.figure_checks import total_checks
 from steel_slag_slm.exceptions import AgentOutputError
 from steel_slag_slm.llm.prompts import PromptTemplate
-from steel_slag_slm.schemas import AxisReading, FigureReading, FigureToRead, TokenUsage
+from steel_slag_slm.schemas import FigureReading, FigureToRead, TableColumn, TokenUsage
 
 SETTINGS = FigureReadingSettings(
     model="fake-model",
@@ -58,7 +58,7 @@ def fake_reader(monkeypatch: pytest.MonkeyPatch) -> None:
         reading = FigureReading(
             figure_type="data_plot",
             summary="s",
-            y_axis=AxisReading(label="Strength", unit="MPa", min_value=0, max_value=50),
+            columns=[TableColumn(label="Strength", unit="MPa", source="y_axis")],
         )
         return reading, TokenUsage(input_tokens=1000, output_tokens=250)
 
