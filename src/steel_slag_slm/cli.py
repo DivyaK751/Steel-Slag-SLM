@@ -13,7 +13,7 @@ from google.adk.runners import Runner
 from google.cloud import bigquery
 
 from steel_slag_slm.agents.abstract_extractor import build_extractor_agent
-from steel_slag_slm.agents.figure_reader import build_figure_reader_agent
+from steel_slag_slm.agents.figure_reader import build_figure_reader_agent, figure_label
 from steel_slag_slm.agents.relevance_screener import build_screener_agent
 from steel_slag_slm.agents.runner import build_runner
 from steel_slag_slm.config import (
@@ -36,6 +36,7 @@ from steel_slag_slm.data.figure_detection import build_figure_converter
 from steel_slag_slm.data.openalex import OpenAlexClient
 from steel_slag_slm.data.paper_registry import build_bigquery_client
 from steel_slag_slm.evaluation.figure_checks import total_checks
+from steel_slag_slm.evaluation.figure_report import ReviewRow, write_review_page
 from steel_slag_slm.evaluation.retrieval_metrics import mean_scores
 from steel_slag_slm.llm.prompts import PromptTemplate, load_prompt
 from steel_slag_slm.pipelines.build_index import run_build_index
@@ -458,22 +459,38 @@ def read_figures() -> None:
 
     cost = summarize_costs(results)
     checks = total_checks([result.check for result in results if result.check])
-    print(
-        f"\nRead {cost.figures_read} figures ({cost.figures_failed} failed) "
-        f"from {cost.papers} papers with {settings.model}"
-    )
-    print(
+    lines = [
+        f"Read {cost.figures_read} figures ({cost.figures_failed} failed) "
+        f"from {cost.papers} papers with {settings.model}",
         f"Cost: total ${cost.total_usd:.4f} | per figure ${cost.mean_per_figure_usd:.4f} "
         f"(min ${cost.min_per_figure_usd:.4f}, max ${cost.max_per_figure_usd:.4f}) | "
-        f"per paper ${cost.mean_per_paper_usd:.4f}"
-    )
-    for kind, mean in sorted(cost.mean_per_type_usd.items()):
-        print(f"  {kind:<20} ${mean:.4f} per figure")
-    projected_usd = cost.mean_per_paper_usd * args.project_papers
-    print(f"Projected for {args.project_papers} papers: ${projected_usd:.2f}")
+        f"per paper ${cost.mean_per_paper_usd:.4f}",
+        *(
+            f"  {kind}: ${mean:.4f} per figure"
+            for kind, mean in sorted(cost.mean_per_type_usd.items())
+        ),
+        f"Projected for {args.project_papers} papers: "
+        f"${cost.mean_per_paper_usd * args.project_papers:.2f}",
+    ]
+    print("\n" + "\n".join(lines))
     print(
         f"Checks: {checks.labels_unsupported} of {checks.labels_checked} labels not in the PDF "
         f"text ({checks.figures_with_pdf_text} figures had text to check); "
         f"{checks.points_out_of_range} of {checks.points_checked} points outside their axes"
     )
+    rows = [
+        ReviewRow(
+            heading=f"{result.figure.paper_id} · {figure_label(result.figure)}",
+            image_path=result.figure.image_path,
+            caption=result.figure.caption,
+            reading=result.reading,
+            check=result.check,
+            cost_usd=result.cost_usd,
+            error=result.error,
+        )
+        for result in results
+    ]
+    page = settings.report_dir / f"figure_readings_{datetime.now():%Y%m%d_%H%M%S}.html"
+    write_review_page(rows, lines, checks, page)
+    print(f"Review page: {page}")
     print(f"Readings saved next to each paper's figures as readings.json in {args.figures_dir}")

@@ -143,3 +143,27 @@ How it works:
 
 Settings: the `figure_extraction:` section of `configs/base.yaml`. A figure whose caption is
 printed inside the image keeps an empty caption and no figure number.
+
+## Reading figures with Gemini (local)
+
+`read-figures` sends each figure saved by `extract-figures` to Gemini on Vertex AI and records
+what it shows: axes, series and approximate values for plots, labelled phases for XRD patterns,
+steps and conditions for process diagrams, and a short summary for photos.
+
+```bash
+gcloud auth application-default login          # once; your own Google account
+# in .env: GOOGLE_CLOUD_PROJECT, GOOGLE_CLOUD_LOCATION (see .env.example)
+uv run extract-figures data/raw/test_pdfs/
+uv run read-figures --max-papers 1             # try one paper first
+uv run read-figures                            # every paper under data/interim/figures
+```
+
+- Each paper's readings are saved next to its figures as `readings.json`.
+- Every reading is checked automatically: labels (axes, units, legends, phases, process steps)
+  must appear in the PDF's own text inside the figure, and values must lie within the axes.
+  Figures pasted in as pictures have no text, so only the value check applies to them.
+- The command prints cost per figure, per paper and per figure type, plus a projection for the
+  whole corpus, and writes a review page (figure beside its reading) to
+  `reports/figure_reading/`.
+- Model, concurrency and per-token prices: the `figure_reading:` section of
+  `configs/base.yaml`. Prompt: [prompts/read_figure.yaml](prompts/read_figure.yaml).
