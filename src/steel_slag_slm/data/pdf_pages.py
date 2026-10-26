@@ -1,4 +1,4 @@
-"""Cut a PDF down to its first pages, read their text layer, and render page regions."""
+"""Cut a PDF down to its first pages, read their text layer, and render or read regions."""
 
 import pymupdf
 
@@ -41,5 +41,21 @@ def render_regions(pdf: bytes, regions: list[tuple[int, PageBox]], dpi: int) -> 
             document[page_number - 1]
             .get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), clip=pymupdf.Rect(*bbox))
             .tobytes("png")
+            for page_number, bbox in regions
+        ]
+
+
+def region_text(pdf: bytes, regions: list[tuple[int, PageBox]]) -> list[str]:
+    """Return the text layer inside each (page number, box) region, in the order given.
+
+    Vector figures keep their axis numbers, labels and legends as real text, so this reads
+    them exactly; a figure pasted in as a picture has none and gives "".
+
+    Raises:
+        pymupdf.FileDataError: If the bytes are not a readable PDF.
+    """
+    with pymupdf.open(stream=pdf, filetype="pdf") as document:
+        return [
+            " ".join(document[page_number - 1].get_text("text", clip=pymupdf.Rect(*bbox)).split())
             for page_number, bbox in regions
         ]

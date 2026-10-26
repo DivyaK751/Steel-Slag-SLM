@@ -11,9 +11,9 @@ from docling.document_converter import DocumentConverter
 from docling.exceptions import ConversionError
 
 from steel_slag_slm.config import FigureExtractionSettings
-from steel_slag_slm.data.figure_cleanup import clean_figures
+from steel_slag_slm.data.figure_cleanup import add_inner_captions, clean_figures
 from steel_slag_slm.data.figure_detection import detect_figures
-from steel_slag_slm.data.pdf_pages import render_regions
+from steel_slag_slm.data.pdf_pages import region_text, render_regions
 from steel_slag_slm.schemas import Figure
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ def collect_pdf_paths(paths: list[Path]) -> list[Path]:
     return sorted(pdf_paths)
 
 
-def _figure_record(figure: Figure, file_name: str) -> dict[str, Any]:
+def _figure_record(figure: Figure, file_name: str, pdf_text: str) -> dict[str, Any]:
     return {
         "file": file_name,
         "figure_number": figure.figure_number,
@@ -41,6 +41,8 @@ def _figure_record(figure: Figure, file_name: str) -> dict[str, Any]:
         "bbox": [round(value, 1) for value in figure.bbox],
         "figure_type": figure.figure_type,
         "type_confidence": round(figure.type_confidence, 3),
+        # Words the PDF itself stores inside the figure, used later to check a model's reading
+        "pdf_text": pdf_text,
     }
 
 
@@ -53,16 +55,19 @@ def extract_paper_figures(
     """Write a paper's cleaned figures as PNGs plus figures.json, returning how many were kept."""
     layout = detect_figures(pdf_bytes, converter)
     figures = clean_figures(layout.figures, layout.captions, settings)
-    images = render_regions(
-        pdf_bytes, [(figure.page_number, figure.bbox) for figure in figures], settings.render_dpi
-    )
+    regions = [(figure.page_number, figure.bbox) for figure in figures]
+    images = render_regions(pdf_bytes, regions, settings.render_dpi)
+    texts = region_text(pdf_bytes, regions)
+    figures = add_inner_captions(figures, texts)
 
     paper_dir.mkdir(parents=True, exist_ok=True)
     records = []
-    for position, (figure, png) in enumerate(zip(figures, images, strict=True), start=1):
+    for position, (figure, png, text) in enumerate(
+        zip(figures, images, texts, strict=True), start=1
+    ):
         file_name = f"figure_{position:02d}.png"
         (paper_dir / file_name).write_bytes(png)
-        records.append(_figure_record(figure, file_name))
+        records.append(_figure_record(figure, file_name, text))
     (paper_dir / FIGURES_FILE_NAME).write_text(json.dumps(records, indent=2, ensure_ascii=False))
     logger.info(
         "%s: %d figure regions found, %d kept", paper_dir.name, len(layout.figures), len(figures)

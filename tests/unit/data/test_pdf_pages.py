@@ -3,7 +3,7 @@ import io
 import pymupdf
 from PIL import Image
 
-from steel_slag_slm.data.pdf_pages import first_pages, page_text, render_regions
+from steel_slag_slm.data.pdf_pages import first_pages, page_text, region_text, render_regions
 
 
 def _pdf(*page_texts: str) -> bytes:
@@ -27,3 +27,9 @@ def test_render_regions_returns_a_png_per_region_scaled_to_the_dpi() -> None:
     sizes = [Image.open(io.BytesIO(png)).size for png in pngs]
     # 144 dpi is twice the PDF's 72 points per inch
     assert sizes == [(144, 72), (288, 144)]
+
+
+def test_region_text_reads_only_the_words_inside_each_region() -> None:
+    # _pdf writes its text at (72, 72), i.e. the baseline sits one inch from the top
+    texts = region_text(_pdf("inside"), [(1, (60, 50, 200, 80)), (1, (300, 300, 400, 400))])
+    assert texts == ["inside", ""]

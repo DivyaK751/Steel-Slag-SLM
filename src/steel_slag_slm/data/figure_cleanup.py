@@ -9,6 +9,8 @@ from steel_slag_slm.schemas import CaptionBlock, Figure, PageBox
 # "Fig. 3", "Figure 3a:", "FIGURE 12." at the start of a block; "Fig. 3 shows" mid-sentence is
 # excluded by requiring the block to start with it
 _CAPTION_START = re.compile(r"^\s*(?:fig(?:ure)?\.?)\s*(\d+[a-z]?)\b", re.IGNORECASE)
+# A "Fig. N ..." caption anywhere in a figure's own text, up to the end of the text
+_INNER_CAPTION = re.compile(r"\b(fig(?:ure)?\.?\s*(\d+[a-z]?)\b.*)$", re.IGNORECASE)
 # Rounding slack when comparing edges, in PDF points
 _EDGE_TOLERANCE_PT = 2.0
 # Lower wins when a caption could belong to two figures
@@ -19,6 +21,21 @@ def parse_figure_number(text: str) -> str | None:
     """Return the figure number a caption starts with, e.g. "3a" for "Figure 3a: ...", or None."""
     match = _CAPTION_START.match(text)
     return match.group(1).lower() if match else None
+
+
+def add_inner_captions(figures: list[Figure], region_texts: list[str]) -> list[Figure]:
+    """Give uncaptioned figures the "Fig. N ..." caption printed inside their own region.
+
+    Some papers draw the caption inside the figure, where Docling labels it as figure text
+    rather than a caption. region_texts holds each figure's text layer, in the same order.
+    """
+    result = []
+    for figure, text in zip(figures, region_texts, strict=True):
+        match = None if figure.caption else _INNER_CAPTION.search(text)
+        if match:
+            figure = replace(figure, caption=match.group(1), figure_number=match.group(2).lower())
+        result.append(figure)
+    return result
 
 
 def _overlaps_horizontally(first: PageBox, second: PageBox) -> bool:

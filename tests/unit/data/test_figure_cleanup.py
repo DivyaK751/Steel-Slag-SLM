@@ -4,6 +4,7 @@ import pytest
 
 from steel_slag_slm.config import FigureExtractionSettings
 from steel_slag_slm.data.figure_cleanup import (
+    add_inner_captions,
     clean_figures,
     is_kept,
     match_captions,
@@ -135,3 +136,15 @@ def test_clean_figures_returns_split_captioned_figures_in_reading_order() -> Non
         (2, "2"),
         (2, "3"),
     ]
+
+
+def test_add_inner_captions_reads_a_caption_printed_inside_an_uncaptioned_figure() -> None:
+    uncaptioned = _figure((0, 0, 400, 300))
+    captioned = Figure(1, (0, 0, 400, 300), "bar_chart", 0.9, "Fig. 1 Strength", "1")
+    texts = ["J. Civ. Eng. 2 theta Figure 4. XRD trace of un-reacted GGBS.", "Fig. 9 ignored"]
+    result = add_inner_captions([uncaptioned, captioned], texts)
+    assert (result[0].figure_number, result[0].caption) == (
+        "4",
+        "Figure 4. XRD trace of un-reacted GGBS.",
+    )
+    assert result[1] == captioned
