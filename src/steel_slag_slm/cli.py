@@ -5,6 +5,7 @@ import asyncio
 import logging
 import os
 import subprocess
+import textwrap
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
@@ -31,7 +32,11 @@ from steel_slag_slm.config import (
     load_screening_settings,
     load_settings,
 )
-from steel_slag_slm.data.drive_storage import build_drive_service, find_subfolder_id
+from steel_slag_slm.data.drive_storage import (
+    build_drive_service,
+    find_subfolder_id,
+    list_paper_titles,
+)
 from steel_slag_slm.data.extraction_export import export_workbook
 from steel_slag_slm.data.extraction_tables import ensure_extraction_tables
 from steel_slag_slm.data.openalex import OpenAlexClient
@@ -437,19 +442,25 @@ def search_index() -> None:
     _setup_logging()
     settings = load_embedding_settings()
     kinds = cast(set[ChunkKind], set(args.kind)) if args.kind else None
+    drive_service, parsed_folder_id = _connect_to_parsed_folder()
     hits = run_search(
         settings,
-        *_connect_to_parsed_folder(),
+        drive_service,
+        parsed_folder_id,
         Embedder(settings.model),
         args.query,
         args.top_k,
         kinds,
     )
+    titles = list_paper_titles(drive_service, load_drive_connection_settings().folder_id)
     for rank, hit in enumerate(hits, start=1):
         chunk = hit.chunk
+        title = titles.get(chunk.paper_id) or "(title unknown)"
         pages = f" · pages {', '.join(str(page) for page in chunk.pages)}" if chunk.pages else ""
-        print(f"{rank}. [{hit.score:.3f}] {chunk.paper_id} · {chunk.kind} · {chunk.section}{pages}")
-        print(f"   {' '.join(chunk.text.split())[:300]}")
+        print(f"{rank}. [{hit.score:.3f}] {chunk.paper_id} · {title}")
+        print(f"   {chunk.kind} · {chunk.section}{pages}")
+        print(textwrap.fill(chunk.text, width=100, initial_indent="   ", subsequent_indent="   "))
+        print()
 
 
 def evaluate_retrieval() -> None:
