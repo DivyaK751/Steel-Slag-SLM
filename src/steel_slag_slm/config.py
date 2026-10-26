@@ -118,6 +118,13 @@ class GcpSettings(BaseModel):
     credentials_file: Path | None = None
 
 
+class ModelPrices(BaseModel):
+    """What one million tokens cost, to estimate the price of a run."""
+
+    input_usd_per_million: float
+    output_usd_per_million: float
+
+
 class AgentSettings(BaseModel):
     """Model settings shared by every agent: the `llm:` defaults plus the agent's overrides."""
 

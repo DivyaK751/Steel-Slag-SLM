@@ -2,7 +2,7 @@
 
 import asyncio
 from collections.abc import Awaitable, Callable, Sequence
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from google.adk.agents import LlmAgent
 from google.adk.runners import InMemoryRunner, Runner
@@ -11,6 +11,7 @@ from pydantic import BaseModel, ValidationError
 
 from steel_slag_slm.config import AgentSettings
 from steel_slag_slm.exceptions import AgentOutputError
+from steel_slag_slm.schemas import TokenUsage
 
 APP_NAME = "steel_slag_slm"
 USER_ID = "pipeline"
@@ -59,14 +60,31 @@ async def run_structured(
     Raises:
         AgentOutputError: If the agent gives no final answer or it doesn't match the schema.
     """
+    answer, _ = await run_structured_with_usage(runner, message, schema, attachments)
+    return answer
+
+
+async def run_structured_with_usage(
+    runner: Runner,
+    message: str,
+    schema: type[SchemaT],
+    attachments: Sequence[types.Part] = (),
+) -> tuple[SchemaT, TokenUsage]:
+    """Like run_structured, but also return the tokens the call used, for cost tracking.
+
+    Raises:
+        AgentOutputError: If the agent gives no final answer or it doesn't match the schema.
+    """
     # A new session per item, so one paper's context can never leak into the next
     session = await runner.session_service.create_session(app_name=APP_NAME, user_id=USER_ID)
     content = types.Content(role="user", parts=[types.Part(text=message), *attachments])
     final_text = ""
+    usage = TokenUsage()
     try:
         async for event in runner.run_async(
             user_id=USER_ID, session_id=session.id, new_message=content
         ):
+            usage += _event_usage(event)
             if event.is_final_response() and event.content and event.content.parts:
                 final_text = "".join(part.text or "" for part in event.content.parts)
     finally:
@@ -76,9 +94,21 @@ async def run_structured(
     if not final_text.strip():
         raise AgentOutputError("Agent returned no final answer")
     try:
-        return schema.model_validate_json(final_text)
+        return schema.model_validate_json(final_text), usage
     except ValidationError as error:
         raise AgentOutputError(f"Answer doesn't match {schema.__name__}: {error}") from error
+
+
+def _event_usage(event: Any) -> TokenUsage:
+    """Token counts on one ADK event; events that didn't call the model report none."""
+    metadata = getattr(event, "usage_metadata", None)
+    if metadata is None:
+        return TokenUsage()
+    return TokenUsage(
+        input_tokens=metadata.prompt_token_count or 0,
+        output_tokens=metadata.candidates_token_count or 0,
+        thinking_tokens=metadata.thoughts_token_count or 0,
+    )
 
 
 async def gather_bounded(

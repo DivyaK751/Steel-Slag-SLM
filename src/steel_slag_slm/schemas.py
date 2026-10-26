@@ -88,6 +88,22 @@ class ParsedPaper:
     content_blocks: tuple[ParsedContentBlock, ...] = ()
 
 
+@dataclass(frozen=True, slots=True)
+class TokenUsage:
+    """Tokens one or more model calls used, as reported by the provider."""
+
+    input_tokens: int = 0  # prompt text plus attachments such as images
+    output_tokens: int = 0  # the answer itself
+    thinking_tokens: int = 0  # reasoning the model did before answering
+
+    def __add__(self, other: "TokenUsage") -> "TokenUsage":
+        return TokenUsage(
+            self.input_tokens + other.input_tokens,
+            self.output_tokens + other.output_tokens,
+            self.thinking_tokens + other.thinking_tokens,
+        )
+
+
 # x0, y0, x1, y1 in PDF points, measured from the page's top-left corner
 PageBox = tuple[float, float, float, float]
 
