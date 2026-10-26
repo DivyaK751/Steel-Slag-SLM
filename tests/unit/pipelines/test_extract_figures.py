@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from typing import Any
 
 import pymupdf
 import pytest
@@ -8,6 +9,9 @@ import steel_slag_slm.pipelines.extract_figures as extract_figures
 from steel_slag_slm.config import FigureExtractionSettings
 from steel_slag_slm.data.figure_detection import DetectedLayout
 from steel_slag_slm.schemas import CaptionBlock, Figure
+
+# detect_figures is faked, so the Docling converter is never used
+UNUSED_CONVERTER: Any = None
 
 SETTINGS = FigureExtractionSettings(
     output_dir=Path("unused"),
@@ -50,7 +54,9 @@ def test_collect_pdf_paths_expands_folders_and_skips_other_files(tmp_path: Path)
 
 @pytest.mark.usefixtures("fake_layout")
 def test_extract_paper_figures_writes_kept_figures_and_their_metadata(tmp_path: Path) -> None:
-    kept = extract_figures.extract_paper_figures(_pdf(), tmp_path / "W1", None, SETTINGS)  # type: ignore[arg-type]
+    kept = extract_figures.extract_paper_figures(
+        _pdf(), tmp_path / "W1", UNUSED_CONVERTER, SETTINGS
+    )
     records = json.loads((tmp_path / "W1" / "figures.json").read_text())
     assert kept == 1
     assert records[0]["figure_number"] == "1"
@@ -66,7 +72,23 @@ def test_run_figure_extraction_continues_past_an_unreadable_pdf(tmp_path: Path) 
     outcomes = extract_figures.run_figure_extraction(
         [good, bad],
         tmp_path / "out",
-        None,  # type: ignore[arg-type]
+        UNUSED_CONVERTER,
         SETTINGS,
     )
     assert outcomes == {"papers_done": 1, "papers_failed": 1, "figures_kept": 1}
+
+
+@pytest.mark.usefixtures("fake_layout")
+def test_extract_paper_figures_writes_an_annotated_pdf_and_clears_old_output(
+    tmp_path: Path,
+) -> None:
+    paper_dir = tmp_path / "W1"
+    paper_dir.mkdir()
+    (paper_dir / "figure_07.png").write_bytes(b"left over from an earlier run")
+    extract_figures.extract_paper_figures(_pdf(), paper_dir, UNUSED_CONVERTER, SETTINGS)
+    assert not (paper_dir / "figure_07.png").exists()
+    annotated = (paper_dir / "annotated.pdf").read_bytes()
+    with pymupdf.open(stream=annotated, filetype="pdf") as document:
+        page_text = document[0].get_text()
+    assert "Fig. 1 · line_chart" in page_text  # the kept figure
+    assert "logo" in page_text and "caption" in page_text  # everything Docling found

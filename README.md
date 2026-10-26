@@ -130,8 +130,14 @@ uv run extract-figures path/to/pdf_folder/          # every PDF in a folder
 uv run extract-figures papers/ --out-dir /tmp/figs  # somewhere other than data/interim/figures
 ```
 
-Each paper gets a folder named after its PDF, with `figure_01.png`, `figure_02.png`, ... and a
-`figures.json` listing each figure's number, caption, page, position and type.
+Each paper gets a folder named after its PDF, emptied first on every run so it only holds that
+run's output:
+
+- `figure_01.png`, `figure_02.png`, ...: the figures.
+- `figures.json`: each figure's number, caption, page, position, type and PDF text.
+- `annotated.pdf`: the paper with boxes drawn on it: thin red for every region Docling
+  detected (with its type), blue for caption blocks, thick green for the figures kept
+  ("Fig. N · type"). Open it to see what was found, merged or missed.
 
 How it works:
 
