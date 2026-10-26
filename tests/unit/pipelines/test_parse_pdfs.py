@@ -291,6 +291,49 @@ def test_run_pdf_parsing_limits_papers_and_counts_deferred(monkeypatch) -> None:
     assert parsed_ids == ["%PDF"]
 
 
+def test_run_pdf_parsing_parses_only_the_requested_papers(monkeypatch) -> None:
+    sources = [PdfSource(f"W{number}", f"SOURCE{number}") for number in (123, 124, 125)]
+    parsed = ParsedDocument(
+        text_parser="Docling",
+        image_parser="PyMuPDF",
+        page_count=1,
+        markdown="# Sample",
+        tables=(),
+        images=(),
+    )
+    downloaded: list[str] = []
+
+    monkeypatch.setattr(pdf_parsing_source, "list_pdf_sources", lambda *_: sources)
+    monkeypatch.setattr(
+        drive_storage,
+        "ensure_subfolder",
+        lambda _service, parent_id, name: f"{parent_id}/{name}",
+    )
+    monkeypatch.setattr(drive_storage, "read_text_file", lambda *_: "")
+    monkeypatch.setattr(drive_storage, "drive_file_id_from_link", lambda link: link)
+
+    def fake_download_pdf(_service: object, file_id: str) -> bytes:
+        downloaded.append(file_id)
+        return b"%PDF"
+
+    monkeypatch.setattr(drive_storage, "download_pdf", fake_download_pdf)
+    monkeypatch.setattr(pdf_parsing, "build_docling_converter", lambda: object())
+    monkeypatch.setattr(pdf_parsing, "parse_pdf", lambda *_: parsed)
+    monkeypatch.setattr(drive_storage, "write_file", lambda _s, _f, name, *_: name)
+
+    outcomes = parse_pdfs.run_pdf_parsing(
+        _settings(),
+        MagicMock(),
+        MagicMock(),
+        "source-folder",
+        paper_ids=["W124", "W999"],
+    )
+
+    assert downloaded == ["SOURCE124"]
+    assert outcomes["parsed"] == 1
+    assert outcomes["not_in_source_table"] == 1
+
+
 def test_run_pdf_parsing_rejects_non_positive_limit() -> None:
     with pytest.raises(ValueError, match="max_papers must be greater than zero"):
         parse_pdfs.run_pdf_parsing(

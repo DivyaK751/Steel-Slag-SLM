@@ -7,21 +7,25 @@ import os
 import subprocess
 import textwrap
 from datetime import datetime
+from pathlib import Path
 from typing import Any, cast
 
 from google.adk.runners import Runner
 from google.cloud import bigquery
 
 from steel_slag_slm.agents.abstract_extractor import build_extractor_agent
+from steel_slag_slm.agents.data_extractor import build_data_extractor_agent
 from steel_slag_slm.agents.relevance_screener import build_screener_agent
 from steel_slag_slm.agents.runner import build_runner
 from steel_slag_slm.config import (
     ScreeningSettings,
     Settings,
     load_abstract_extraction_settings,
+    load_data_extraction_settings,
     load_drive_connection_settings,
     load_embedding_settings,
     load_evaluation_settings,
+    load_extraction_tables_settings,
     load_gcp_settings,
     load_pdf_parsing_settings,
     load_retrieval_eval_set,
@@ -33,6 +37,8 @@ from steel_slag_slm.data.drive_storage import (
     find_subfolder_id,
     list_paper_titles,
 )
+from steel_slag_slm.data.extraction_export import export_workbook
+from steel_slag_slm.data.extraction_tables import ensure_extraction_tables
 from steel_slag_slm.data.openalex import OpenAlexClient
 from steel_slag_slm.data.paper_registry import build_bigquery_client
 from steel_slag_slm.evaluation.retrieval_metrics import mean_scores
@@ -40,6 +46,7 @@ from steel_slag_slm.llm.prompts import PromptTemplate, load_prompt
 from steel_slag_slm.pipelines.build_index import run_build_index
 from steel_slag_slm.pipelines.evaluate_retrieval import run_retrieval_eval
 from steel_slag_slm.pipelines.evaluate_screening import run_evaluation
+from steel_slag_slm.pipelines.extract_data import run_data_extraction
 from steel_slag_slm.pipelines.fetch_papers import run_fetch
 from steel_slag_slm.pipelines.fill_abstracts import run_fill_abstracts
 from steel_slag_slm.pipelines.parse_pdfs import run_pdf_parsing
@@ -153,6 +160,39 @@ def sync_registry() -> None:
     _print_remaining_budget(client)
 
 
+def create_extraction_tables() -> None:
+    """Create the BigQuery tables (one per input-workbook sheet) for extracted paper data."""
+    argparse.ArgumentParser(description=create_extraction_tables.__doc__).parse_args()
+    _setup_logging()
+    gcp = load_gcp_settings()
+    client = build_bigquery_client(gcp.project, gcp.credentials_file)
+    for table_id in ensure_extraction_tables(client, load_extraction_tables_settings()):
+        print("Ready:", table_id)
+
+
+def export_extraction() -> None:
+    """Export the nine extraction tables from BigQuery to one Excel workbook."""
+    parser = argparse.ArgumentParser(description=export_extraction.__doc__)
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="where to save the .xlsx (default: a timestamped file in reports/extraction/)",
+    )
+    args = parser.parse_args()
+    _setup_logging()
+    gcp = load_gcp_settings()
+    settings = load_extraction_tables_settings()
+    client = build_bigquery_client(gcp.project, gcp.credentials_file)
+    output = args.output or (
+        settings.export_dir / f"steel_slag_extraction_{datetime.now():%Y%m%d_%H%M%S}.xlsx"
+    )
+    row_counts = export_workbook(client, f"{client.project}.{settings.dataset}", output)
+    for table, count in row_counts.items():
+        print(f"{table:32} {count} rows")
+    print("Saved:", output)
+
+
 def screen_papers() -> None:
     """Fill the relevance columns of unscreened papers in BigQuery using Gemini."""
     parser = argparse.ArgumentParser(description=screen_papers.__doc__)
@@ -206,6 +246,12 @@ def parse_pdfs() -> None:
         default=None,
         help="stop after parsing this many unindexed papers (default: all)",
     )
+    parser.add_argument(
+        "--paper-ids",
+        nargs="+",
+        default=None,
+        help="parse only these OpenAlex IDs from the source table (default: every paper)",
+    )
     args = parser.parse_args()
     if args.max_papers is not None and args.max_papers <= 0:
         parser.error("--max-papers must be greater than zero")
@@ -230,6 +276,7 @@ def parse_pdfs() -> None:
         drive_service,
         drive_settings.folder_id,
         args.max_papers,
+        args.paper_ids,
     )
     print("Summary:", dict(outcomes))
 
@@ -295,6 +342,51 @@ def _connect_to_parsed_folder() -> tuple[Any, str]:
     if parsed_folder_id is None:
         raise SystemExit("No _parsed folder in DRIVE_FOLDER_ID yet; run parse-pdfs first")
     return drive_service, parsed_folder_id
+
+
+def extract_data() -> None:
+    """Extract workbook data values from parsed papers into the BigQuery sheet tables."""
+    parser = argparse.ArgumentParser(description=extract_data.__doc__)
+    parser.add_argument(
+        "--paper-ids",
+        nargs="+",
+        default=None,
+        help="OpenAlex IDs to (re-)extract (default: every parsed paper not extracted yet)",
+    )
+    parser.add_argument(
+        "--max-papers",
+        type=int,
+        default=None,
+        help="stop after this many papers (default: no limit)",
+    )
+    args = parser.parse_args()
+    if args.max_papers is not None and args.max_papers <= 0:
+        parser.error("--max-papers must be greater than zero")
+    _setup_logging()
+    _quiet_gemini_logs()
+
+    gcp = load_gcp_settings()
+    settings = load_data_extraction_settings()
+    drive_service, parsed_folder_id = _connect_to_parsed_folder()
+    if gcp.credentials_file:
+        # Set only after Drive signs in, as in fill-abstracts: Gemini uses ADC
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(gcp.credentials_file)
+    prompt = load_prompt(settings.prompt_name)
+    runner = build_runner(build_data_extractor_agent(settings, prompt))
+    outcomes = asyncio.run(
+        run_data_extraction(
+            settings,
+            load_pdf_parsing_settings(),
+            build_bigquery_client(gcp.project, gcp.credentials_file),
+            drive_service,
+            parsed_folder_id,
+            runner,
+            prompt,
+            args.paper_ids,
+            args.max_papers,
+        )
+    )
+    print("Summary:", dict(outcomes))
 
 
 def build_index() -> None:

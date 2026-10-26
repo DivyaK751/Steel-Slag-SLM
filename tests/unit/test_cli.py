@@ -38,5 +38,6 @@ def test_parse_pdfs_builds_clients_and_runs_pipeline(monkeypatch, capsys) -> Non
         "drive-client",
         "source-folder",
         1,
+        None,
     )
     assert capsys.readouterr().out == "Summary: {'parsed': 2}\n"

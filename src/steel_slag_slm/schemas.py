@@ -157,3 +157,84 @@ class ExtractedAbstract(BaseModel):
     abstract: str | None = None
     heading: str | None = None  # e.g. "Abstract" or "Summary", as printed
     language: str | None = None  # ISO 639-1 code of the abstract text
+
+
+# Controlled vocabulary of the CNS input workbook ("10 Controlled Vocab" sheet)
+SteelSlagType = Literal[
+    "EAF", "BOF", "Ladle", "Stainless Steel", "Electric Arc Furnace Dust-derived",
+    "Other Steel Slag",
+]  # fmt: skip
+PublicationType = Literal[
+    "Journal Article", "Conference Paper", "Thesis/Dissertation", "Patent", "Government Report",
+    "Technical Report", "Dataset", "Standard", "Other",
+]  # fmt: skip
+ExtractionConfidence = Literal["High", "Medium", "Low"]
+# The workbook sheets that hold experimental data (sheet 1 is per paper, sheet 9 is provenance)
+DataSheet = Literal[
+    "sheet_02_feedstock_chemistry", "sheet_03_processing", "sheet_04_particle_size",
+    "sheet_05_activation", "sheet_06_concrete_performance", "sheet_07_durability",
+    "sheet_08_carbon_uptake",
+]  # fmt: skip
+
+
+@dataclass(frozen=True, slots=True)
+class PaperCitation:
+    """Bibliographic fields of a paper, taken from the registry rather than the model."""
+
+    title: str | None
+    authors: tuple[str, ...]
+    year: int | None
+    doi: str | None
+
+
+class ExtractedLiterature(BaseModel):
+    """Paper-level fields of the Scientific Literature sheet that come from the paper's text."""
+
+    publication_type: PublicationType | None
+    journal_or_source: str | None
+    country_or_region: str | None
+    study_objective: str | None
+    abstract_or_key_finding: str | None
+    full_text_access: Literal["Open", "Abstract Only", "Restricted", "Unknown"] | None
+    relevant_to_scm: Literal["Yes", "No", "Unclear"]
+    notes: str | None
+
+
+class ExtractedMaterial(BaseModel):
+    """One distinct steel slag in the paper; every fact about it carries its material_id."""
+
+    material_id: str  # MAT-0001, MAT-0002, ... within this paper
+    steel_slag_type: SteelSlagType
+    description: str
+
+
+class ExtractedFact(BaseModel):
+    """One value the paper reports, destined for one column of one data sheet."""
+
+    sheet: DataSheet
+    field: str  # workbook column header, e.g. "CaO_pct"
+    value: str  # in the column's unit, e.g. "20" for a reported 0.20 mass fraction
+    reported_value: str  # exactly as printed, with its unit
+    material_id: str
+    experiment_id: str | None
+    mix_id: str | None
+    location: str  # page, table or figure
+    excerpt: str
+    confidence: ExtractionConfidence
+
+
+class PaperExtraction(BaseModel):
+    """Gemini's answer when asked for every workbook value one paper reports."""
+
+    literature: ExtractedLiterature
+    materials: list[ExtractedMaterial]
+    facts: list[ExtractedFact]
+
+
+@dataclass(frozen=True, slots=True)
+class TokenUsage:
+    """Tokens one Gemini call used, as Vertex bills them."""
+
+    input_tokens: int
+    cached_tokens: int  # part of input_tokens, billed at the lower cached rate
+    output_tokens: int  # includes thinking tokens, which are billed as output

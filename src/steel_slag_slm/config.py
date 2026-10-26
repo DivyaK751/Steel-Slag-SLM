@@ -65,6 +65,14 @@ class RegistrySettings(BaseModel):
     location: str
 
 
+class ExtractionTablesSettings(BaseModel):
+    """Where the tables holding data extracted from papers (one per workbook sheet) live."""
+
+    dataset: str
+    location: str
+    export_dir: Path  # where export-extraction saves its workbooks
+
+
 class PdfParsingSettings(BaseModel):
     """Where PDF parsing reads paper rows and stores its Drive outputs."""
 
@@ -142,6 +150,26 @@ class AbstractExtractionSettings(AgentSettings):
     batch_size: int
     max_concurrency: int
     call_timeout_s: float
+    papers_table: str  # fully qualified: project.dataset.table
+
+
+class TokenPrices(BaseModel):
+    """List prices of one Gemini model, in US$ per million tokens."""
+
+    input: float
+    cached_input: float
+    output: float  # thinking tokens are billed at this rate too
+
+
+class DataExtractionSettings(AgentSettings):
+    """How the data-extraction agent reads parsed papers and fills the sheet tables."""
+
+    prompt_name: str
+    max_concurrency: int
+    call_timeout_s: float
+    dataset: str  # holds one table per workbook sheet, in GOOGLE_CLOUD_PROJECT
+    prices: TokenPrices  # of `model`; used only to report what each paper cost
+    bigquery_usd_per_tib: float
     papers_table: str  # fully qualified: project.dataset.table
 
 
@@ -261,6 +289,17 @@ def load_abstract_extraction_settings(
     )
 
 
+def load_data_extraction_settings(
+    config_path: Path = BASE_CONFIG_PATH,
+) -> DataExtractionSettings:
+    """Build the data-extraction agent's settings; needs no OpenAlex secrets."""
+    raw_config = _read_base_config(config_path)
+    return DataExtractionSettings(
+        **_agent_section(raw_config, "data_extraction"),
+        papers_table=_papers_table(raw_config),
+    )
+
+
 def load_evaluation_settings(
     papers_table: str, config_path: Path = BASE_CONFIG_PATH
 ) -> EvaluationSettings:
@@ -279,6 +318,18 @@ def load_pdf_parsing_settings(
     """Build PDF-parsing settings from the YAML config."""
     raw_config = _read_base_config(config_path)
     return PdfParsingSettings(**raw_config["pdf_parsing"])
+
+
+def load_extraction_tables_settings(
+    config_path: Path = BASE_CONFIG_PATH,
+) -> ExtractionTablesSettings:
+    """Build the extraction tables' location from the YAML config."""
+    raw_config = _read_base_config(config_path)["data_extraction"]
+    return ExtractionTablesSettings(
+        dataset=raw_config["dataset"],
+        location=raw_config["location"],
+        export_dir=PROJECT_ROOT / raw_config["export_dir"],
+    )
 
 
 def load_drive_connection_settings() -> DriveConnectionSettings:
