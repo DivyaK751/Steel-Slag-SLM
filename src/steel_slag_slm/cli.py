@@ -37,6 +37,7 @@ from steel_slag_slm.data.openalex import OpenAlexClient
 from steel_slag_slm.data.paper_registry import build_bigquery_client
 from steel_slag_slm.evaluation.figure_checks import total_checks
 from steel_slag_slm.evaluation.retrieval_metrics import mean_scores
+from steel_slag_slm.exceptions import PapersNotFoundError
 from steel_slag_slm.llm.prompts import PromptTemplate, load_prompt
 from steel_slag_slm.pipelines.build_index import run_build_index
 from steel_slag_slm.pipelines.evaluate_retrieval import run_retrieval_eval
@@ -44,6 +45,7 @@ from steel_slag_slm.pipelines.evaluate_screening import run_evaluation
 from steel_slag_slm.pipelines.extract_figures import collect_pdf_paths, run_figure_extraction
 from steel_slag_slm.pipelines.fetch_papers import run_fetch
 from steel_slag_slm.pipelines.fill_abstracts import run_fill_abstracts
+from steel_slag_slm.pipelines.paper_selection import select_papers
 from steel_slag_slm.pipelines.parse_pdfs import run_pdf_parsing
 from steel_slag_slm.pipelines.read_figures import (
     list_paper_dirs,
@@ -408,13 +410,22 @@ def extract_figures() -> None:
     parser = argparse.ArgumentParser(description=extract_figures.__doc__)
     parser.add_argument("paths", nargs="+", type=Path, help="PDF files or folders of PDFs")
     parser.add_argument(
+        "--paper-ids",
+        nargs="+",
+        default=None,
+        help="only these papers, by OpenAlex ID (PDFs named e.g. W2114885577.pdf)",
+    )
+    parser.add_argument(
         "--out-dir",
         type=Path,
         default=settings.output_dir,
         help=f"where each paper's folder is written (default: {settings.output_dir})",
     )
     args = parser.parse_args()
-    pdf_paths = collect_pdf_paths(args.paths)
+    try:
+        pdf_paths = select_papers(collect_pdf_paths(args.paths), args.paper_ids)
+    except PapersNotFoundError as error:
+        parser.error(str(error))
     if not pdf_paths:
         parser.error("no PDF files found in the given paths")
 
@@ -435,6 +446,12 @@ def read_figures() -> None:
         help=f"folder written by extract-figures (default: {extraction.output_dir})",
     )
     parser.add_argument(
+        "--paper-ids",
+        nargs="+",
+        default=None,
+        help="only these papers, by OpenAlex ID (default: every extracted paper)",
+    )
+    parser.add_argument(
         "--max-papers", type=int, default=None, help="read only this many papers (default: all)"
     )
     parser.add_argument(
@@ -444,7 +461,10 @@ def read_figures() -> None:
         help="number of papers to project the full-corpus cost for (default: 2000)",
     )
     args = parser.parse_args()
-    paper_dirs = list_paper_dirs(args.figures_dir, args.max_papers)
+    try:
+        paper_dirs = list_paper_dirs(args.figures_dir, args.max_papers, args.paper_ids)
+    except PapersNotFoundError as error:
+        parser.error(f"{error}; run extract-figures on them first")
     if not paper_dirs:
         parser.error(f"no figures.json found under {args.figures_dir}; run extract-figures first")
 

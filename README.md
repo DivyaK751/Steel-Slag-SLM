@@ -158,6 +158,13 @@ uv run read-figures --max-papers 1             # try one paper first
 uv run read-figures                            # every paper under data/interim/figures
 ```
 
+Both commands take `--paper-ids` to work on chosen papers only:
+
+```bash
+uv run extract-figures data/raw/test_pdfs/ --paper-ids W2114885577 W2170257698
+uv run read-figures --paper-ids W2114885577 W2170257698
+```
+
 - Each figure's reading is saved beside its image, so the two can be compared side by side:
 
   ```

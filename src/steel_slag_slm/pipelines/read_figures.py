@@ -22,6 +22,7 @@ from steel_slag_slm.evaluation.figure_checks import (
 from steel_slag_slm.exceptions import AgentOutputError
 from steel_slag_slm.llm.costs import estimate_cost_usd
 from steel_slag_slm.llm.prompts import PromptTemplate
+from steel_slag_slm.pipelines.paper_selection import select_papers
 from steel_slag_slm.schemas import FigureReading, FigureToRead, TokenUsage
 
 logger = logging.getLogger(__name__)
@@ -58,9 +59,16 @@ class CostSummary:
     mean_per_type_usd: dict[str, float]  # keyed by the type Gemini gave the figure
 
 
-def list_paper_dirs(figures_dir: Path, max_papers: int | None) -> list[Path]:
-    """Paper folders written by extract-figures, in name order, at most max_papers of them."""
+def list_paper_dirs(
+    figures_dir: Path, max_papers: int | None, paper_ids: list[str] | None = None
+) -> list[Path]:
+    """Paper folders written by extract-figures, in name order, at most max_papers of them.
+
+    Raises:
+        PapersNotFoundError: If paper_ids names a paper with no figures folder.
+    """
     paper_dirs = sorted(path.parent for path in figures_dir.glob(f"*/{FIGURES_FILE_NAME}"))
+    paper_dirs = select_papers(paper_dirs, paper_ids)
     return paper_dirs[:max_papers] if max_papers is not None else paper_dirs
 
 

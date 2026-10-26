@@ -69,6 +69,7 @@ def test_list_paper_dirs_finds_extracted_papers_in_order(tmp_path: Path) -> None
         _write_paper(tmp_path, paper_id, ["1"])
     (tmp_path / "not_a_paper").mkdir()
     assert [path.name for path in read_figures.list_paper_dirs(tmp_path, 2)] == ["W1", "W2"]
+    assert [path.name for path in read_figures.list_paper_dirs(tmp_path, None, ["W3"])] == ["W3"]
 
 
 @pytest.mark.usefixtures("fake_reader")
