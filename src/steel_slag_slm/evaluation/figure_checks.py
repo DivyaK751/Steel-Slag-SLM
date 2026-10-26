@@ -87,3 +87,25 @@ def check_reading(reading: FigureReading, pdf_text: str) -> FigureCheck:
         points_checked=points_checked,
         points_out_of_range=points_out_of_range,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class CheckTotals:
+    """Automatic checks summed over a run."""
+
+    figures_with_pdf_text: int
+    labels_checked: int
+    labels_unsupported: int
+    points_checked: int
+    points_out_of_range: int
+
+
+def total_checks(checks: list[FigureCheck]) -> CheckTotals:
+    """Add up the automatic checks of many readings."""
+    return CheckTotals(
+        figures_with_pdf_text=sum(check.has_pdf_text for check in checks),
+        labels_checked=sum(check.labels_checked for check in checks),
+        labels_unsupported=sum(len(check.unsupported_labels) for check in checks),
+        points_checked=sum(check.points_checked for check in checks),
+        points_out_of_range=sum(check.points_out_of_range for check in checks),
+    )

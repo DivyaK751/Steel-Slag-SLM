@@ -13,6 +13,7 @@ from google.adk.runners import Runner
 from google.cloud import bigquery
 
 from steel_slag_slm.agents.abstract_extractor import build_extractor_agent
+from steel_slag_slm.agents.figure_reader import build_figure_reader_agent
 from steel_slag_slm.agents.relevance_screener import build_screener_agent
 from steel_slag_slm.agents.runner import build_runner
 from steel_slag_slm.config import (
@@ -23,6 +24,7 @@ from steel_slag_slm.config import (
     load_embedding_settings,
     load_evaluation_settings,
     load_figure_extraction_settings,
+    load_figure_reading_settings,
     load_gcp_settings,
     load_pdf_parsing_settings,
     load_retrieval_eval_set,
@@ -33,6 +35,7 @@ from steel_slag_slm.data.drive_storage import build_drive_service, find_subfolde
 from steel_slag_slm.data.figure_detection import build_figure_converter
 from steel_slag_slm.data.openalex import OpenAlexClient
 from steel_slag_slm.data.paper_registry import build_bigquery_client
+from steel_slag_slm.evaluation.figure_checks import total_checks
 from steel_slag_slm.evaluation.retrieval_metrics import mean_scores
 from steel_slag_slm.llm.prompts import PromptTemplate, load_prompt
 from steel_slag_slm.pipelines.build_index import run_build_index
@@ -42,6 +45,11 @@ from steel_slag_slm.pipelines.extract_figures import collect_pdf_paths, run_figu
 from steel_slag_slm.pipelines.fetch_papers import run_fetch
 from steel_slag_slm.pipelines.fill_abstracts import run_fill_abstracts
 from steel_slag_slm.pipelines.parse_pdfs import run_pdf_parsing
+from steel_slag_slm.pipelines.read_figures import (
+    list_paper_dirs,
+    run_figure_reading,
+    summarize_costs,
+)
 from steel_slag_slm.pipelines.screen_papers import run_screening
 from steel_slag_slm.pipelines.search_index import run_search
 from steel_slag_slm.pipelines.sync_registry import run_registry_sync
@@ -414,3 +422,58 @@ def extract_figures() -> None:
     outcomes = run_figure_extraction(pdf_paths, args.out_dir, build_figure_converter(), settings)
     print("Summary:", dict(outcomes))
     print(f"Figures written to {args.out_dir}")
+
+
+def read_figures() -> None:
+    """Read extracted figures with Gemini, check each reading, and report what it cost."""
+    extraction = load_figure_extraction_settings()
+    parser = argparse.ArgumentParser(description=read_figures.__doc__)
+    parser.add_argument(
+        "--figures-dir",
+        type=Path,
+        default=extraction.output_dir,
+        help=f"folder written by extract-figures (default: {extraction.output_dir})",
+    )
+    parser.add_argument(
+        "--max-papers", type=int, default=None, help="read only this many papers (default: all)"
+    )
+    parser.add_argument(
+        "--project-papers",
+        type=int,
+        default=2000,
+        help="number of papers to project the full-corpus cost for (default: 2000)",
+    )
+    args = parser.parse_args()
+    paper_dirs = list_paper_dirs(args.figures_dir, args.max_papers)
+    if not paper_dirs:
+        parser.error(f"no figures.json found under {args.figures_dir}; run extract-figures first")
+
+    _setup_logging()
+    _quiet_gemini_logs()
+    load_gcp_settings()  # checks GOOGLE_CLOUD_PROJECT / GOOGLE_CLOUD_LOCATION, selects Vertex AI
+    settings = load_figure_reading_settings()
+    prompt = load_prompt(settings.prompt_name)
+    runner = build_runner(build_figure_reader_agent(settings, prompt))
+    results = asyncio.run(run_figure_reading(paper_dirs, runner, prompt, settings))
+
+    cost = summarize_costs(results)
+    checks = total_checks([result.check for result in results if result.check])
+    print(
+        f"\nRead {cost.figures_read} figures ({cost.figures_failed} failed) "
+        f"from {cost.papers} papers with {settings.model}"
+    )
+    print(
+        f"Cost: total ${cost.total_usd:.4f} | per figure ${cost.mean_per_figure_usd:.4f} "
+        f"(min ${cost.min_per_figure_usd:.4f}, max ${cost.max_per_figure_usd:.4f}) | "
+        f"per paper ${cost.mean_per_paper_usd:.4f}"
+    )
+    for kind, mean in sorted(cost.mean_per_type_usd.items()):
+        print(f"  {kind:<20} ${mean:.4f} per figure")
+    projected_usd = cost.mean_per_paper_usd * args.project_papers
+    print(f"Projected for {args.project_papers} papers: ${projected_usd:.2f}")
+    print(
+        f"Checks: {checks.labels_unsupported} of {checks.labels_checked} labels not in the PDF "
+        f"text ({checks.figures_with_pdf_text} figures had text to check); "
+        f"{checks.points_out_of_range} of {checks.points_checked} points outside their axes"
+    )
+    print(f"Readings saved next to each paper's figures as readings.json in {args.figures_dir}")
