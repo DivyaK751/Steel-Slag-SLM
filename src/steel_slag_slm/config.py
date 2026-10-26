@@ -130,6 +130,9 @@ class AgentSettings(BaseModel):
 
     model: str
     temperature: float
+    # Gemini's reasoning depth (minimal, low, medium, high); None keeps the model's default.
+    # Thinking tokens are billed as output, so lower levels cut cost on simple tasks
+    thinking_level: Literal["minimal", "low", "medium", "high"] | None = None
 
 
 class ScreeningSettings(AgentSettings):

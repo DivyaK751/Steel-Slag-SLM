@@ -81,7 +81,7 @@ def test_run_figure_reading_saves_readings_and_reports_failed_figures(tmp_path: 
         )
     )
     saved = json.loads((paper_dir / "readings.json").read_text())
-    assert [record["error"] is None for record in saved] == [True, False]
+    assert [record["error"] for record in saved] == [None, "AgentOutputError: malformed"]
     assert saved[0]["reading"]["figure_type"] == "data_plot"
     assert saved[0]["cost_usd"] == pytest.approx((1000 * 1.0 + 250 * 4.0) / 1_000_000)
     assert total_checks([r.check for r in results if r.check]).labels_unsupported == 0

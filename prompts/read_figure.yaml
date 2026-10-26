@@ -1,5 +1,5 @@
 name: read_figure
-version: 2
+version: 3
 description: Read one figure from a steel slag paper into structured data (plots, diagrams, photos).
 variables: [paper_id, figure_label, caption, pdf_text]
 
@@ -42,8 +42,9 @@ instruction: |
       values as axis_min and axis_max.
     - rows: one row per value, one cell per column, written as text exactly as printed
       for categories and as the number read for values (e.g. ["30G", "180-Day", "10.3"]).
-      Bars and markers: one row each. Continuous lines without markers: only the values at
-      the labelled x ticks the line spans.
+      Bars and markers: one row each. Continuous lines without markers: one row per labelled
+      x tick the line spans, and no others (e.g. a log axis labelled 1, 10, 100, 1000 gives
+      at most 4 rows per line).
   - xrd_pattern: columns for the two axes (no rows), and every phase labelled on the
     pattern in phases.
   - process_diagram: steps for each box or stage (ids s1, s2, ... in reading order; label

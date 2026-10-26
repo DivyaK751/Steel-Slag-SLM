@@ -35,6 +35,13 @@ def build_structured_agent(
         output_schema=output_schema,
         generate_content_config=types.GenerateContentConfig(
             temperature=settings.temperature,
+            thinking_config=(
+                types.ThinkingConfig(
+                    thinking_level=types.ThinkingLevel(settings.thinking_level.upper())
+                )
+                if settings.thinking_level
+                else None
+            ),
             http_options=types.HttpOptions(
                 retry_options=types.HttpRetryOptions(attempts=LLM_RETRY_ATTEMPTS)
             ),

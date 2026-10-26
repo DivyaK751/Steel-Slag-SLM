@@ -124,8 +124,10 @@ async def _read_paper(
         figures, await gather_bounded(figures, read_one, settings.max_concurrency), strict=True
     ):
         if isinstance(outcome, _PER_FIGURE_ERRORS):
-            logger.warning("%s %s failed: %s", figure.paper_id, figure_label(figure), outcome)
-            outcome = FigureResult(figure, None, None, TokenUsage(), 0.0, error=str(outcome))
+            # A timeout's message is empty, so name the error type too
+            error = f"{type(outcome).__name__}: {outcome}".removesuffix(": ")
+            logger.warning("%s %s failed: %s", figure.paper_id, figure_label(figure), error)
+            outcome = FigureResult(figure, None, None, TokenUsage(), 0.0, error=error)
         elif isinstance(outcome, Exception):
             raise outcome
         results.append(outcome)

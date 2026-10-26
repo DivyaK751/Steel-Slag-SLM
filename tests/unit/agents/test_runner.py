@@ -6,10 +6,12 @@ import pytest
 from pydantic import BaseModel
 
 from steel_slag_slm.agents.runner import (
+    build_structured_agent,
     gather_bounded,
     run_structured,
     run_structured_with_usage,
 )
+from steel_slag_slm.config import AgentSettings
 from steel_slag_slm.exceptions import AgentOutputError
 from steel_slag_slm.schemas import TokenUsage
 
@@ -88,3 +90,14 @@ def test_gather_bounded_keeps_order_caps_concurrency_and_returns_errors() -> Non
     assert results[0] == 10 and results[2:] == [30, 40]
     assert isinstance(results[1], ValueError)
     assert peak == 2
+
+
+def test_build_structured_agent_sets_the_thinking_level_only_when_configured() -> None:
+    low = AgentSettings(model="m", temperature=0.0, thinking_level="low")
+    default = AgentSettings(model="m", temperature=0.0)
+    low_config = build_structured_agent("a", low, "i", Answer).generate_content_config
+    default_config = build_structured_agent("a", default, "i", Answer).generate_content_config
+    assert low_config is not None and default_config is not None
+    assert low_config.thinking_config is not None
+    assert low_config.thinking_config.thinking_level == "LOW"
+    assert default_config.thinking_config is None

@@ -334,6 +334,8 @@ figure_extraction:
 figure_reading:
   prompt_name: read_figure
   model: null  # null = use llm.model
+  # Reading a chart needs little reasoning, and thinking tokens were half the cost at default
+  thinking_level: low
   # Gemini calls in flight at once; raise slowly, Vertex quotas are per minute
   max_concurrency: 4
   # A call taking longer is skipped and reported, so it can't stall the run
