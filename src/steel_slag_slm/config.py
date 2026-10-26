@@ -174,7 +174,6 @@ class FigureReadingSettings(AgentSettings):
     max_concurrency: int
     call_timeout_s: float
     prices: ModelPrices
-    report_dir: Path
 
 
 class EvaluationSettings(BaseModel):
@@ -342,7 +341,7 @@ def load_figure_reading_settings(
     """Build the figure-reading agent's settings; needs no OpenAlex, Drive or BigQuery secrets."""
     raw_config = _read_base_config(config_path)
     section = _agent_section(raw_config, "figure_reading")
-    return FigureReadingSettings(**{**section, "report_dir": PROJECT_ROOT / section["report_dir"]})
+    return FigureReadingSettings(**section)
 
 
 def load_embedding_settings(config_path: Path = BASE_CONFIG_PATH) -> EmbeddingSettings:

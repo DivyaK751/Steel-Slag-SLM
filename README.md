@@ -163,7 +163,6 @@ uv run read-figures                            # every paper under data/interim/
   must appear in the PDF's own text inside the figure, and values must lie within the axes.
   Figures pasted in as pictures have no text, so only the value check applies to them.
 - The command prints cost per figure, per paper and per figure type, plus a projection for the
-  whole corpus, and writes a review page (figure beside its reading) to
-  `reports/figure_reading/`.
+  whole corpus.
 - Model, concurrency and per-token prices: the `figure_reading:` section of
   `configs/base.yaml`. Prompt: [prompts/read_figure.yaml](prompts/read_figure.yaml).

@@ -19,7 +19,6 @@ SETTINGS = FigureReadingSettings(
     max_concurrency=2,
     call_timeout_s=5,
     prices=ModelPrices(input_usd_per_million=1.0, output_usd_per_million=4.0),
-    report_dir=Path("unused"),
 )
 PROMPT = PromptTemplate("read_figure", 1, "d", "i", "{paper_id}", ("paper_id",))
 # read_figure is faked, so the runner is never used

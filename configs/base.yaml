@@ -345,5 +345,3 @@ figure_reading:
   prices:
     input_usd_per_million: 0.75
     output_usd_per_million: 3.75
-  # One review page per run, git-ignored
-  report_dir: reports/figure_reading

@@ -13,7 +13,7 @@ from google.adk.runners import Runner
 from google.cloud import bigquery
 
 from steel_slag_slm.agents.abstract_extractor import build_extractor_agent
-from steel_slag_slm.agents.figure_reader import build_figure_reader_agent, figure_label
+from steel_slag_slm.agents.figure_reader import build_figure_reader_agent
 from steel_slag_slm.agents.relevance_screener import build_screener_agent
 from steel_slag_slm.agents.runner import build_runner
 from steel_slag_slm.config import (
@@ -36,7 +36,6 @@ from steel_slag_slm.data.figure_detection import build_figure_converter
 from steel_slag_slm.data.openalex import OpenAlexClient
 from steel_slag_slm.data.paper_registry import build_bigquery_client
 from steel_slag_slm.evaluation.figure_checks import total_checks
-from steel_slag_slm.evaluation.figure_report import ReviewRow, write_review_page
 from steel_slag_slm.evaluation.retrieval_metrics import mean_scores
 from steel_slag_slm.llm.prompts import PromptTemplate, load_prompt
 from steel_slag_slm.pipelines.build_index import run_build_index
@@ -479,19 +478,4 @@ def read_figures() -> None:
         f"{checks.values_out_of_range} of {checks.values_checked} values outside their axes; "
         f"{checks.rows_malformed} rows with missing cells"
     )
-    rows = [
-        ReviewRow(
-            heading=f"{result.figure.paper_id} · {figure_label(result.figure)}",
-            image_path=result.figure.image_path,
-            caption=result.figure.caption,
-            reading=result.reading,
-            check=result.check,
-            cost_usd=result.cost_usd,
-            error=result.error,
-        )
-        for result in results
-    ]
-    page = settings.report_dir / f"figure_readings_{datetime.now():%Y%m%d_%H%M%S}.html"
-    write_review_page(rows, lines, checks, page)
-    print(f"Review page: {page}")
     print(f"Readings saved next to each paper's figures as readings.json in {args.figures_dir}")

@@ -131,8 +131,7 @@ def test_abstract_extraction_settings_fall_back_to_llm_defaults(
     assert settings.papers_table == "proj.ds.papers"
 
 
-def test_figure_reading_settings_use_llm_defaults_and_resolve_the_report_dir() -> None:
+def test_figure_reading_settings_use_llm_defaults() -> None:
     settings = config.load_figure_reading_settings()
     assert settings.model  # falls back to llm.model
     assert settings.prices.output_usd_per_million > settings.prices.input_usd_per_million
-    assert settings.report_dir.is_absolute()
