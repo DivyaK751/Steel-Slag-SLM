@@ -158,7 +158,15 @@ uv run read-figures --max-papers 1             # try one paper first
 uv run read-figures                            # every paper under data/interim/figures
 ```
 
-- Each paper's readings are saved next to its figures as `readings.json`.
+- Each figure's reading is saved beside its image, so the two can be compared side by side:
+
+  ```
+  data/interim/figures/<paper_id>/
+  ├── figures.json      index of the paper's figures (page, position, caption, PDF text)
+  ├── figure_01.png     the figure
+  ├── figure_01.json    what Gemini read from it, its checks, tokens and cost
+  └── ...
+  ```
 - Every reading is checked automatically: labels (axes, units, legends, phases, process steps)
   must appear in the PDF's own text inside the figure, and values must lie within the axes.
   Figures pasted in as pictures have no text, so only the value check applies to them.

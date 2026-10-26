@@ -27,7 +27,6 @@ from steel_slag_slm.schemas import FigureReading, FigureToRead, TokenUsage
 logger = logging.getLogger(__name__)
 
 FIGURES_FILE_NAME = "figures.json"
-READINGS_FILE_NAME = "readings.json"
 # Failures that cost one figure, not the run; the figure is reported as failed
 _PER_FIGURE_ERRORS = (AgentOutputError, APIError, TimeoutError)
 
@@ -81,9 +80,14 @@ def load_figures_to_read(paper_dir: Path) -> list[FigureToRead]:
     ]
 
 
+def reading_path(figure: FigureToRead) -> Path:
+    """Where a figure's reading is saved: beside its image, e.g. figure_03.png -> figure_03.json."""
+    return figure.image_path.with_suffix(".json")
+
+
 def _result_record(result: FigureResult) -> dict[str, Any]:
     return {
-        "file": result.figure.image_path.name,
+        "image": result.figure.image_path.name,
         "figure_number": result.figure.figure_number,
         "reading": result.reading.model_dump() if result.reading else None,
         "check": asdict(result.check) if result.check else None,
@@ -132,8 +136,10 @@ async def _read_paper(
             raise outcome
         results.append(outcome)
 
-    readings = [_result_record(result) for result in results]
-    (paper_dir / READINGS_FILE_NAME).write_text(json.dumps(readings, indent=2, ensure_ascii=False))
+    for result in results:
+        reading_path(result.figure).write_text(
+            json.dumps(_result_record(result), indent=2, ensure_ascii=False)
+        )
     return results
 
 
@@ -143,7 +149,7 @@ async def run_figure_reading(
     prompt: PromptTemplate,
     settings: FigureReadingSettings,
 ) -> list[FigureResult]:
-    """Read every figure of each paper, writing each paper's readings.json as it finishes."""
+    """Read every figure of each paper, saving each reading as JSON beside the figure's image."""
     logger.info(
         "Reading figures with %s, prompt %s v%d", settings.model, prompt.name, prompt.version
     )

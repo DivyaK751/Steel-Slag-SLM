@@ -72,14 +72,17 @@ def test_list_paper_dirs_finds_extracted_papers_in_order(tmp_path: Path) -> None
 
 
 @pytest.mark.usefixtures("fake_reader")
-def test_run_figure_reading_saves_readings_and_reports_failed_figures(tmp_path: Path) -> None:
+def test_run_figure_reading_saves_each_reading_beside_its_image(tmp_path: Path) -> None:
     paper_dir = _write_paper(tmp_path, "W1", ["1", "2"])
     results = asyncio.run(
         read_figures.run_figure_reading(
             [paper_dir], runner=UNUSED_RUNNER, prompt=PROMPT, settings=SETTINGS
         )
     )
-    saved = json.loads((paper_dir / "readings.json").read_text())
+    saved = [
+        json.loads((paper_dir / name).read_text()) for name in ("figure_01.json", "figure_02.json")
+    ]
+    assert [record["image"] for record in saved] == ["figure_01.png", "figure_02.png"]
     assert [record["error"] for record in saved] == [None, "AgentOutputError: malformed"]
     assert saved[0]["reading"]["figure_type"] == "data_plot"
     assert saved[0]["cost_usd"] == pytest.approx((1000 * 1.0 + 250 * 4.0) / 1_000_000)

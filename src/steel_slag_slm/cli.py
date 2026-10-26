@@ -478,4 +478,4 @@ def read_figures() -> None:
         f"{checks.values_out_of_range} of {checks.values_checked} values outside their axes; "
         f"{checks.rows_malformed} rows with missing cells"
     )
-    print(f"Readings saved next to each paper's figures as readings.json in {args.figures_dir}")
+    print(f"Each reading is saved beside its figure (figure_NN.json) in {args.figures_dir}")
