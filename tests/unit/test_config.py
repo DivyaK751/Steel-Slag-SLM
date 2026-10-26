@@ -90,9 +90,7 @@ def test_evaluation_table_sits_next_to_papers_table() -> None:
 
 def test_pdf_parsing_settings_use_screening_evaluation_table_and_drive_names() -> None:
     settings = config.load_pdf_parsing_settings()
-    assert settings.source_table == (
-        "capstone-project-511200.steel_slag.screening_evaluation"
-    )
+    assert settings.source_table == ("capstone-project-511200.steel_slag.screening_evaluation")
     assert settings.output_folder_name == "_parsed"
     assert settings.index_file_name == "index.json"
 
@@ -131,3 +129,10 @@ def test_abstract_extraction_settings_fall_back_to_llm_defaults(
     settings = config.load_abstract_extraction_settings(path)
     assert settings.model == "default-model" and settings.max_pages == 3
     assert settings.papers_table == "proj.ds.papers"
+
+
+def test_figure_reading_settings_use_llm_defaults_and_resolve_the_report_dir() -> None:
+    settings = config.load_figure_reading_settings()
+    assert settings.model  # falls back to llm.model
+    assert settings.prices.output_usd_per_million > settings.prices.input_usd_per_million
+    assert settings.report_dir.is_absolute()

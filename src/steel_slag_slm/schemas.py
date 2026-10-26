@@ -1,6 +1,7 @@
 """Record types shared across modules."""
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -199,3 +200,72 @@ class ExtractedAbstract(BaseModel):
     abstract: str | None = None
     heading: str | None = None  # e.g. "Abstract" or "Summary", as printed
     language: str | None = None  # ISO 639-1 code of the abstract text
+
+
+@dataclass(frozen=True, slots=True)
+class FigureToRead:
+    """One extracted figure, as listed in its paper's figures.json, ready for a model."""
+
+    paper_id: str
+    image_path: Path
+    figure_number: str | None
+    caption: str
+    pdf_text: str  # words the PDF stores inside the figure; "" for pasted-in pictures
+    detected_type: str  # Docling's label, e.g. "line_chart"
+
+
+FigureKind = Literal["data_plot", "xrd_pattern", "process_diagram", "micrograph_or_photo", "other"]
+
+
+class AxisReading(BaseModel):
+    """One axis of a plot, as printed."""
+
+    label: str | None = None
+    unit: str | None = None
+    scale: Literal["linear", "log"] | None = None
+    min_value: float | None = None  # first tick value
+    max_value: float | None = None  # last tick value
+
+
+class PointReading(BaseModel):
+    """One value read off a plot; x is a number, or a category name for bar charts."""
+
+    x: float | None = None
+    x_category: str | None = None
+    y: float
+
+
+class SeriesReading(BaseModel):
+    """One line, marker set or bar group, named as in the legend."""
+
+    name: str | None = None
+    points: list[PointReading] = Field(default_factory=list)
+
+
+class ProcessStep(BaseModel):
+    """One box or stage of a process diagram, with any conditions printed in it."""
+
+    id: str
+    label: str
+    conditions: list[str] = Field(default_factory=list)
+
+
+class ProcessFlow(BaseModel):
+    """An arrow between two steps of a process diagram."""
+
+    source: str
+    target: str
+    label: str | None = None
+
+
+class FigureReading(BaseModel):
+    """Gemini's reading of one figure; values read off plots are approximate."""
+
+    figure_type: FigureKind
+    summary: str
+    x_axis: AxisReading | None = None
+    y_axis: AxisReading | None = None
+    series: list[SeriesReading] = Field(default_factory=list)
+    phases: list[str] = Field(default_factory=list)  # phases labelled on an XRD pattern
+    steps: list[ProcessStep] = Field(default_factory=list)
+    flows: list[ProcessFlow] = Field(default_factory=list)

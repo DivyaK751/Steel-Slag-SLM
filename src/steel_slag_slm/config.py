@@ -164,6 +164,16 @@ class FigureExtractionSettings(BaseModel):
     min_uncaptioned_side_pt: float
 
 
+class FigureReadingSettings(AgentSettings):
+    """How the figure-reading agent describes extracted figures and what its tokens cost."""
+
+    prompt_name: str
+    max_concurrency: int
+    call_timeout_s: float
+    prices: ModelPrices
+    report_dir: Path
+
+
 class EvaluationSettings(BaseModel):
     """Where the human-labelled papers live and where run reports are saved."""
 
@@ -321,6 +331,15 @@ def load_figure_extraction_settings(
     return FigureExtractionSettings(
         **{**raw_config, "output_dir": PROJECT_ROOT / raw_config["output_dir"]}
     )
+
+
+def load_figure_reading_settings(
+    config_path: Path = BASE_CONFIG_PATH,
+) -> FigureReadingSettings:
+    """Build the figure-reading agent's settings; needs no OpenAlex, Drive or BigQuery secrets."""
+    raw_config = _read_base_config(config_path)
+    section = _agent_section(raw_config, "figure_reading")
+    return FigureReadingSettings(**{**section, "report_dir": PROJECT_ROOT / section["report_dir"]})
 
 
 def load_embedding_settings(config_path: Path = BASE_CONFIG_PATH) -> EmbeddingSettings:

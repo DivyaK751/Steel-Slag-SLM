@@ -330,3 +330,18 @@ figure_extraction:
   # Uncaptioned regions are kept only this large (some papers print the caption inside the
   # image); smaller ones are author photos, ads and journal artwork
   min_uncaptioned_side_pt: 150
+
+figure_reading:
+  prompt_name: read_figure
+  model: null  # null = use llm.model
+  # Gemini calls in flight at once; raise slowly, Vertex quotas are per minute
+  max_concurrency: 4
+  # A call taking longer is skipped and reported, so it can't stall the run
+  call_timeout_s: 120
+  # Vertex AI price of llm.model per million tokens, for the run's cost report. Gemini Flash
+  # is on an introductory $0.75 / $3.75 until 2026-12-31, then $1.50 / $7.50; re-check it
+  prices:
+    input_usd_per_million: 0.75
+    output_usd_per_million: 3.75
+  # One review page per run, git-ignored
+  report_dir: reports/figure_reading
