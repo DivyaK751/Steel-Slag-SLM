@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "docling>=2.140.0",
+    "faiss-cpu>=1.15.1",
     "google-adk>=2.12.0",
     "google-api-python-client>=2.100",
     "google-auth>=2.23",
@@ -18,14 +19,22 @@ dependencies = [
     "python-dotenv>=1.0",
     "pyyaml>=6.0",
     "requests>=2.31",
+    "sentence-transformers>=6.2.0",
 ]
 
 [project.scripts]
 fetch-papers = "steel_slag_slm.cli:fetch_papers"
 sync-registry = "steel_slag_slm.cli:sync_registry"
+create-extraction-tables = "steel_slag_slm.cli:create_extraction_tables"
+fill-abstracts = "steel_slag_slm.cli:fill_abstracts"
+extract-data = "steel_slag_slm.cli:extract_data"
+export-extraction = "steel_slag_slm.cli:export_extraction"
 screen-papers = "steel_slag_slm.cli:screen_papers"
 evaluate-screening = "steel_slag_slm.cli:evaluate_screening"
 parse-pdfs = "steel_slag_slm.cli:parse_pdfs"
+build-index = "steel_slag_slm.cli:build_index"
+search-index = "steel_slag_slm.cli:search_index"
+evaluate-retrieval = "steel_slag_slm.cli:evaluate_retrieval"
 
 [dependency-groups]
 dev = [
@@ -55,7 +64,7 @@ select = ["E", "F", "I", "B", "UP"]
 strict = true
 ignore_missing_imports = true
 # google-auth ships without type hints
-untyped_calls_exclude = ["google"]
+untyped_calls_exclude = ["google", "pymupdf"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

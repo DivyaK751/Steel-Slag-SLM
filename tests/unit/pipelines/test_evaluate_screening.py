@@ -6,11 +6,10 @@ import pytest
 from openpyxl import load_workbook
 
 import steel_slag_slm.pipelines.evaluate_screening as evaluate_screening
-from steel_slag_slm.agents.runner import TokenUsage
 from steel_slag_slm.config import EvaluationSettings, ModelPrice, ScreeningSettings
 from steel_slag_slm.exceptions import AgentOutputError
 from steel_slag_slm.llm.prompts import load_prompt
-from steel_slag_slm.schemas import PaperForScreening, RelevanceDecision
+from steel_slag_slm.schemas import PaperForScreening, RelevanceDecision, TokenUsage
 
 LABELLED_ROWS = [
     {
@@ -58,7 +57,7 @@ def _run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, write: bool = False) -
         decision = RelevanceDecision(
             relevant="Yes", relevance_score=0.9, relevance_confidence="High", relevance_reason="r"
         )
-        return decision, TokenUsage(1_000_000, 100_000)
+        return decision, TokenUsage(1_000_000, 0, 100_000)
 
     monkeypatch.setattr(evaluate_screening, "query_rows", lambda *_: LABELLED_ROWS)
     monkeypatch.setattr(evaluate_screening, "screen_paper", fake_screen)

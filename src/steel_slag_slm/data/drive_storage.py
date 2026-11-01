@@ -95,7 +95,9 @@ def parse_openalex_id(file_name: str) -> str | None:
     return match.group(1) if match else None
 
 
-def _list_children(service: Any, folder_id: str, extra_query: str = "") -> list[dict[str, str]]:
+def _list_children(
+    service: Any, folder_id: str, extra_query: str = "", file_fields: str = "id, name"
+) -> list[dict[str, str]]:
     """List every non-trashed item directly inside a folder, following pagination."""
     query = f"'{folder_id}' in parents and trashed = false{extra_query}"
     items: list[dict[str, str]] = []
@@ -105,7 +107,7 @@ def _list_children(service: Any, folder_id: str, extra_query: str = "") -> list[
             service.files()
             .list(
                 q=query,
-                fields="nextPageToken, files(id, name)",
+                fields=f"nextPageToken, files({file_fields})",
                 pageSize=1000,
                 pageToken=page_token,
                 **_LIST_ALL_DRIVES,
@@ -225,6 +227,25 @@ def list_paper_files(service: Any, folder_id: str) -> dict[str, str]:
     }
 
 
+def list_paper_titles(service: Any, folder_id: str) -> dict[str, str]:
+    """Map each OpenAlex ID in the folder to its paper's full title.
+
+    The title is the first line of the description upload_pdf writes. Without one, the
+    file name's title is used, cut at MAX_TITLE_CHARS_IN_NAME; old 'W123.pdf' names give "".
+    """
+    titles: dict[str, str] = {}
+    items = _list_children(
+        service, folder_id, " and mimeType = 'application/pdf'", "id, name, description"
+    )
+    for item in items:
+        if paper_id := parse_openalex_id(item["name"]):
+            description_title = item.get("description", "").split("\n", 1)[0].strip()
+            stem = item["name"].removesuffix(".pdf")
+            name_title = stem.removeprefix(paper_id).removeprefix(" - ").strip()
+            titles[paper_id] = description_title or name_title
+    return titles
+
+
 def has_paper(service: Any, folder_id: str, openalex_id: str) -> bool:
     """Check whether a teammate's run uploaded this paper since we listed the folder."""
     matches = _list_children(service, folder_id, f" and name contains '{openalex_id}'")
@@ -279,3 +300,35 @@ def read_id_list(service: Any, folder_id: str, file_name: str) -> set[str]:
 def write_id_list(service: Any, folder_id: str, file_name: str, ids: set[str]) -> None:
     """Save IDs one per line to a text file in the folder, replacing its previous contents."""
     write_text_file(service, folder_id, file_name, "\n".join(sorted(ids)))
+
+
+def download_file(service: Any, file_id: str) -> bytes:
+    """Return the raw bytes of any file stored in Drive."""
+    content: bytes = (
+        service.files().get_media(fileId=file_id, **_ALL_DRIVES).execute(num_retries=DRIVE_RETRIES)
+    )
+    return content
+
+
+def read_file_bytes(service: Any, folder_id: str, file_name: str) -> bytes | None:
+    """Read a file in the folder as bytes; None if the file doesn't exist yet."""
+    file_id = _find_child_id(service, folder_id, file_name)
+    return download_file(service, file_id) if file_id else None
+
+
+def find_subfolder_id(service: Any, parent_id: str, name: str) -> str | None:
+    """Return the ID of the named subfolder if it exists; never creates it."""
+    return _find_child_id(service, parent_id, name, f" and mimeType = '{FOLDER_MIME_TYPE}'")
+
+
+def list_file_names(service: Any, folder_id: str) -> dict[str, str]:
+    """Map each non-folder file name in the folder to its Drive file ID."""
+    return {
+        item["name"]: item["id"]
+        for item in _list_children(service, folder_id, f" and mimeType != '{FOLDER_MIME_TYPE}'")
+    }
+
+
+def delete_file(service: Any, file_id: str) -> None:
+    """Permanently remove a Drive file."""
+    service.files().delete(fileId=file_id, **_ALL_DRIVES).execute(num_retries=DRIVE_RETRIES)

@@ -48,6 +48,39 @@ fetch:
     - '"steel slag binder"'
     - '"alkaline industrial wastes" carbonation'
     - '"high performance cementing materials" slag'
+    # Slag names the relevance rules accept but no search asked for
+    - '"white slag"'
+    - '"black slag"'
+    - '"LF slag"'
+    - '"electric furnace slag"'
+    - '"ladle metallurgy slag"'
+    - '"secondary metallurgy slag"'
+    - '"dephosphorization slag"'
+    - '"argon oxygen decarburization slag"'
+    # Names common in Chinese papers, a large share of this literature
+    - '"steel slag powder"'
+    - '"steel slag micropowder"'
+    - '"converter steel slag"'
+    - '"desulfurization slag"'  # KR hot-metal desulfurization slag
+    - '"steel slag" "composite cement"'
+    - '"steel slag" "cementitious material"'
+    # Processing, activation and carbon uptake routes (workbook tabs 3, 5 and 8)
+    - '"steel slag" "carbonation curing"'
+    - '"steel slag" "CO2 curing"'
+    - '"steel slag" "accelerated carbonation"'
+    - '"steel slag" "activity index"'
+    - '"steel slag" "thermal activation"'
+    - '"steel slag" "chemical activation"'
+    - '"steel slag" "supersulfated"'
+    - '"steel slag" phosphogypsum'
+    - '"steel slag" "hot stage"'  # hot-state / molten modification
+    - '"steel slag" "reconstruction"'  # Chinese term for molten modification
+    - '"steel slag" "water quenched"'
+    - '"steel slag" "air cooled"'
+    - '"steel slag" "belite"'
+    - '"steel slag" "raw meal"'
+    - '"steel slag" autoclave'
+    - '"steel slag" "ternary"'
   search_filter: "is_oa:true,language:en"
   # Citation sort surfaces famous off-topic papers; relevance keeps results on steel slag
   sort: "relevance_score:desc"
@@ -90,6 +123,8 @@ relevance:
     - aod slag
     - argon oxygen decarburization slag
     - dephosphorization slag
+    - desulfurization slag
+    - desulphurization slag
     - induction furnace slag
   # Title or abstract must touch a use case we extract (cementitious, stability or CO2) ...
   # "cement" also covers cementitious/SCM wording, "pozzolan" covers pozzolanic/pozzolana,
@@ -119,6 +154,21 @@ relevance:
     - co2
     - sequestration
     - carbon capture
+    # Processing and activation routes; the paper must still name a steel slag
+    - activity index
+    - thermal activation
+    - chemical activation
+    - supersulfated
+    - supersulphated
+    - phosphogypsum
+    - belite
+    - raw meal
+    - autoclave
+    - ternary
+    - hot stage
+    - quench  # also water-quenched, quenching
+    - air cooled  # "air-cooled" after hyphens become spaces
+    - reconstruction
   # ... or the title must signal a characterization or utilization study. These words are
   # title-only because nearly every abstract says "utilization" or "characterization".
   include_title_terms:
@@ -169,9 +219,16 @@ relevance:
     - heavy metal removal
     - acid mine drainage
     - catalyst
-    - leaching
-    - heavy metal
     - agricultur
+    - ceramic  # also glass-ceramic
+    - tile
+    - sintered
+    - pavement
+    - microwave
+    - freshwater
+    - aquatic
+    - phytoplankton
+    - sediment
   # Other slags skip a title only when it names no steel slag, so blends such as
   # "steel slag-GGBFS-cement" stay in
   other_slag_title_terms:
@@ -198,6 +255,8 @@ drive:
   queue_list_name: _fetcher_queue_ids.txt
   # The next result page each search reads, so runs go deeper instead of repeating page 1
   search_progress_name: _fetcher_search_progress.txt
+  # The date searching last found nothing new; later runs that day skip searching
+  no_new_papers_name: _fetcher_no_new_papers_date.txt
 
 registry:
   # One row per paper in the Drive folder, with its abstract, keywords and language
@@ -205,8 +264,30 @@ registry:
   table: papers
   location: US
 
+data_extraction:
+  prompt_name: extract_data_v4
+  # Strongest Gemini this project can call; 3.8 and 3.5 Pro return 404 here (2026-10-23)
+  model: gemini-3.1-pro-preview
+  # One table per data sheet of the CNS input workbook, joined to papers on source_id
+  dataset: steel_slag_extraction
+  location: US
+  # export-extraction writes one workbook per run here; git-ignored
+  export_dir: reports/extraction
+  # Gemini calls in flight at once; the Pro preview often answers 503 under load
+  max_concurrency: 2
+  # A whole paper with thinking can take minutes; a slower call is retried on the next run
+  call_timeout_s: 600
+  # Vertex list prices of `model` above (US$ per 1M tokens, prompts under 200k tokens), for
+  # the cost logged per paper; change them together with the model
+  prices:
+    input: 2.00
+    cached_input: 0.20
+    output: 12.00
+  # BigQuery on-demand query price; the load jobs that write the rows are free
+  bigquery_usd_per_tib: 6.25
+
 pdf_parsing:
-  source_table: capstone-project-511200.steel_slag.papers_trial
+  source_table: capstone-project-511200.steel_slag.screening_evaluation
   output_folder_name: _parsed
   index_file_name: index.json
 
@@ -224,11 +305,36 @@ screening:
   # Gemini calls in flight at once; raise slowly, Vertex quotas are per minute
   max_concurrency: 8
 
+abstract_extraction:
+  prompt_name: extract_abstract
+  model: null  # null = use llm.model
+  # Only the first pages are sent; abstracts sit on page 1 or 2
+  max_pages: 3
+  # Papers read from BigQuery, downloaded from Drive and written back per round trip
+  batch_size: 10
+  # Gemini calls in flight at once; at 4, Vertex kept making calls wait and retry
+  max_concurrency: 2
+  # A call taking longer is given up and retried on the next run, so it can't stall a batch
+  call_timeout_s: 120
+
 evaluation:
   # Human-labelled papers; lives in the same project and dataset as the papers table
   table: screening_evaluation
   # One Excel report per run, git-ignored
   output_dir: reports/evaluation
+
+embedding:
+  # Local sentence-transformers model; its vectors are only comparable with the same model
+  model: BAAI/bge-small-en-v1.5
+  # bge models expect this text in front of search queries (not in front of passages)
+  query_prefix: "Represent this sentence for searching relevant passages: "
+  # Text chunks are packed from paragraphs up to this many characters
+  chunk_max_chars: 800
+  # A table longer than this is split into row groups, each repeating the header
+  table_max_chars: 1500
+  # The index is saved to Drive after this many papers, so a failed run loses little work
+  papers_per_save: 25
+  top_k: 5
 
 # USD per 1 million tokens, standard on-demand text pricing, used only to estimate run costs.
 # Copy from https://cloud.google.com/vertex-ai/generative-ai/pricing (thinking tokens are billed

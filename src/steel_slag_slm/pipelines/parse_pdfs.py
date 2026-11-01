@@ -5,72 +5,20 @@ import logging
 import mimetypes
 import re
 from collections import Counter
+from collections.abc import Sequence
 from typing import Any
 
 from google.cloud import bigquery
 
 from steel_slag_slm.config import PdfParsingSettings
-from steel_slag_slm.data import drive_storage, pdf_parsing, pdf_parsing_source
+from steel_slag_slm.data import drive_storage, parsed_index, pdf_parsing, pdf_parsing_source
 from steel_slag_slm.data.pdf_parsing_source import PdfSource
 from steel_slag_slm.schemas import ParsedDocument
 
 logger = logging.getLogger(__name__)
 
 _PAPER_ID_PATTERN = re.compile(r"^W\d+$")
-_INDEX_SCHEMA_VERSION = 1
-
-
-def _load_index(
-    drive_service: Any,
-    output_folder_id: str,
-    index_file_name: str,
-) -> dict[str, dict[str, str | list[str]]]:
-    """Read and validate the existing Drive index."""
-    index_text = drive_storage.read_text_file(drive_service, output_folder_id, index_file_name)
-    if not index_text:
-        return {}
-
-    try:
-        stored_index = json.loads(index_text)
-    except json.JSONDecodeError as error:
-        raise ValueError(f"Drive index {index_file_name!r} is not valid JSON") from error
-
-    if (
-        not isinstance(stored_index, dict)
-        or stored_index.get("schema_version") != _INDEX_SCHEMA_VERSION
-        or not isinstance(stored_index.get("papers"), dict)
-    ):
-        raise ValueError(f"Drive index {index_file_name!r} has an unsupported structure")
-
-    papers: dict[str, dict[str, str | list[str]]] = {}
-    for paper_id, entry in stored_index["papers"].items():
-        if not isinstance(paper_id, str) or not isinstance(entry, dict):
-            raise ValueError(f"Drive index {index_file_name!r} contains an invalid paper entry")
-
-        json_file_id = entry.get("json_file_id")
-        image_file_ids = entry.get("image_file_ids")
-        if (
-            not isinstance(json_file_id, str)
-            or not isinstance(image_file_ids, list)
-            or not all(isinstance(file_id, str) for file_id in image_file_ids)
-        ):
-            raise ValueError(f"Drive index {index_file_name!r} contains an invalid paper entry")
-
-        papers[paper_id] = {
-            "json_file_id": json_file_id,
-            "image_file_ids": image_file_ids,
-        }
-
-        for key in ("paper_folder_id", "image_folder_id", "source_drive_link"):
-            value = entry.get(key)
-            if value is not None:
-                if not isinstance(value, str):
-                    raise ValueError(
-                        f"Drive index {index_file_name!r} contains an invalid paper entry"
-                    )
-                papers[paper_id][key] = value
-
-    return papers
+_CONTENT_SCHEMA_VERSION = 3
 
 
 def _serialize_document(
@@ -82,14 +30,62 @@ def _serialize_document(
     record = {
         "openalex_id": source.openalex_id,
         "source_drive_link": source.drive_link,
+        "content_schema_version": _CONTENT_SCHEMA_VERSION,
         "text_parser": parsed.text_parser,
         "image_parser": parsed.image_parser,
         "page_count": parsed.page_count,
         "markdown": parsed.markdown,
         "tables": list(parsed.tables),
+        "content_blocks": [
+            {
+                "kind": block.kind,
+                "label": block.label,
+                "text": block.text,
+                "placements": [
+                    {
+                        "page_number": placement.page_number,
+                        "bbox": list(placement.bbox),
+                        "coordinate_origin": placement.coordinate_origin,
+                    }
+                    for placement in block.placements
+                ],
+            }
+            for block in parsed.content_blocks
+        ],
         "images": image_references,
     }
     return json.dumps(record, ensure_ascii=False, indent=2).encode("utf-8")
+
+
+def _record_skipped_paper(
+    source: PdfSource,
+    reason: str,
+    papers: dict[str, dict[str, str | int | list[str]]],
+    drive_service: Any,
+    output_folder_id: str,
+    index_file_name: str,
+) -> None:
+    """Record a paper that should not be retried automatically."""
+    papers[source.openalex_id] = {
+        "status": "skipped",
+        "skip_reason": reason,
+        "source_drive_link": source.drive_link,
+        "json_file_id": "",
+        "image_file_ids": [],
+    }
+    index_bytes = json.dumps(
+        {"schema_version": parsed_index.INDEX_SCHEMA_VERSION, "papers": papers},
+        ensure_ascii=False,
+        indent=2,
+    ).encode("utf-8")
+    drive_storage.write_file(
+        drive_service,
+        output_folder_id,
+        index_file_name,
+        index_bytes,
+        "application/json",
+    )
+    logger.warning("Skipped paper %s: %s", source.openalex_id, reason)
 
 
 def run_pdf_parsing(
@@ -98,29 +94,50 @@ def run_pdf_parsing(
     drive_service: Any,
     source_folder_id: str,
     max_papers: int | None = None,
+    paper_ids: Sequence[str] | None = None,
 ) -> Counter[str]:
-    """Parse unprocessed trial papers and save their artifacts and index to Drive."""
+    """Parse unprocessed screened papers and save their artifacts and index to Drive.
+
+    paper_ids limits the run to those papers; ones already parsed are still left alone.
+    """
     if max_papers is not None and max_papers <= 0:
         raise ValueError("max_papers must be greater than zero")
 
     sources = pdf_parsing_source.list_pdf_sources(bigquery_client, settings.source_table)
     outcomes: Counter[str] = Counter()
+    if paper_ids:
+        requested = set(paper_ids)
+        # Only papers in the source table have a Drive link to their PDF
+        outcomes["not_in_source_table"] = len(requested - {s.openalex_id for s in sources})
+        sources = [source for source in sources if source.openalex_id in requested]
     if not sources:
         return outcomes
 
     output_folder_id = drive_storage.ensure_subfolder(
         drive_service, source_folder_id, settings.output_folder_name
     )
-    papers = _load_index(drive_service, output_folder_id, settings.index_file_name)
+    papers = parsed_index.load_index(drive_service, output_folder_id, settings.index_file_name)
     converter = None
 
+    skipped_sources = [
+        source
+        for source in sources
+        if papers.get(source.openalex_id, {}).get("status") == "skipped"
+    ]
     pending_sources = [
         source
         for source in sources
-        if not papers.get(source.openalex_id, {}).get("paper_folder_id")
-        or not papers.get(source.openalex_id, {}).get("image_folder_id")
+        if papers.get(source.openalex_id, {}).get("status") != "skipped"
+        and (
+            not papers.get(source.openalex_id, {}).get("paper_folder_id")
+            or not papers.get(source.openalex_id, {}).get("image_folder_id")
+            or papers.get(source.openalex_id, {}).get("content_schema_version")
+            != _CONTENT_SCHEMA_VERSION
+        )
     ]
-    outcomes["already_parsed"] = len(sources) - len(pending_sources)
+    if skipped_sources:
+        outcomes["skipped"] = len(skipped_sources)
+    outcomes["already_parsed"] = len(sources) - len(pending_sources) - len(skipped_sources)
 
     if max_papers is not None:
         outcomes["deferred"] = max(0, len(pending_sources) - max_papers)
@@ -130,19 +147,41 @@ def run_pdf_parsing(
         if not _PAPER_ID_PATTERN.fullmatch(source.openalex_id):
             raise ValueError(f"Invalid OpenAlex paper ID: {source.openalex_id!r}")
 
+        source_file_id = drive_storage.drive_file_id_from_link(source.drive_link)
+        pdf_bytes = drive_storage.download_pdf(drive_service, source_file_id)
+
+        if not pdf_bytes:
+            _record_skipped_paper(
+                source,
+                "empty_pdf_file",
+                papers,
+                drive_service,
+                output_folder_id,
+                settings.index_file_name,
+            )
+            outcomes["skipped"] += 1
+            continue
+
         if converter is None:
             converter = pdf_parsing.build_docling_converter()
 
-        source_file_id = drive_storage.drive_file_id_from_link(source.drive_link)
-        pdf_bytes = drive_storage.download_pdf(drive_service, source_file_id)
         parsed = pdf_parsing.parse_pdf(pdf_bytes, converter)
+        if not parsed.markdown.strip() and not parsed.tables and not parsed.content_blocks:
+            _record_skipped_paper(
+                source,
+                "no_extracted_text_tables_or_content_blocks",
+                papers,
+                drive_service,
+                output_folder_id,
+                settings.index_file_name,
+            )
+            outcomes["skipped"] += 1
+            continue
 
         paper_folder_id = drive_storage.ensure_subfolder(
             drive_service, output_folder_id, source.openalex_id
         )
-        image_folder_id = drive_storage.ensure_subfolder(
-            drive_service, paper_folder_id, "images"
-        )
+        image_folder_id = drive_storage.ensure_subfolder(drive_service, paper_folder_id, "images")
 
         image_references: list[dict[str, object]] = []
         image_file_ids: list[str] = []
@@ -184,9 +223,11 @@ def run_pdf_parsing(
             "json_file_id": json_file_id,
             "image_folder_id": image_folder_id,
             "image_file_ids": image_file_ids,
+            "content_schema_version": _CONTENT_SCHEMA_VERSION,
         }
+
         index_bytes = json.dumps(
-            {"schema_version": _INDEX_SCHEMA_VERSION, "papers": papers},
+            {"schema_version": parsed_index.INDEX_SCHEMA_VERSION, "papers": papers},
             ensure_ascii=False,
             indent=2,
         ).encode("utf-8")

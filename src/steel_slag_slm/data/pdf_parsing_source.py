@@ -19,14 +19,14 @@ class PdfSource:
 
 
 def list_pdf_sources(client: bigquery.Client, table_id: str) -> list[PdfSource]:
-    """Return trial-paper rows that have an OpenAlex ID and a nonempty Drive link."""
+    """Return screened-paper rows that have an OpenAlex ID and a nonempty Drive link."""
     if not _TABLE_PATTERN.fullmatch(table_id):
         raise ValueError(f"Invalid BigQuery table ID: {table_id!r}")
 
     rows = query_rows(
         client,
         f"""
-        SELECT openalex_id, drive_link
+        SELECT DISTINCT openalex_id, drive_link
         FROM `{table_id}`
         WHERE openalex_id IS NOT NULL
           AND TRIM(openalex_id) != ''

@@ -45,14 +45,38 @@ uv run pytest -m integration                   # 3 obvious cases against real Ge
   `data/bigquery_store.py` and `pipelines/screen_papers.py`. A new agent adds a prompt, an
   output schema, a small agent module and a pipeline, and reuses the rest.
 
+## Missing abstracts
 
+Some papers have no abstract on OpenAlex. `fill-abstracts` downloads each one's PDF from Drive,
+sends its first 3 pages to Gemini with
+[prompts/extract_abstract.yaml](prompts/extract_abstract.yaml), and writes the abstract back to
+the `papers` table. It runs nightly after the fetch, and can be run by hand:
+
+```bash
+uv run fill-abstracts --max-papers 5 --dry-run  # log the abstracts, write nothing
+uv run fill-abstracts                           # every paper still missing an abstract
+```
+
+`abstract_source` records where each abstract came from:
+
+| Value | Meaning |
+|---|---|
+| `openalex` | From OpenAlex |
+| `pdf` | From the PDF, and found in the pages' text (margin line numbers ignored) |
+| `pdf_unverified` | From the PDF, but the pages are scanned or their text is garbled, so it couldn't be checked |
+| `pdf_mismatch` | Gemini's text wasn't on the pages; nothing stored |
+| `not_found` | No abstract in the first pages (e.g. retraction notes, editorials) |
+
+A paper whose PDF can't be read, or whose Gemini call fails or takes over 2 minutes, stays empty
+and is retried on the next run. Settings: the `abstract_extraction:` section of
+`configs/base.yaml`.
 
 ## PDF parsing
 
 The `parse-pdfs` command reads paper IDs and Drive links from
-`capstone-project-511200.steel_slag.papers_trial`. It downloads source PDFs from the configured
+`capstone-project-511200.steel_slag.screening_evaluation`. It downloads source PDFs from the configured
 Drive folder, parses text and tables with Docling and embedded image resources with PyMuPDF, then
-stores each paper under `_parsed/<paper_id>/`, with its parsed content in `parsed.json` and extracted images in an `images/` subfolder. The root `_parsed/index.json` registry records the Drive file and folder IDs for each paper. The six PDFs used in the exploratory notebook are not production inputs.
+stores each paper under `_parsed/<paper_id>/`, with its parsed content in `parsed.json` and extracted images in an `images/` subfolder. The `parsed.json` includes per-item text/table page and bounding-box provenance, while keeping the existing Markdown and table fields. The root `_parsed/index.json` registry records the Drive file and folder IDs for each paper. The six PDFs used in the exploratory notebook are not production inputs.
 
 Configure `DRIVE_FOLDER_ID`, `GOOGLE_CLOUD_PROJECT`, and Google Drive/BigQuery credentials as
 described in `.env.example`. The table and output names are in the `pdf_parsing` section of
@@ -71,3 +95,57 @@ uv run parse-pdfs
 ```
 
 The command skips papers already recorded in the index. If a run fails before updating the index, rerunning it can replace same-named partial output files.
+
+To parse particular papers from the source table, add `--paper-ids W123 W456` (the "Parse trial
+PDFs" workflow has a matching `paper_ids` input). On macOS, prefix the command with
+`OMP_NUM_THREADS=1`: Docling's PyTorch and faiss each bundle OpenMP, and running both in one
+process segfaults there.
+
+## Data extraction
+
+`extract-data` sends each parsed paper's Markdown to Gemini and stores every value it reports
+in nine BigQuery tables, one per data sheet of the CNS input workbook
+(`steel_slag_extraction.sheet_01_scientific_literature` ... `sheet_09_citations_provenance`).
+The model, prompt version and prices are in the `data_extraction:` section of
+`configs/base.yaml`; the prompts are `prompts/extract_data*.yaml`.
+
+```bash
+uv run create-extraction-tables                 # once per project: create the nine tables
+uv run extract-data --paper-ids W123 W456       # (re-)extract these papers
+uv run extract-data --max-papers 5              # extract parsed papers that have no rows yet
+uv run export-extraction                        # all nine tables -> reports/extraction/*.xlsx
+```
+
+On GitHub, the "Extract paper data" workflow takes a comma-separated list of paper IDs.
+
+- A paper's old rows are replaced on every run. Each material's slag type is copied to all
+  its rows; values that break a column rule (unit, allowed values, unknown material) are
+  dropped and logged.
+- Each fact's page is found from its excerpt, and its confidence drops from High to Medium
+  when the stored value isn't printed as such (a unit conversion, for example).
+- Every paper's token count and cost are logged. Images are not sent to the model yet.
+- Code: `agents/data_extractor.py`, `data/extraction_rows.py` (rules and rows),
+  `data/extraction_tables.py` (table definitions) and `pipelines/extract_data.py`.
+
+## Semantic search
+
+Semantic search lets you ask a question in plain language and get back the passages from the
+papers that answer it, each with its paper, section and page.
+
+Each parsed paper is split into short passages (paragraphs, tables and figure captions). An
+embedding model turns each passage into numbers that capture its meaning, and the result is saved
+as a search index in Drive (`_parsed/_embeddings/`). A search finds the passages closest in meaning
+to the question.
+
+```bash
+uv run build-index                      # add newly parsed papers to the index
+uv run build-index --rebuild            # rebuild everything, e.g. after changing how papers are split
+uv run search-index "free lime volume stability"
+uv run evaluate-retrieval               # score search quality on a fixed test
+```
+
+- The parse workflow runs `build-index` after parsing, so new papers are added automatically.
+- `evaluate-retrieval` asks 22 fixed questions about one paper, whose answers were found by
+  reading the paper, and reports how high the right passage ranks.
+- Settings are in the `embedding:` section of `configs/base.yaml`. Design notes are in
+  [docs/adr/003-semantic-search-index.md](docs/adr/003-semantic-search-index.md).

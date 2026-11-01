@@ -2,15 +2,16 @@
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from dotenv import load_dotenv
-from pydantic import BaseModel, SecretStr
+from pydantic import BaseModel, Field, SecretStr
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CONFIGS_DIR = PROJECT_ROOT / "configs"
 BASE_CONFIG_PATH = CONFIGS_DIR / "base.yaml"
+RETRIEVAL_EVAL_PATH = CONFIGS_DIR / "retrieval_eval.yaml"
 # Kept outside the repo so a personal Google login can never be committed
 DEFAULT_GOOGLE_TOKEN_PATH = Path.home() / ".config" / "steel_slag_slm" / "google_token.json"
 
@@ -44,6 +45,7 @@ class DriveSettings(BaseModel):
     no_pdf_list_name: str
     queue_list_name: str
     search_progress_name: str
+    no_new_papers_name: str
 
 
 class DriveConnectionSettings(BaseModel):
@@ -63,12 +65,56 @@ class RegistrySettings(BaseModel):
     location: str
 
 
+class ExtractionTablesSettings(BaseModel):
+    """Where the tables holding data extracted from papers (one per workbook sheet) live."""
+
+    dataset: str
+    location: str
+    export_dir: Path  # where export-extraction saves its workbooks
+
+
 class PdfParsingSettings(BaseModel):
     """Where PDF parsing reads paper rows and stores its Drive outputs."""
 
     source_table: str
     output_folder_name: str
     index_file_name: str
+
+
+class EmbeddingSettings(BaseModel):
+    """How parsed papers are chunked, embedded and stored in Drive."""
+
+    model: str
+    query_prefix: str
+    chunk_max_chars: int
+    table_max_chars: int
+    papers_per_save: int
+    top_k: int
+
+
+class EvidenceSpan(BaseModel):
+    """A passage that answers a test question, identified by text copied from the paper."""
+
+    paper_id: str
+    kind: Literal["text", "table", "figure_caption"]
+    text: str  # matched inside chunk text, ignoring case and spacing
+    grade: Literal[1, 2] = 2  # 2 answers the question directly, 1 answers it in part
+
+
+class EvalQuestion(BaseModel):
+    """One fixed test question and every passage known to answer it."""
+
+    id: str
+    query: str
+    evidence: list[EvidenceSpan] = Field(min_length=1)
+
+
+class RetrievalEvalSet(BaseModel):
+    """The fixed set of questions used to score retrieval."""
+
+    depth: int  # how many results to retrieve per question; the largest K that is reported
+    questions: list[EvalQuestion]
+    paper_id: str | None = None  # when set, search only this paper's chunks
 
 
 class GcpSettings(BaseModel):
@@ -93,6 +139,37 @@ class ScreeningSettings(AgentSettings):
     prompt_name: str
     batch_size: int
     max_concurrency: int
+    papers_table: str  # fully qualified: project.dataset.table
+
+
+class AbstractExtractionSettings(AgentSettings):
+    """How the abstract-extraction agent fills missing abstracts from a paper's first pages."""
+
+    prompt_name: str
+    max_pages: int
+    batch_size: int
+    max_concurrency: int
+    call_timeout_s: float
+    papers_table: str  # fully qualified: project.dataset.table
+
+
+class TokenPrices(BaseModel):
+    """List prices of one Gemini model, in US$ per million tokens."""
+
+    input: float
+    cached_input: float
+    output: float  # thinking tokens are billed at this rate too
+
+
+class DataExtractionSettings(AgentSettings):
+    """How the data-extraction agent reads parsed papers and fills the sheet tables."""
+
+    prompt_name: str
+    max_concurrency: int
+    call_timeout_s: float
+    dataset: str  # holds one table per workbook sheet, in GOOGLE_CLOUD_PROJECT
+    prices: TokenPrices  # of `model`; used only to report what each paper cost
+    bigquery_usd_per_tib: float
     papers_table: str  # fully qualified: project.dataset.table
 
 
@@ -162,6 +239,15 @@ def _agent_section(raw_config: dict[str, Any], name: str) -> dict[str, Any]:
     return {**raw_config["llm"], **overrides}
 
 
+def _papers_table(raw_config: dict[str, Any]) -> str:
+    """The fully qualified papers table that the agents read from and write to."""
+    registry = RegistrySettings(**raw_config["registry"])
+    # The override lets Gemini bill one project while the papers table lives in another
+    return os.environ.get("BIGQUERY_PAPERS_TABLE", "").strip() or (
+        f"{_require_env('GOOGLE_CLOUD_PROJECT')}.{registry.dataset}.{registry.table}"
+    )
+
+
 def load_settings(config_path: Path = BASE_CONFIG_PATH) -> Settings:
     """Build settings from the YAML config plus secrets from the environment or .env."""
     raw_config = _read_base_config(config_path)
@@ -196,12 +282,31 @@ def load_gcp_settings() -> GcpSettings:
 def load_screening_settings(config_path: Path = BASE_CONFIG_PATH) -> ScreeningSettings:
     """Build the screening agent's settings; needs no OpenAlex or Drive secrets."""
     raw_config = _read_base_config(config_path)
-    registry = RegistrySettings(**raw_config["registry"])
-    # The override lets Gemini bill one project while the papers table lives in another
-    papers_table = os.environ.get("BIGQUERY_PAPERS_TABLE", "").strip() or (
-        f"{_require_env('GOOGLE_CLOUD_PROJECT')}.{registry.dataset}.{registry.table}"
+    return ScreeningSettings(
+        **_agent_section(raw_config, "screening"), papers_table=_papers_table(raw_config)
     )
-    return ScreeningSettings(**_agent_section(raw_config, "screening"), papers_table=papers_table)
+
+
+def load_abstract_extraction_settings(
+    config_path: Path = BASE_CONFIG_PATH,
+) -> AbstractExtractionSettings:
+    """Build the abstract-extraction agent's settings; needs no OpenAlex secrets."""
+    raw_config = _read_base_config(config_path)
+    return AbstractExtractionSettings(
+        **_agent_section(raw_config, "abstract_extraction"),
+        papers_table=_papers_table(raw_config),
+    )
+
+
+def load_data_extraction_settings(
+    config_path: Path = BASE_CONFIG_PATH,
+) -> DataExtractionSettings:
+    """Build the data-extraction agent's settings; needs no OpenAlex secrets."""
+    raw_config = _read_base_config(config_path)
+    return DataExtractionSettings(
+        **_agent_section(raw_config, "data_extraction"),
+        papers_table=_papers_table(raw_config),
+    )
 
 
 def load_evaluation_settings(
@@ -230,6 +335,18 @@ def load_pdf_parsing_settings(
     return PdfParsingSettings(**raw_config["pdf_parsing"])
 
 
+def load_extraction_tables_settings(
+    config_path: Path = BASE_CONFIG_PATH,
+) -> ExtractionTablesSettings:
+    """Build the extraction tables' location from the YAML config."""
+    raw_config = _read_base_config(config_path)["data_extraction"]
+    return ExtractionTablesSettings(
+        dataset=raw_config["dataset"],
+        location=raw_config["location"],
+        export_dir=PROJECT_ROOT / raw_config["export_dir"],
+    )
+
+
 def load_drive_connection_settings() -> DriveConnectionSettings:
     """Load Drive authentication and source-folder settings from the environment."""
     load_dotenv(PROJECT_ROOT / ".env")
@@ -241,3 +358,15 @@ def load_drive_connection_settings() -> DriveConnectionSettings:
             os.environ.get("GOOGLE_OAUTH_TOKEN_FILE", "").strip() or DEFAULT_GOOGLE_TOKEN_PATH
         ).expanduser(),
     )
+
+
+def load_embedding_settings(config_path: Path = BASE_CONFIG_PATH) -> EmbeddingSettings:
+    """Build chunking and embedding settings from the YAML config."""
+    raw_config = _read_base_config(config_path)
+    return EmbeddingSettings(**raw_config["embedding"])
+
+
+def load_retrieval_eval_set(path: Path = RETRIEVAL_EVAL_PATH) -> RetrievalEvalSet:
+    """Read the fixed retrieval test set from configs/retrieval_eval.yaml."""
+    raw: dict[str, Any] = yaml.safe_load(path.read_text(encoding="utf-8"))
+    return RetrievalEvalSet(**raw)

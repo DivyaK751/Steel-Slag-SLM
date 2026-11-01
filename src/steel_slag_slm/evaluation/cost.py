@@ -1,7 +1,7 @@
 """Estimate what Gemini calls cost from their token counts."""
 
-from steel_slag_slm.agents.runner import TokenUsage
 from steel_slag_slm.config import ModelPrice
+from steel_slag_slm.schemas import TokenUsage
 
 TOKENS_PER_PRICE_UNIT = 1_000_000
 

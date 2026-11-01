@@ -14,7 +14,7 @@ from steel_slag_slm.agents.relevance_screener import (
     paper_from_row,
     screen_paper,
 )
-from steel_slag_slm.agents.runner import TokenUsage, gather_bounded
+from steel_slag_slm.agents.runner import gather_bounded
 from steel_slag_slm.config import EvaluationSettings, ModelPrice, ScreeningSettings
 from steel_slag_slm.data.bigquery_store import merge_updates, query_rows
 from steel_slag_slm.evaluation.cost import estimate_cost_usd
@@ -22,7 +22,7 @@ from steel_slag_slm.evaluation.excel_report import PredictionRow, write_report
 from steel_slag_slm.evaluation.metrics import FAILED, EvalMetrics, compute_metrics, normalize_label
 from steel_slag_slm.exceptions import AgentOutputError
 from steel_slag_slm.llm.prompts import PromptTemplate
-from steel_slag_slm.schemas import RelevanceDecision
+from steel_slag_slm.schemas import RelevanceDecision, TokenUsage
 
 logger = logging.getLogger(__name__)
 
@@ -71,8 +71,9 @@ def cost_summary(
 ) -> dict[str, object]:
     """Token totals and estimated cost for the Summary sheet (failed papers report no tokens)."""
     usage = TokenUsage(
-        sum(p.input_tokens or 0 for p in predictions),
-        sum(p.output_tokens or 0 for p in predictions),
+        input_tokens=sum(p.input_tokens or 0 for p in predictions),
+        cached_tokens=0,
+        output_tokens=sum(p.output_tokens or 0 for p in predictions),
     )
     answered = sum(1 for p in predictions if p.input_tokens is not None)
     cost = estimate_cost_usd(usage, price)

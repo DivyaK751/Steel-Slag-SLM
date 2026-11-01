@@ -1,0 +1,75 @@
+name: Extract paper data
+
+# Started by hand: extracts the workbook data values of the listed parsed papers into the
+# BigQuery sheet tables, replacing any rows those papers already have
+on:
+  workflow_dispatch:
+    inputs:
+      paper_ids:
+        description: "Comma-separated OpenAlex IDs of parsed papers, e.g. W123,W456"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: extract-paper-data
+  cancel-in-progress: false
+
+env:
+  DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+  GOOGLE_OAUTH_TOKEN_JSON: ${{ secrets.GOOGLE_OAUTH_TOKEN_JSON }}
+  GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+  GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+  GOOGLE_CLOUD_LOCATION: global
+  GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    # A Pro call per paper can take minutes, and the preview model often retries on 503s
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Check required secrets
+        run: |
+          if [ -z "$DRIVE_FOLDER_ID" ]; then
+            echo "DRIVE_FOLDER_ID secret is required."
+            exit 1
+          fi
+          if [ -z "$GOOGLE_OAUTH_TOKEN_JSON" ] && [ -z "$GOOGLE_SERVICE_ACCOUNT_JSON" ]; then
+            echo "Configure GOOGLE_OAUTH_TOKEN_JSON or GOOGLE_SERVICE_ACCOUNT_JSON for Drive."
+            exit 1
+          fi
+          if [ -z "$GOOGLE_CLOUD_PROJECT" ] || [ -z "$GCP_SERVICE_ACCOUNT_JSON" ]; then
+            echo "GOOGLE_CLOUD_PROJECT and GCP_SERVICE_ACCOUNT_JSON are required for Gemini and BigQuery."
+            exit 1
+          fi
+
+      - name: Write Google credentials
+        run: .github/scripts/write_google_credentials.sh
+
+      - name: Install project dependencies
+        run: uv sync --locked
+
+      - name: Extract the listed papers
+        env:
+          PAPER_IDS: ${{ inputs.paper_ids }}
+        run: |
+          # "W1, W2,W3" -> W1 W2 W3; anything that isn't an OpenAlex ID stops the run
+          ids=()
+          for id in $(echo "$PAPER_IDS" | tr ',' ' '); do
+            if [[ ! "$id" =~ ^W[0-9]+$ ]]; then
+              echo "Not an OpenAlex ID: '$id'"
+              exit 1
+            fi
+            ids+=("$id")
+          done
+          if [ ${#ids[@]} -eq 0 ]; then
+            echo "No paper IDs given."
+            exit 1
+          fi
+          uv run extract-data --paper-ids "${ids[@]}"

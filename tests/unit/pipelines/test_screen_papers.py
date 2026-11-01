@@ -4,11 +4,10 @@ from typing import Any
 import pytest
 
 import steel_slag_slm.pipelines.screen_papers as screen_papers
-from steel_slag_slm.agents.runner import TokenUsage
 from steel_slag_slm.config import ScreeningSettings
 from steel_slag_slm.exceptions import AgentOutputError
 from steel_slag_slm.llm.prompts import load_prompt
-from steel_slag_slm.schemas import PaperForScreening, RelevanceDecision
+from steel_slag_slm.schemas import PaperForScreening, RelevanceDecision, TokenUsage
 
 
 class FakeTable:
@@ -51,7 +50,7 @@ def _install(monkeypatch: pytest.MonkeyPatch, table: FakeTable, failing: set[str
             relevance_confidence="High",
             relevance_reason="r",
             supporting_excerpt="BOF slag binder.",
-        ), TokenUsage(100, 10)
+        ), TokenUsage(100, 0, 10)
 
     monkeypatch.setattr(screen_papers, "fetch_unscreened", table.fetch)
     monkeypatch.setattr(screen_papers, "merge_updates", table.merge)
