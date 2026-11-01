@@ -107,6 +107,9 @@ def _build_screening(
     settings = load_screening_settings()
     if model:
         settings = settings.model_copy(update={"model": model})
+    if gcp.credentials_file:
+        # Gemini uses ADC; on GitHub this variable otherwise points at the Drive sign-in file
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(gcp.credentials_file)
     prompt = load_prompt(settings.prompt_name)
     runner = build_runner(build_screener_agent(settings, prompt))
     return settings, prompt, runner, build_bigquery_client(gcp.project, gcp.credentials_file)
