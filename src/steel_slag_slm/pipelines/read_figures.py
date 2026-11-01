@@ -5,18 +5,17 @@ import json
 import logging
 import statistics
 from dataclasses import asdict, dataclass
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
-
-from hashlib import sha256
 
 from google.adk.runners import Runner
 from google.genai.errors import APIError
 
-from steel_slag_slm.data.parsed_manifest import ParsedManifest
 from steel_slag_slm.agents.figure_reader import figure_label, read_figure
 from steel_slag_slm.agents.runner import gather_bounded
 from steel_slag_slm.config import FigureReadingSettings
+from steel_slag_slm.data.parsed_manifest import ParsedManifest
 from steel_slag_slm.evaluation.figure_checks import (
     FigureCheck,
     check_reading,

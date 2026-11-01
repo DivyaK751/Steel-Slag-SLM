@@ -42,6 +42,7 @@ from steel_slag_slm.llm.prompts import PromptTemplate, load_prompt
 from steel_slag_slm.pipelines.build_index import run_build_index
 from steel_slag_slm.pipelines.evaluate_retrieval import run_retrieval_eval
 from steel_slag_slm.pipelines.evaluate_screening import run_evaluation
+from steel_slag_slm.pipelines.export_parsed import run_export_parsed
 from steel_slag_slm.pipelines.extract_figures import collect_pdf_paths, run_figure_extraction
 from steel_slag_slm.pipelines.fetch_papers import run_fetch
 from steel_slag_slm.pipelines.fill_abstracts import run_fill_abstracts
@@ -55,7 +56,6 @@ from steel_slag_slm.pipelines.read_figures import (
 from steel_slag_slm.pipelines.screen_papers import run_screening
 from steel_slag_slm.pipelines.search_index import run_search
 from steel_slag_slm.pipelines.sync_registry import run_registry_sync
-from steel_slag_slm.pipelines.export_parsed import run_export_parsed
 from steel_slag_slm.rag.embeddings import Embedder
 from steel_slag_slm.schemas import ChunkKind
 
@@ -284,9 +284,7 @@ def export_parsed() -> None:
     _setup_logging()
     settings = load_pdf_parsing_settings()
     if args.output_folder is not None:
-        settings = settings.model_copy(
-            update={"output_folder_name": args.output_folder}
-        )
+        settings = settings.model_copy(update={"output_folder_name": args.output_folder})
 
     outcomes = run_export_parsed(
         settings,

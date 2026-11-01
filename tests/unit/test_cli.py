@@ -25,7 +25,7 @@ def test_parse_pdfs_builds_clients_and_runs_pipeline(monkeypatch, capsys) -> Non
     monkeypatch.setattr(cli, "load_gcp_settings", lambda: gcp_settings)
     monkeypatch.setattr(cli, "build_drive_service", lambda *args: "drive-client")
     monkeypatch.setattr(cli, "build_bigquery_client", lambda *args: "bigquery-client")
-    
+
     def fake_run(*args, **kwargs):
         calls["pipeline_args"] = args
         calls["pipeline_kwargs"] = kwargs

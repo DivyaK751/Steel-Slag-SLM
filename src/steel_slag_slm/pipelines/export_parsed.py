@@ -44,9 +44,7 @@ def run_export_parsed(
         settings.index_file_name,
     )
     available = {
-        paper_id: entry
-        for paper_id, entry in entries.items()
-        if entry.get("status") != "skipped"
+        paper_id: entry for paper_id, entry in entries.items() if entry.get("status") != "skipped"
     }
 
     if paper_ids is not None:

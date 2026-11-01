@@ -67,7 +67,13 @@ def load_index(
         if skip_reason is not None:
             papers[paper_id]["skip_reason"] = skip_reason
 
-        for key in ("paper_folder_id", "image_folder_id","source_drive_link", "parser_revision", "parse_generation",):
+        for key in (
+            "paper_folder_id",
+            "image_folder_id",
+            "source_drive_link",
+            "parser_revision",
+            "parse_generation",
+        ):
             value = entry.get(key)
             if value is not None:
                 if not isinstance(value, str):
@@ -76,7 +82,6 @@ def load_index(
                     )
                 papers[paper_id][key] = value
 
-        
         content_schema_version = entry.get("content_schema_version")
         if content_schema_version is not None:
             if not isinstance(content_schema_version, int) or isinstance(

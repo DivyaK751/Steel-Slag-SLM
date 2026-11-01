@@ -82,8 +82,7 @@ def run_pdf_parsing(
             continue
 
         complete = all(
-            entry.get(key)
-            for key in ("paper_folder_id", "image_folder_id", "json_file_id")
+            entry.get(key) for key in ("paper_folder_id", "image_folder_id", "json_file_id")
         )
         current = (
             entry.get("content_schema_version") == CONTENT_SCHEMA_VERSION
@@ -143,12 +142,7 @@ def run_pdf_parsing(
                 outcomes["failed"] += 1
                 continue
 
-            if (
-                parsed.markdown.strip()
-                or parsed.tables
-                or parsed.content_blocks
-                or parsed.figures
-            ):
+            if parsed.markdown.strip() or parsed.tables or parsed.content_blocks or parsed.figures:
                 reason = ""
             else:
                 reason = "no_extracted_content"

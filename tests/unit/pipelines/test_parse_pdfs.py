@@ -96,16 +96,15 @@ def test_unified_pipeline_publishes_indexed_manifest_and_browsing_copy(
     assert _run()["parsed"] == 1
 
     entry = _entry(fake_drive, folder)
-    manifest = ParsedManifest.model_validate_json(
-        fake_drive.contents[entry["json_file_id"]]
-    )
+    manifest = ParsedManifest.model_validate_json(fake_drive.contents[entry["json_file_id"]])
     assert entry["content_schema_version"] == 4
     assert entry["parse_generation"] == manifest.parse_generation
     assert manifest.images[0].caption_placements[0].bbox == (0, 20, 100, 30)
     assert manifest.images[0].file_id in entry["image_file_ids"]
-    assert fake_drive.read_file_bytes(
-        None, entry["paper_folder_id"], "parsed.json"
-    ) == fake_drive.contents[entry["json_file_id"]]
+    assert (
+        fake_drive.read_file_bytes(None, entry["paper_folder_id"], "parsed.json")
+        == fake_drive.contents[entry["json_file_id"]]
+    )
     assert _run()["already_parsed"] == 1
 
 
@@ -117,8 +116,7 @@ def test_reparse_preserves_old_assets_and_changes_generation(
     _run()
     old = _entry(fake_drive, folder)
     old_contents = {
-        key: fake_drive.contents[key]
-        for key in [old["json_file_id"], *old["image_file_ids"]]
+        key: fake_drive.contents[key] for key in [old["json_file_id"], *old["image_file_ids"]]
     }
 
     assert _run(reparse=True)["parsed"] == 1

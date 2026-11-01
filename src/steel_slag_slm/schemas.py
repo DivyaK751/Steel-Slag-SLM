@@ -226,7 +226,7 @@ class ExtractedAbstract(BaseModel):
 @dataclass(frozen=True, slots=True)
 class FigureToRead:
     """Store one local figure and optional immutable-source identity for model reading."""
-    
+
     paper_id: str
     image_path: Path
     figure_number: str | None
@@ -235,6 +235,7 @@ class FigureToRead:
     detected_type: str  # Docling's label, e.g. "line_chart"
     figure_id: str | None = None
     image_sha256: str | None = None
+
 
 FigureKind = Literal["data_plot", "xrd_pattern", "process_diagram", "micrograph_or_photo", "other"]
 

@@ -116,11 +116,7 @@ class ParsedManifest(BaseModel):
 
     @model_validator(mode="after")
     def validate_locations(self) -> "ParsedManifest":
-        placements = [
-            placement
-            for block in self.content_blocks
-            for placement in block.placements
-        ]
+        placements = [placement for block in self.content_blocks for placement in block.placements]
         placements += [
             placement
             for image in self.images
