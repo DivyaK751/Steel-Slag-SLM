@@ -18,6 +18,7 @@ def test_build_row_includes_language_and_drive_link() -> None:
     assert row["authors"] == ["A. Author"] and row["keywords"] == ["steel slag"]
     assert row["drive_link"] == "https://drive.google.com/file/d/FILE1/view"
     assert row["abstract"] is None  # missing abstracts are stored as NULL, not ""
+    assert row["abstract_source"] is None  # left for the abstract extractor
     assert row["added_at"].startswith("2026-10-16T00:00:00")
 
 

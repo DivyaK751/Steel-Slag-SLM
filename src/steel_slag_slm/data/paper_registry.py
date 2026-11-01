@@ -9,7 +9,8 @@ from google.cloud import bigquery
 from google.oauth2 import service_account
 
 from steel_slag_slm.config import RegistrySettings
-from steel_slag_slm.schemas import Paper
+from steel_slag_slm.data.bigquery_store import query_rows
+from steel_slag_slm.schemas import Paper, PaperCitation
 
 BIGQUERY_SCOPES = ["https://www.googleapis.com/auth/bigquery"]
 DRIVE_FILE_URL = "https://drive.google.com/file/d/{file_id}/view"
@@ -26,6 +27,11 @@ PAPERS_SCHEMA = [
     bigquery.SchemaField("drive_file_id", "STRING"),
     bigquery.SchemaField("drive_link", "STRING"),
     bigquery.SchemaField("added_at", "TIMESTAMP"),
+    bigquery.SchemaField(
+        "abstract_source",
+        "STRING",
+        description="openalex / pdf / pdf_unverified / pdf_mismatch / not_found",
+    ),
     # Filled in later by relevance screening; empty when a row is first added
     bigquery.SchemaField("relevant", "STRING", description="Yes / No / Unclear"),
     bigquery.SchemaField("relevance_score", "FLOAT64", description="0.0-1.0 model confidence"),
@@ -72,6 +78,8 @@ def build_row(paper: Paper, drive_file_id: str, added_at: datetime) -> dict[str,
         "language": paper.language,
         # Empty means OpenAlex has no abstract; NULL makes those rows easy to find later
         "abstract": paper.abstract or None,
+        # NULL until the abstract extractor has looked at the paper's first pages
+        "abstract_source": "openalex" if paper.abstract else None,
         "keywords": list(paper.keywords),
         "drive_file_id": drive_file_id,
         "drive_link": DRIVE_FILE_URL.format(file_id=drive_file_id),
@@ -87,3 +95,24 @@ def add_rows(client: bigquery.Client, table_id: str, rows: Sequence[dict[str, An
     # which would block the screening step from filling in its columns
     job_config = bigquery.LoadJobConfig(schema=PAPERS_SCHEMA, write_disposition="WRITE_APPEND")
     client.load_table_from_json(list(rows), table_id, job_config=job_config).result()
+
+
+def read_citations(
+    client: bigquery.Client, table_id: str, openalex_ids: Sequence[str]
+) -> dict[str, PaperCitation]:
+    """Return the title, authors, year and DOI of each listed paper that has a registry row."""
+    rows = query_rows(
+        client,
+        f"SELECT openalex_id, title, authors, year, doi FROM `{table_id}` "
+        "WHERE openalex_id IN UNNEST(@ids)",
+        {"ids": list(openalex_ids)},
+    )
+    return {
+        row["openalex_id"]: PaperCitation(
+            title=row["title"],
+            authors=tuple(row["authors"] or ()),
+            year=row["year"],
+            doi=row["doi"],
+        )
+        for row in rows
+    }

@@ -7,11 +7,11 @@ from typing import Any
 from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
 
-from steel_slag_slm.agents.runner import TokenUsage, build_structured_agent, run_structured
+from steel_slag_slm.agents.runner import build_structured_agent, run_structured_with_usage
 from steel_slag_slm.config import ScreeningSettings
 from steel_slag_slm.data.language_filter import non_english_reason
 from steel_slag_slm.llm.prompts import PromptTemplate
-from steel_slag_slm.schemas import PaperForScreening, RelevanceDecision
+from steel_slag_slm.schemas import PaperForScreening, RelevanceDecision, TokenUsage
 
 AGENT_NAME = "relevance_screener"
 MISSING_FIELD = "(not available)"
@@ -106,6 +106,6 @@ async def screen_paper(
     """
     skipped = non_english_decision(paper)
     if skipped is not None:
-        return skipped, TokenUsage(0, 0)
-    decision, usage = await run_structured(runner, render_paper(prompt, paper), RelevanceDecision)
-    return check_excerpt(decision, paper), usage
+        return skipped, TokenUsage(input_tokens=0, cached_tokens=0, output_tokens=0)
+    answer = await run_structured_with_usage(runner, render_paper(prompt, paper), RelevanceDecision)
+    return check_excerpt(answer.result, paper), answer.usage
