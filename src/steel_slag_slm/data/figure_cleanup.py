@@ -114,11 +114,10 @@ def _caption_distance(figure: Figure, caption: CaptionBlock) -> tuple[int, float
 def match_captions(
     figures: list[Figure], captions: list[CaptionBlock], max_gap_pt: float
 ) -> list[Figure]:
-    """Give each figure the caption below, beside or above it, each caption used once.
-
-    Pairs are taken by preferred position first, then closest first, so a caption between two
-    figures goes to the one it sits under. Figures left without a caption keep an empty caption
-    and no figure number.
+    """Match captions below, beside or above figures, using each caption once.
+    Preserve the matched CaptionBlock, including its page and bounding box.
+    Prefer position first, then distance. Unmatched figures have their caption text,
+    figure number and caption block cleared.
     """
     candidates = sorted(
         (distance, figure_index, caption_index)
@@ -135,12 +134,17 @@ def match_captions(
         caption_for_figure[figure_index] = captions[caption_index]
         used_captions.add(caption_index)
 
-    return [
-        replace(figure, caption=caption.text, figure_number=caption.figure_number)
+        return [
+        replace(
+            figure,
+            caption=caption.text,
+            figure_number=caption.figure_number,
+            caption_block=caption,
+        )
         if (caption := caption_for_figure.get(index))
-        else replace(figure, caption="", figure_number=None)
+        else replace(figure, caption="", figure_number=None, caption_block=None)
         for index, figure in enumerate(figures)
-    ]
+        ]
 
 
 def is_kept(figure: Figure, settings: FigureExtractionSettings) -> bool:
