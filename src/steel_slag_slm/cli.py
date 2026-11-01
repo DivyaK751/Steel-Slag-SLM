@@ -345,8 +345,9 @@ def fill_abstracts() -> None:
     print("Summary:", dict(outcomes))
 
 
-def _connect_to_parsed_folder() -> tuple[Any, str]:
-    """Sign in to Drive and find the _parsed folder inside DRIVE_FOLDER_ID."""
+def _connect_to_parsed_folder(folder_name: str | None = None) -> tuple[Any, str]:
+    """Connect to the configured parsed Drive folder, optionally overriding its name."""
+
     drive_settings = load_drive_connection_settings()
     drive_service = build_drive_service(
         drive_settings.service_account_file,
@@ -354,10 +355,12 @@ def _connect_to_parsed_folder() -> tuple[Any, str]:
         drive_settings.oauth_token_file,
     )
     parsed_folder_id = find_subfolder_id(
-        drive_service, drive_settings.folder_id, load_pdf_parsing_settings().output_folder_name
+        drive_service,
+        drive_settings.folder_id,
+        folder_name if folder_name is not None else load_pdf_parsing_settings().output_folder_name,
     )
     if parsed_folder_id is None:
-        raise SystemExit("No _parsed folder in DRIVE_FOLDER_ID yet; run parse-pdfs first")
+        raise SystemExit("Configured parsed folder is missing in Drive; run parse-pdfs first")
     return drive_service, parsed_folder_id
 
 
