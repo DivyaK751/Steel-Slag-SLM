@@ -155,11 +155,13 @@ Settings: the `figure_extraction:` section of `configs/base.yaml`.
 Internally, matched figures retain their caption's page and bounding box in
 `Figure.caption_block`. Captions recovered from a figure's PDF text layer have text and a
 number but no exact caption box. Raster-only captions cannot be recovered from that text
-layer. Internal-caption recovery currently runs after filtering.
+layer. Internal-caption recovery runs before filtering, so a recovered caption can retain a legitimate smaller figure.
 
-`RenderedFigure` holds a crop's PNG bytes, pixel dimensions, render DPI, region text and
-source figure metadata for publication. These internal records do not change the current
+`RenderedFigure` holds a crop's PNG bytes, pixel dimensions, render DPI, region text and source figure metadata for publication. These internal records do not change the current
 local output layout or JSON format.
+
+`render_figures(pdf_bytes, layout, settings)` returns these records without converting the PDF or writing files. Both standalone extraction and unified parsing reuse this function.
+The standalone command still owns its local output directory and annotated PDF.
 
 ## Reading figures with Gemini (local)
 
