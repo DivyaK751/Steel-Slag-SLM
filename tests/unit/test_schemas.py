@@ -16,7 +16,19 @@ def _decision(score: float, confidence: str = "High") -> RelevanceDecision:
 
 
 @pytest.mark.parametrize(
-    ("score", "expected"), [(0.85, "High"), (0.84, "Medium"), (0.60, "Medium"), (0.59, "Low")]
+    ("score", "expected"),
+    [
+        (0.85, "High"),
+        (0.84, "Medium"),
+        (0.70, "Medium"),
+        (0.69, "Low"),
+        (0.50, "Low"),
+        (0.30, "Low"),
+        (0.29, "Medium"),
+        (0.16, "Medium"),
+        (0.15, "High"),
+        (0.0, "High"),
+    ],
 )
 def test_confidence_is_derived_from_score_not_model_choice(score: float, expected: str) -> None:
     assert _decision(score, confidence="High").relevance_confidence == expected

@@ -110,3 +110,17 @@ def test_drive_connection_settings_load_without_openalex_credentials(
     assert settings.service_account_file is None
     assert settings.oauth_client_file is None
     assert settings.oauth_token_file == config.DEFAULT_GOOGLE_TOKEN_PATH
+
+
+def test_evaluation_prices_skip_models_without_both_prices(tmp_path: Path) -> None:
+    path = tmp_path / "base.yaml"
+    raw = {
+        "evaluation": {"table": "labels", "output_dir": "out"},
+        "pricing": {
+            "priced": {"input": 0.5, "output": 2},
+            "unpriced": {"input": None, "output": 1},
+        },
+    }
+    path.write_text(yaml.safe_dump(raw))
+    settings = config.load_evaluation_settings("p.d.papers", path)
+    assert set(settings.prices) == {"priced"}

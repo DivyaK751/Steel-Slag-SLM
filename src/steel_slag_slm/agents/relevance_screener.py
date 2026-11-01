@@ -7,13 +7,25 @@ from typing import Any
 from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
 
-from steel_slag_slm.agents.runner import build_structured_agent, run_structured
+from steel_slag_slm.agents.runner import TokenUsage, build_structured_agent, run_structured
 from steel_slag_slm.config import ScreeningSettings
+from steel_slag_slm.data.language_filter import non_english_reason
 from steel_slag_slm.llm.prompts import PromptTemplate
 from steel_slag_slm.schemas import PaperForScreening, RelevanceDecision
 
 AGENT_NAME = "relevance_screener"
 MISSING_FIELD = "(not available)"
+NON_ENGLISH_PREFIX = "Not in English (checked before Gemini): "
+# The BigQuery columns a screening decision fills, keyed by paper ID; the rest of a row is
+# owned by the registry
+DECISION_COLUMN_TYPES = {
+    "openalex_id": "STRING",
+    "relevant": "STRING",
+    "relevance_score": "FLOAT64",
+    "relevance_confidence": "STRING",
+    "relevance_reason": "STRING",
+    "supporting_excerpt": "STRING",
+}
 
 
 def build_screener_agent(settings: ScreeningSettings, prompt: PromptTemplate) -> LlmAgent:
@@ -66,13 +78,34 @@ def check_excerpt(decision: RelevanceDecision, paper: PaperForScreening) -> Rele
     return decision.model_copy(update={"supporting_excerpt": None})
 
 
+def non_english_decision(paper: PaperForScreening) -> RelevanceDecision | None:
+    """A "No" for a paper that is clearly not in English, so it never reaches Gemini."""
+    reason = non_english_reason(paper)
+    if reason is None:
+        return None
+    return RelevanceDecision(
+        relevant="No",
+        relevance_score=0.0,
+        relevance_confidence="High",
+        relevance_reason=NON_ENGLISH_PREFIX + reason,
+    )
+
+
 async def screen_paper(
     runner: Runner, prompt: PromptTemplate, paper: PaperForScreening
-) -> RelevanceDecision:
+) -> tuple[RelevanceDecision, TokenUsage]:
     """Ask the agent for a decision on one paper and verify its excerpt.
+
+    Papers that are clearly not in English get "No" without calling Gemini.
+
+    Returns:
+        The decision and the tokens it cost (none for a non-English paper).
 
     Raises:
         AgentOutputError: If the agent's answer is missing or malformed.
     """
-    decision = await run_structured(runner, render_paper(prompt, paper), RelevanceDecision)
-    return check_excerpt(decision, paper)
+    skipped = non_english_decision(paper)
+    if skipped is not None:
+        return skipped, TokenUsage(0, 0)
+    decision, usage = await run_structured(runner, render_paper(prompt, paper), RelevanceDecision)
+    return check_excerpt(decision, paper), usage

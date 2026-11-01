@@ -2,6 +2,7 @@
 
 import asyncio
 from collections.abc import Awaitable, Callable, Sequence
+from dataclasses import dataclass
 from typing import TypeVar
 
 from google.adk.agents import LlmAgent
@@ -20,6 +21,29 @@ LLM_RETRY_ATTEMPTS = 5
 SchemaT = TypeVar("SchemaT", bound=BaseModel)
 ItemT = TypeVar("ItemT")
 ResultT = TypeVar("ResultT")
+
+
+@dataclass(frozen=True, slots=True)
+class TokenUsage:
+    """Tokens Gemini billed for one or more calls."""
+
+    input_tokens: int = 0
+    # Includes the model's hidden "thinking" tokens, which are billed as output
+    output_tokens: int = 0
+
+    def __add__(self, other: "TokenUsage") -> "TokenUsage":
+        return TokenUsage(
+            self.input_tokens + other.input_tokens, self.output_tokens + other.output_tokens
+        )
+
+
+def _usage_of(metadata: types.GenerateContentResponseUsageMetadata | None) -> TokenUsage:
+    if metadata is None:
+        return TokenUsage()
+    return TokenUsage(
+        input_tokens=metadata.prompt_token_count or 0,
+        output_tokens=(metadata.candidates_token_count or 0) + (metadata.thoughts_token_count or 0),
+    )
 
 
 def build_structured_agent(
@@ -48,8 +72,13 @@ def build_runner(agent: LlmAgent) -> Runner:
     return InMemoryRunner(agent=agent, app_name=APP_NAME)
 
 
-async def run_structured(runner: Runner, message: str, schema: type[SchemaT]) -> SchemaT:
+async def run_structured(
+    runner: Runner, message: str, schema: type[SchemaT]
+) -> tuple[SchemaT, TokenUsage]:
     """Send one message in a fresh session and parse the agent's final answer.
+
+    Returns:
+        The parsed answer and the tokens the call used.
 
     Raises:
         AgentOutputError: If the agent gives no final answer or it doesn't match the schema.
@@ -58,10 +87,12 @@ async def run_structured(runner: Runner, message: str, schema: type[SchemaT]) ->
     session = await runner.session_service.create_session(app_name=APP_NAME, user_id=USER_ID)
     content = types.Content(role="user", parts=[types.Part(text=message)])
     final_text = ""
+    usage = TokenUsage()
     try:
         async for event in runner.run_async(
             user_id=USER_ID, session_id=session.id, new_message=content
         ):
+            usage += _usage_of(event.usage_metadata)
             if event.is_final_response() and event.content and event.content.parts:
                 final_text = "".join(part.text or "" for part in event.content.parts)
     finally:
@@ -71,7 +102,7 @@ async def run_structured(runner: Runner, message: str, schema: type[SchemaT]) ->
     if not final_text.strip():
         raise AgentOutputError("Agent returned no final answer")
     try:
-        return schema.model_validate_json(final_text)
+        return schema.model_validate_json(final_text), usage
     except ValidationError as error:
         raise AgentOutputError(f"Answer doesn't match {schema.__name__}: {error}") from error
 
