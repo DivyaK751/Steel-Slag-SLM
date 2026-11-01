@@ -83,7 +83,34 @@ def list_paper_dirs(
 
 
 def load_figures_to_read(paper_dir: Path) -> list[FigureToRead]:
-    """Read one paper's figures.json into the records the agent needs."""
+    """Read a unified manifest, or a legacy local figures.json if no manifest exists."""
+    manifest_path = paper_dir / "parsed.json"
+
+    if manifest_path.exists():
+        manifest = ParsedManifest.model_validate_json(manifest_path.read_bytes())
+        if manifest.openalex_id != paper_dir.name:
+            raise ValueError("Paper directory does not match manifest openalex_id")
+
+        figures = []
+        for image in manifest.images:
+            path = paper_dir / image.relative_path
+            if sha256(path.read_bytes()).hexdigest() != image.sha256:
+                raise ValueError(f"Image checksum mismatch for {image.figure_id}")
+
+            figures.append(
+                FigureToRead(
+                    paper_id=manifest.openalex_id,
+                    image_path=path,
+                    figure_number=image.figure_number,
+                    caption=image.caption,
+                    pdf_text=image.pdf_text,
+                    detected_type=image.figure_type,
+                    figure_id=image.figure_id,
+                    image_sha256=image.sha256,
+                )
+            )
+        return figures
+
     records = json.loads((paper_dir / FIGURES_FILE_NAME).read_text())
     return [
         FigureToRead(
