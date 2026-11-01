@@ -163,6 +163,18 @@ local output layout or JSON format.
 `render_figures(pdf_bytes, layout, settings)` returns these records without converting the PDF or writing files. Both standalone extraction and unified parsing reuse this function.
 The standalone command still owns its local output directory and annotated PDF.
 
+### Unified parsing API
+
+`build_docling_converter(include_figures=True)` enables figure classification while retaining
+OCR and table structure. `parse_pdf_with_figures(pdf_bytes, converter, settings)` uses one
+Docling conversion for text, tables and figure crops, returning crops in
+`ParsedDocument.figures`.
+
+The existing `parse_pdf` entry point and Drive command continue to use embedded image
+resources. Drive publication of the new figure records requires the subsequent manifest and
+schema migration. Do not pass the new result to the legacy serializer: it does not publish
+the `figures` field.
+
 ## Reading figures with Gemini (local)
 
 `read-figures` sends each figure saved by `extract-figures` to Gemini on Vertex AI and records
