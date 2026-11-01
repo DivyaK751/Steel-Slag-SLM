@@ -37,7 +37,6 @@ def build_figure_converter() -> DocumentConverter:
         format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)}
     )
 
-
 def detect_figures(pdf_bytes: bytes, converter: DocumentConverter) -> DetectedLayout:
     """Return every figure region and caption block in the PDF, in top-left page coordinates.
 
@@ -46,12 +45,22 @@ def detect_figures(pdf_bytes: bytes, converter: DocumentConverter) -> DetectedLa
     """
     if not pdf_bytes:
         raise ValueError("PDF bytes must not be empty")
+
     document = converter.convert(
         DocumentStream(name="paper.pdf", stream=BytesIO(pdf_bytes))
     ).document
+    return detect_figures_in_document(document)
 
+
+def detect_figures_in_document(document: DoclingDocument) -> DetectedLayout:
+    """Read figure regions and caption blocks from an already-converted document.
+
+    Return boxes in top-left PDF points and retain Docling's one-based page numbers.
+    This function does not convert the PDF or modify the document.
+    """
     figures: list[Figure] = []
     captions: list[CaptionBlock] = []
+
     for item, _ in document.iterate_items():
         if isinstance(item, PictureItem):
             figure_type, confidence = top_figure_class(item)
@@ -69,7 +78,9 @@ def detect_figures(pdf_bytes: bytes, converter: DocumentConverter) -> DetectedLa
                 CaptionBlock(page_number, bbox, item.text.strip(), number)
                 for page_number, bbox in _placements(item, document)
             )
+
     return DetectedLayout(figures=figures, captions=captions)
+
 
 
 def _placements(item: Any, document: DoclingDocument) -> list[tuple[int, PageBox]]:
