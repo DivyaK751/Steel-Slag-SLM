@@ -1,302 +1,317 @@
+"""Exercise unified publication, migration and offline figure consumption."""
+
 import json
-from collections import Counter
+from dataclasses import replace
+from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock
 
+import pymupdf
 import pytest
+from docling.exceptions import ConversionError
+from pydantic import ValidationError
 
-from steel_slag_slm.config import PdfParsingSettings
+from steel_slag_slm.config import FigureExtractionSettings, PdfParsingSettings
 from steel_slag_slm.data import drive_storage, pdf_parsing, pdf_parsing_source
+from steel_slag_slm.data.parsed_manifest import ParsedManifest, parser_revision
+from steel_slag_slm.data.parsed_publication import publish_parse
 from steel_slag_slm.data.pdf_parsing_source import PdfSource
-from steel_slag_slm.pipelines import parse_pdfs
-from steel_slag_slm.schemas import (
-    ContentPlacement,
-    ParsedContentBlock,
-    ImagePlacement,
-    ParsedDocument,
-    ParsedImage,
+from steel_slag_slm.pipelines.export_parsed import run_export_parsed
+from steel_slag_slm.pipelines.parse_pdfs import run_pdf_parsing
+from steel_slag_slm.pipelines.read_figures import list_paper_dirs, load_figures_to_read
+from steel_slag_slm.schemas import CaptionBlock, Figure, ParsedDocument, RenderedFigure
+
+SOURCE = PdfSource("W123", "https://drive.google.com/file/d/SOURCE123/view")
+PARSING = PdfParsingSettings(
+    source_table="project.dataset.papers",
+    output_folder_name="_parsed",
+    index_file_name="index.json",
+)
+FIGURES = FigureExtractionSettings(
+    output_dir=Path("unused"),
+    render_dpi=72,
+    caption_max_gap_pt=60,
+    min_side_pt=72,
+    min_split_height_pt=50,
+    drop_types=["logo"],
+    min_uncaptioned_side_pt=150,
 )
 
 
-def _settings() -> PdfParsingSettings:
-    return PdfParsingSettings(
-        source_table="project.dataset.papers_trial",
-        output_folder_name="_parsed",
-        index_file_name="index.json",
+def _parsed() -> ParsedDocument:
+    pixmap = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 10, 10), False)
+    pixmap.clear_with(255)
+    caption = CaptionBlock(1, (0, 20, 100, 30), "Fig. 1 Strength", "1")
+    figure = Figure(1, (0, 0, 100, 10), "line_chart", 0.9, caption.text, "1", caption)
+    item = RenderedFigure(
+        figure,
+        "figure_01.png",
+        10,
+        10,
+        72,
+        "Strength",
+        pixmap.tobytes("png"),
     )
-
-
-def _parsed_document() -> ParsedDocument:
     return ParsedDocument(
-        text_parser="Docling",
-        image_parser="PyMuPDF",
-        page_count=1,
-        markdown="# Sample",
-        tables=("table",),
-        images=(
-            ParsedImage(
-                xref=7,
-                file_name="image_001.png",
-                width=2,
-                height=2,
-                placements=(ImagePlacement(page_number=1, bbox=(1.0, 2.0, 3.0, 4.0)),),
-                image_bytes=b"png-bytes",
-            ),
-        ),
-        content_blocks=(
-            ParsedContentBlock(
-                kind="text",
-                label="paragraph",
-                text="Sample text",
-                placements=(
-                    ContentPlacement(
-                        page_number=1,
-                        bbox=(10.0, 20.0, 100.0, 40.0),
-                        coordinate_origin="TOPLEFT",
-                    ),
-                ),
-            ),
-        ),
+        "Docling",
+        "Docling+PyMuPDF",
+        1,
+        "Text",
+        (),
+        (),
+        figures=(item,),
     )
 
 
-def test_run_pdf_parsing_uploads_paper_folder_images_and_index(monkeypatch) -> None:
-    source = PdfSource("W123", "https://drive.google.com/file/d/SOURCE123/view")
-    parsed = _parsed_document()
-    uploads: dict[tuple[str, str], bytes] = {}
+def _prepare(monkeypatch: pytest.MonkeyPatch, drive: Any) -> str:
+    monkeypatch.setattr(pdf_parsing_source, "list_pdf_sources", lambda *_: [SOURCE])
+    monkeypatch.setattr(pdf_parsing, "build_docling_converter", lambda **_: MagicMock())
+    monkeypatch.setattr(pdf_parsing, "parse_pdf_with_figures", lambda *_: _parsed())
+    monkeypatch.setattr(drive_storage, "download_pdf", drive.download_file)
+    drive.contents["SOURCE123"] = b"%PDF"
+    return str(drive.ensure_subfolder(None, "root", "_parsed"))
 
-    monkeypatch.setattr(pdf_parsing_source, "list_pdf_sources", lambda *_: [source])
-    monkeypatch.setattr(
-        drive_storage,
-        "ensure_subfolder",
-        lambda _service, parent_id, name: f"{parent_id}/{name}",
-    )
-    monkeypatch.setattr(drive_storage, "read_text_file", lambda *_: "")
-    monkeypatch.setattr(drive_storage, "drive_file_id_from_link", lambda _: "source-file")
-    monkeypatch.setattr(drive_storage, "download_pdf", lambda *_: b"%PDF")
-    monkeypatch.setattr(pdf_parsing, "build_docling_converter", lambda: object())
-    monkeypatch.setattr(pdf_parsing, "parse_pdf", lambda *_: parsed)
 
-    def fake_write_file(
-        _service: object,
-        folder_id: str,
-        file_name: str,
-        content: bytes,
-        _mime_type: str,
-    ) -> str:
-        uploads[(folder_id, file_name)] = content
-        return f"{folder_id}:{file_name}"
-
-    monkeypatch.setattr(drive_storage, "write_file", fake_write_file)
-
-    outcomes = parse_pdfs.run_pdf_parsing(
-        _settings(),
+def _run(**kwargs: Any) -> Any:
+    return run_pdf_parsing(
+        PARSING,
         MagicMock(),
-        MagicMock(),
-        "source-folder",
+        None,
+        "root",
+        figure_settings=FIGURES,
+        **kwargs,
     )
 
-    paper_folder = "source-folder/_parsed/W123"
-    image_folder = f"{paper_folder}/images"
 
-    assert outcomes == Counter(parsed=1)
-    paper_record = json.loads(uploads[(paper_folder, "parsed.json")])
-    assert paper_record["markdown"] == "# Sample"
-    assert paper_record["tables"] == ["table"]
-    assert paper_record["content_schema_version"] == 3
-    assert paper_record["content_blocks"] == [
-        {
-            "kind": "text",
-            "label": "paragraph",
-            "text": "Sample text",
-            "placements": [
-                {
-                    "page_number": 1,
-                    "bbox": [10.0, 20.0, 100.0, 40.0],
-                    "coordinate_origin": "TOPLEFT",
-                }
-            ],
-        }
-    ]
-    assert paper_record["images"][0]["file_id"] == f"{image_folder}:image_001.png"
-    assert "image_bytes" not in paper_record["images"][0]
-    assert uploads[(image_folder, "image_001.png")] == b"png-bytes"
+def _entry(drive: Any, folder: str) -> dict[str, Any]:
+    content = json.loads(drive.read_text_file(None, folder, "index.json"))
+    return dict(content["papers"]["W123"])
 
-    index = json.loads(uploads[("source-folder/_parsed", "index.json")])
-    assert index["papers"]["W123"] == {
-        "source_drive_link": source.drive_link,
-        "paper_folder_id": paper_folder,
-        "json_file_id": f"{paper_folder}:parsed.json",
-        "image_folder_id": image_folder,
-        "image_file_ids": [f"{image_folder}:image_001.png"],
-        "content_schema_version": 3,
+
+def test_unified_pipeline_publishes_indexed_manifest_and_browsing_copy(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_drive: Any,
+) -> None:
+    folder = _prepare(monkeypatch, fake_drive)
+    assert _run()["parsed"] == 1
+
+    entry = _entry(fake_drive, folder)
+    manifest = ParsedManifest.model_validate_json(
+        fake_drive.contents[entry["json_file_id"]]
+    )
+    assert entry["content_schema_version"] == 4
+    assert entry["parse_generation"] == manifest.parse_generation
+    assert manifest.images[0].caption_placements[0].bbox == (0, 20, 100, 30)
+    assert manifest.images[0].file_id in entry["image_file_ids"]
+    assert fake_drive.read_file_bytes(
+        None, entry["paper_folder_id"], "parsed.json"
+    ) == fake_drive.contents[entry["json_file_id"]]
+    assert _run()["already_parsed"] == 1
+
+
+def test_reparse_preserves_old_assets_and_changes_generation(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_drive: Any,
+) -> None:
+    folder = _prepare(monkeypatch, fake_drive)
+    _run()
+    old = _entry(fake_drive, folder)
+    old_contents = {
+        key: fake_drive.contents[key]
+        for key in [old["json_file_id"], *old["image_file_ids"]]
     }
 
+    assert _run(reparse=True)["parsed"] == 1
 
-def test_run_pdf_parsing_skips_papers_already_in_the_new_layout(monkeypatch) -> None:
-    source = PdfSource("W123", "https://drive.google.com/file/d/SOURCE123/view")
-    stored_index = json.dumps(
-        {
-            "schema_version": 1,
-            "papers": {
-                "W123": {
-                    "content_schema_version": 3,
-                    "source_drive_link": source.drive_link,
-                    "paper_folder_id": "paper-folder",
-                    "json_file_id": "existing-json",
-                    "image_folder_id": "image-folder",
-                    "image_file_ids": [],
-                }
-            },
-        }
-    )
+    new = _entry(fake_drive, folder)
+    assert old["parse_generation"] != new["parse_generation"]
+    assert all(fake_drive.contents[key] == value for key, value in old_contents.items())
 
-    monkeypatch.setattr(pdf_parsing_source, "list_pdf_sources", lambda *_: [source])
-    monkeypatch.setattr(drive_storage, "ensure_subfolder", lambda *_: "output-folder")
-    monkeypatch.setattr(drive_storage, "read_text_file", lambda *_: stored_index)
+
+@pytest.mark.parametrize("failed_name", ["image", "manifest", "index"])
+def test_upload_failure_preserves_old_index(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_drive: Any,
+    failed_name: str,
+) -> None:
+    folder = _prepare(monkeypatch, fake_drive)
+    _run()
+    old_index = fake_drive.read_text_file(None, folder, "index.json")
+    original = fake_drive.write_file
+
+    def fail(
+        service: Any,
+        parent: str,
+        name: str,
+        content: bytes,
+        mime: str,
+    ) -> str:
+        matches = (
+            (failed_name == "image" and name.endswith(".png"))
+            or (failed_name == "manifest" and name.startswith("parsed_"))
+            or (failed_name == "index" and name == "index.json")
+        )
+        if matches:
+            raise RuntimeError("simulated upload failure")
+        return str(original(service, parent, name, content, mime))
+
+    monkeypatch.setattr(drive_storage, "write_file", fail)
+
+    with pytest.raises(RuntimeError, match="upload failure"):
+        _run(reparse=True)
+
+    assert fake_drive.read_text_file(None, folder, "index.json") == old_index
+
+
+def test_failed_reparse_keeps_previous_success(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_drive: Any,
+) -> None:
+    folder = _prepare(monkeypatch, fake_drive)
+    _run()
+    old = _entry(fake_drive, folder)
     monkeypatch.setattr(
         pdf_parsing,
-        "build_docling_converter",
-        lambda: (_ for _ in ()).throw(AssertionError("should not build converter")),
+        "parse_pdf_with_figures",
+        MagicMock(side_effect=ConversionError("bad")),
     )
 
-    outcomes = parse_pdfs.run_pdf_parsing(
-        _settings(),
-        MagicMock(),
-        MagicMock(),
-        "source-folder",
-    )
-
-    assert outcomes == Counter(already_parsed=1)
+    assert _run(reparse=True)["failed"] == 1
+    assert _entry(fake_drive, folder) == old
 
 
-def test_run_pdf_parsing_reprocesses_legacy_index_entries(monkeypatch) -> None:
-    source = PdfSource("W123", "https://drive.google.com/file/d/SOURCE123/view")
-    legacy_index = json.dumps(
-        {
-            "schema_version": 1,
-            "papers": {
-                "W123": {
-                    "source_drive_link": source.drive_link,
-                    "paper_folder_id": "old-paper-folder",
-                    "json_file_id": "old-json",
-                    "image_folder_id": "old-image-folder",
-                    "image_file_ids": ["old-image"],
-                }
-            },
-        }
-    )
-    parsed = ParsedDocument(
-        text_parser="Docling",
-        image_parser="PyMuPDF",
-        page_count=1,
-        markdown="# Reparsed",
-        tables=(),
-        images=(),
-    )
-    uploads: dict[tuple[str, str], bytes] = {}
-
-    monkeypatch.setattr(pdf_parsing_source, "list_pdf_sources", lambda *_: [source])
+def test_figure_only_paper_is_published(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_drive: Any,
+) -> None:
+    _prepare(monkeypatch, fake_drive)
     monkeypatch.setattr(
-        drive_storage,
-        "ensure_subfolder",
-        lambda _service, parent_id, name: f"{parent_id}/{name}",
-    )
-    monkeypatch.setattr(drive_storage, "read_text_file", lambda *_: legacy_index)
-    monkeypatch.setattr(drive_storage, "drive_file_id_from_link", lambda _: "source-file")
-    monkeypatch.setattr(drive_storage, "download_pdf", lambda *_: b"%PDF")
-    monkeypatch.setattr(pdf_parsing, "build_docling_converter", lambda: object())
-    monkeypatch.setattr(pdf_parsing, "parse_pdf", lambda *_: parsed)
-
-    def fake_write_file(
-        _service: object,
-        folder_id: str,
-        file_name: str,
-        content: bytes,
-        _mime_type: str,
-    ) -> str:
-        uploads[(folder_id, file_name)] = content
-        return f"{folder_id}:{file_name}"
-
-    monkeypatch.setattr(drive_storage, "write_file", fake_write_file)
-
-    outcomes = parse_pdfs.run_pdf_parsing(
-        _settings(),
-        MagicMock(),
-        MagicMock(),
-        "source-folder",
-        max_papers=1,
+        pdf_parsing,
+        "parse_pdf_with_figures",
+        lambda *_: replace(_parsed(), markdown=""),
     )
 
-    paper_folder = "source-folder/_parsed/W123"
-    assert outcomes["parsed"] == 1
-    assert uploads[(paper_folder, "parsed.json")]
-    updated_index = json.loads(uploads[("source-folder/_parsed", "index.json")])
-    assert updated_index["papers"]["W123"]["paper_folder_id"] == paper_folder
-    assert updated_index["papers"]["W123"]["content_schema_version"] == 3
+    assert _run()["parsed"] == 1
 
 
-def test_run_pdf_parsing_limits_papers_and_counts_deferred(monkeypatch) -> None:
-    sources = [
-        PdfSource(f"W{number}", f"https://drive.google.com/file/d/SOURCE{number}/view")
-        for number in (123, 124, 125)
-    ]
-    parsed = ParsedDocument(
-        text_parser="Docling",
-        image_parser="PyMuPDF",
-        page_count=1,
-        markdown="# Sample",
-        tables=(),
-        images=(),
+def test_empty_pdf_skip_requires_explicit_retry(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_drive: Any,
+) -> None:
+    _prepare(monkeypatch, fake_drive)
+    fake_drive.contents["SOURCE123"] = b""
+    assert _run()["skipped"] == 1
+
+    fake_drive.contents["SOURCE123"] = b"%PDF"
+    assert _run()["skipped"] == 1
+    assert _run(retry_skipped=True)["parsed"] == 1
+
+
+def test_revision_ignores_local_output_path() -> None:
+    assert parser_revision(FIGURES) == parser_revision(
+        FIGURES.model_copy(update={"output_dir": Path("elsewhere")})
     )
-    parsed_ids: list[str] = []
+    assert parser_revision(FIGURES) != parser_revision(
+        FIGURES.model_copy(update={"render_dpi": 200})
+    )
 
-    monkeypatch.setattr(pdf_parsing_source, "list_pdf_sources", lambda *_: sources)
+
+def test_version_three_index_is_migrated(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_drive: Any,
+) -> None:
+    folder = _prepare(monkeypatch, fake_drive)
+    _run()
+    entry = _entry(fake_drive, folder)
+    entry["content_schema_version"] = 3
+    fake_drive.write_file(
+        None,
+        folder,
+        "index.json",
+        json.dumps({"schema_version": 1, "papers": {"W123": entry}}).encode(),
+        "application/json",
+    )
+
+    assert _run()["parsed"] == 1
+    assert _entry(fake_drive, folder)["content_schema_version"] == 4
+
+
+def test_pipeline_limits_pending_papers(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_drive: Any,
+) -> None:
+    _prepare(monkeypatch, fake_drive)
     monkeypatch.setattr(
-        drive_storage,
-        "ensure_subfolder",
-        lambda _service, parent_id, name: f"{parent_id}/{name}",
+        pdf_parsing_source,
+        "list_pdf_sources",
+        lambda *_: [SOURCE, PdfSource("W124", SOURCE.drive_link)],
     )
-    monkeypatch.setattr(drive_storage, "read_text_file", lambda *_: "")
-    monkeypatch.setattr(drive_storage, "drive_file_id_from_link", lambda link: link)
-    monkeypatch.setattr(drive_storage, "download_pdf", lambda *_: b"%PDF")
-    monkeypatch.setattr(pdf_parsing, "build_docling_converter", lambda: object())
 
-    def fake_parse_pdf(pdf_bytes: bytes, converter: object) -> ParsedDocument:
-        parsed_ids.append(pdf_bytes.decode())
-        return parsed
-
-    monkeypatch.setattr(pdf_parsing, "parse_pdf", fake_parse_pdf)
-
-    def fake_write_file(
-        _service: object,
-        _folder_id: str,
-        file_name: str,
-        _content: bytes,
-        _mime_type: str,
-    ) -> str:
-        return file_name
-
-    monkeypatch.setattr(drive_storage, "write_file", fake_write_file)
-
-    outcomes = parse_pdfs.run_pdf_parsing(
-        _settings(),
-        MagicMock(),
-        MagicMock(),
-        "source-folder",
-        max_papers=1,
-    )
+    outcomes = _run(max_papers=1)
 
     assert outcomes["parsed"] == 1
-    assert outcomes["deferred"] == 2
-    assert parsed_ids == ["%PDF"]
+    assert outcomes["deferred"] == 1
 
 
-def test_run_pdf_parsing_rejects_non_positive_limit() -> None:
-    with pytest.raises(ValueError, match="max_papers must be greater than zero"):
-        parse_pdfs.run_pdf_parsing(
-            _settings(),
-            MagicMock(),
-            MagicMock(),
-            "source-folder",
-            max_papers=0,
-        )
+def test_pipeline_rejects_nonpositive_limit() -> None:
+    with pytest.raises(ValueError, match="max_papers"):
+        _run(max_papers=0)
+
+
+def test_export_and_reader_use_same_manifest(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_drive: Any,
+    tmp_path: Path,
+) -> None:
+    folder = _prepare(monkeypatch, fake_drive)
+    _run()
+
+    outcomes = run_export_parsed(PARSING, None, folder, tmp_path)
+
+    assert outcomes["exported"] == 1
+    assert list_paper_dirs(tmp_path, None) == [tmp_path / "W123"]
+    figures = load_figures_to_read(tmp_path / "W123")
+    assert len(figures) == 1
+    assert figures[0].figure_id is not None
+    assert figures[0].image_path.parent.name == "images"
+
+    figures[0].image_path.write_bytes(b"corrupt")
+    with pytest.raises(ValueError, match="checksum"):
+        load_figures_to_read(tmp_path / "W123")
+
+
+def test_corrupt_export_does_not_publish_local_manifest(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_drive: Any,
+    tmp_path: Path,
+) -> None:
+    folder = _prepare(monkeypatch, fake_drive)
+    _run()
+    entry = _entry(fake_drive, folder)
+    fake_drive.contents[entry["image_file_ids"][0]] = b"corrupt"
+
+    with pytest.raises(ValueError, match="checksum"):
+        run_export_parsed(PARSING, None, folder, tmp_path)
+
+    assert not (tmp_path / "W123" / "parsed.json").exists()
+
+
+@pytest.mark.parametrize("bad_value", ["../escape.png", "images/../escape.png"])
+def test_manifest_rejects_unsafe_image_path(
+    fake_drive: Any,
+    bad_value: str,
+) -> None:
+    published = publish_parse(
+        None,
+        "paper",
+        "images",
+        SOURCE,
+        b"%PDF",
+        _parsed(),
+        parser_revision(FIGURES),
+    )
+    raw = published.manifest.model_dump()
+    raw["images"][0]["relative_path"] = bad_value
+
+    with pytest.raises(ValidationError):
+        ParsedManifest.model_validate(raw)
