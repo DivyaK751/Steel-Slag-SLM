@@ -55,23 +55,14 @@ jobs:
       - name: Install project dependencies
         run: uv sync --locked
 
-      - name: Parse PDFs
+      - name: Parse PDFs into _parsed_v2
         env:
           MAX_PAPERS: ${{ inputs.max_papers }}
         run: |
+          set -euo pipefail
+          echo "Publishing unified parsing results to _parsed_v2"
           if [ -n "$MAX_PAPERS" ]; then
-            uv run parse-pdfs --max-papers "$MAX_PAPERS"
+            uv run parse-pdfs --output-folder _parsed_v2 --max-papers "$MAX_PAPERS"
           else
-            uv run parse-pdfs
+            uv run parse-pdfs --output-folder _parsed_v2
           fi
-
-      # Keeps the embedding model between runs so each run doesn't download it again
-      - name: Cache embedding model
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/huggingface
-          key: embedding-model-bge-small-en-v1.5
-
-      # Embeds the papers parsed above (and any others still unindexed) into the Drive index
-      - name: Build search index
-        run: uv run build-index

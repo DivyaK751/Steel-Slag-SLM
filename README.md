@@ -127,6 +127,20 @@ uv run export-parsed \
 Inspect the exported manifest, images and source PDF before parsing more papers. Include
 scanned pages, vector charts, multipart figures and rotated/cropped pages in the pilot.
 
+### GitHub Actions pilot
+
+Live Drive/BigQuery testing uses the repository's configured GitHub Actions secrets.
+The parsing pilot workflow explicitly passes `--output-folder _parsed_v2`, keeping its
+manifests, image assets and parsing index separate from production `_parsed`.
+
+To run it, open Actions → Parse trial PDFs → Run workflow, select the integration branch,
+and set `max_papers` to `1`. Inspect the resulting `_parsed_v2` folder in Drive before
+increasing the batch size.
+
+The pilot workflow does not build embeddings or call Gemini. Local unit tests, linting and
+type-checking do not require the cloud credentials.
+
+
 ### Production parsing and migration
 
 ```bash
