@@ -120,6 +120,7 @@ def match_captions(
     figures: list[Figure], captions: list[CaptionBlock], max_gap_pt: float
 ) -> list[Figure]:
     """Match captions below, beside or above figures, using each caption once.
+
     Preserve the matched CaptionBlock, including its page and bounding box.
     Prefer position first, then distance. Unmatched figures have their caption text,
     figure number and caption block cleared.
@@ -139,7 +140,7 @@ def match_captions(
         caption_for_figure[figure_index] = captions[caption_index]
         used_captions.add(caption_index)
 
-        return [
+    return [
         replace(
             figure,
             caption=caption.text,
@@ -149,7 +150,7 @@ def match_captions(
         if (caption := caption_for_figure.get(index))
         else replace(figure, caption="", figure_number=None, caption_block=None)
         for index, figure in enumerate(figures)
-        ]
+    ]
 
 
 def is_kept(figure: Figure, settings: FigureExtractionSettings) -> bool:

@@ -94,4 +94,4 @@ def test_rendered_figure_is_immutable() -> None:
     )
 
     with pytest.raises(FrozenInstanceError):
-        setattr(rendered, "width", 200)
+        rendered.width = 200  # type: ignore[misc]  # Exercise the frozen-field guard.
