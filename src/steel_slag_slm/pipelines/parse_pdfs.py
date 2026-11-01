@@ -1,90 +1,40 @@
-"""Parse trial-paper PDFs and store their results in Drive."""
+"""Parse screened PDFs and publish unified text, tables and figures to Drive."""
 
 import json
 import logging
-import mimetypes
 import re
 from collections import Counter
 from typing import Any
 
+import pymupdf
+from docling.exceptions import ConversionError
 from google.cloud import bigquery
 
-from steel_slag_slm.config import PdfParsingSettings
+from steel_slag_slm.config import FigureExtractionSettings, PdfParsingSettings
 from steel_slag_slm.data import drive_storage, parsed_index, pdf_parsing, pdf_parsing_source
-from steel_slag_slm.data.pdf_parsing_source import PdfSource
-from steel_slag_slm.schemas import ParsedDocument
+from steel_slag_slm.data.parsed_manifest import (
+    CONTENT_SCHEMA_VERSION,
+    ParsedManifest,
+    parser_revision,
+)
+from steel_slag_slm.data.parsed_publication import publish_parse
 
 logger = logging.getLogger(__name__)
-
 _PAPER_ID_PATTERN = re.compile(r"^W\d+$")
-_CONTENT_SCHEMA_VERSION = 3
 
 
-def _serialize_document(
-    source: PdfSource,
-    parsed: ParsedDocument,
-    image_references: list[dict[str, object]],
-) -> bytes:
-    """Serialize parsed content and Drive image references without embedding image bytes."""
-    record = {
-        "openalex_id": source.openalex_id,
-        "source_drive_link": source.drive_link,
-        "content_schema_version": _CONTENT_SCHEMA_VERSION,
-        "text_parser": parsed.text_parser,
-        "image_parser": parsed.image_parser,
-        "page_count": parsed.page_count,
-        "markdown": parsed.markdown,
-        "tables": list(parsed.tables),
-        "content_blocks": [
-            {
-                "kind": block.kind,
-                "label": block.label,
-                "text": block.text,
-                "placements": [
-                    {
-                        "page_number": placement.page_number,
-                        "bbox": list(placement.bbox),
-                        "coordinate_origin": placement.coordinate_origin,
-                    }
-                    for placement in block.placements
-                ],
-            }
-            for block in parsed.content_blocks
-        ],
-        "images": image_references,
-    }
-    return json.dumps(record, ensure_ascii=False, indent=2).encode("utf-8")
-
-
-def _record_skipped_paper(
-    source: PdfSource,
-    reason: str,
-    papers: dict[str, dict[str, str | int | list[str]]],
-    drive_service: Any,
-    output_folder_id: str,
-    index_file_name: str,
+def _write_index(
+    service: Any,
+    folder_id: str,
+    filename: str,
+    papers: dict[str, Any],
 ) -> None:
-    """Record a paper that should not be retried automatically."""
-    papers[source.openalex_id] = {
-        "status": "skipped",
-        "skip_reason": reason,
-        "source_drive_link": source.drive_link,
-        "json_file_id": "",
-        "image_file_ids": [],
-    }
-    index_bytes = json.dumps(
+    content = json.dumps(
         {"schema_version": parsed_index.INDEX_SCHEMA_VERSION, "papers": papers},
         ensure_ascii=False,
         indent=2,
     ).encode("utf-8")
-    drive_storage.write_file(
-        drive_service,
-        output_folder_id,
-        index_file_name,
-        index_bytes,
-        "application/json",
-    )
-    logger.warning("Skipped paper %s: %s", source.openalex_id, reason)
+    drive_storage.write_file(service, folder_id, filename, content, "application/json")
 
 
 def run_pdf_parsing(
@@ -93,8 +43,16 @@ def run_pdf_parsing(
     drive_service: Any,
     source_folder_id: str,
     max_papers: int | None = None,
+    *,
+    figure_settings: FigureExtractionSettings,
+    reparse: bool = False,
+    retry_skipped: bool = False,
 ) -> Counter[str]:
-    """Parse unprocessed screened papers and save their artifacts and index to Drive."""
+    """Publish pending papers, recording parse failures while letting storage errors abort.
+
+    Keep old generations for readers and rollback. The root index points to an immutable
+    manifest; parsed.json is a browsing copy updated only after the index is committed.
+    """
     if max_papers is not None and max_papers <= 0:
         raise ValueError("max_papers must be greater than zero")
 
@@ -103,133 +61,176 @@ def run_pdf_parsing(
     if not sources:
         return outcomes
 
-    output_folder_id = drive_storage.ensure_subfolder(
-        drive_service, source_folder_id, settings.output_folder_name
+    output_folder = drive_storage.ensure_subfolder(
+        drive_service,
+        source_folder_id,
+        settings.output_folder_name,
     )
-    papers = parsed_index.load_index(drive_service, output_folder_id, settings.index_file_name)
-    converter = None
+    papers = parsed_index.load_index(
+        drive_service,
+        output_folder,
+        settings.index_file_name,
+    )
+    revision = parser_revision(figure_settings)
+    pending = []
 
-    skipped_sources = [
-        source
-        for source in sources
-        if papers.get(source.openalex_id, {}).get("status") == "skipped"
-    ]
-    pending_sources = [
-        source
-        for source in sources
-        if papers.get(source.openalex_id, {}).get("status") != "skipped"
-        and (
-            not papers.get(source.openalex_id, {}).get("paper_folder_id")
-            or not papers.get(source.openalex_id, {}).get("image_folder_id")
-            or papers.get(source.openalex_id, {}).get("content_schema_version")
-            != _CONTENT_SCHEMA_VERSION
+    for source in sources:
+        entry = papers.get(source.openalex_id, {})
+
+        if entry.get("status") == "skipped" and not retry_skipped:
+            outcomes["skipped"] += 1
+            continue
+
+        complete = all(
+            entry.get(key)
+            for key in ("paper_folder_id", "image_folder_id", "json_file_id")
         )
-    ]
-    if skipped_sources:
-        outcomes["skipped"] = len(skipped_sources)
-    outcomes["already_parsed"] = len(sources) - len(pending_sources) - len(skipped_sources)
+        current = (
+            entry.get("content_schema_version") == CONTENT_SCHEMA_VERSION
+            and entry.get("parser_revision") == revision
+            and entry.get("source_drive_link") == source.drive_link
+            and entry.get("status") != "skipped"
+        )
+
+        if complete and current and not reparse:
+            # Repair a browsing copy left stale by an interrupted post-index write.
+            content = drive_storage.download_file(
+                drive_service,
+                str(entry["json_file_id"]),
+            )
+            manifest = ParsedManifest.model_validate_json(content)
+            if manifest.openalex_id != source.openalex_id:
+                raise ValueError("Indexed paper does not match its manifest")
+
+            drive_storage.write_file(
+                drive_service,
+                str(entry["paper_folder_id"]),
+                "parsed.json",
+                content,
+                "application/json",
+            )
+            outcomes["already_parsed"] += 1
+        else:
+            pending.append(source)
 
     if max_papers is not None:
-        outcomes["deferred"] = max(0, len(pending_sources) - max_papers)
-        pending_sources = pending_sources[:max_papers]
+        outcomes["deferred"] = max(0, len(pending) - max_papers)
+        pending = pending[:max_papers]
 
-    for source in pending_sources:
+    converter = None
+
+    for source in pending:
         if not _PAPER_ID_PATTERN.fullmatch(source.openalex_id):
             raise ValueError(f"Invalid OpenAlex paper ID: {source.openalex_id!r}")
 
-        source_file_id = drive_storage.drive_file_id_from_link(source.drive_link)
-        pdf_bytes = drive_storage.download_pdf(drive_service, source_file_id)
+        source_id = drive_storage.drive_file_id_from_link(source.drive_link)
+        pdf_bytes = drive_storage.download_pdf(drive_service, source_id)
 
         if not pdf_bytes:
-            _record_skipped_paper(
-                source,
-                "empty_pdf_file",
-                papers,
+            reason = "empty_pdf_file"
+        else:
+            if converter is None:
+                converter = pdf_parsing.build_docling_converter(include_figures=True)
+
+            try:
+                parsed = pdf_parsing.parse_pdf_with_figures(
+                    pdf_bytes,
+                    converter,
+                    figure_settings,
+                )
+            except (ConversionError, pymupdf.FileDataError, ValueError) as error:
+                logger.error("Failed to parse %s: %s", source.openalex_id, error)
+                outcomes["failed"] += 1
+                continue
+
+            if (
+                parsed.markdown.strip()
+                or parsed.tables
+                or parsed.content_blocks
+                or parsed.figures
+            ):
+                reason = ""
+            else:
+                reason = "no_extracted_content"
+
+        if reason:
+            if papers.get(source.openalex_id, {}).get("json_file_id"):
+                logger.error(
+                    "Reparse of %s has no content; preserving previous parse",
+                    source.openalex_id,
+                )
+                outcomes["failed"] += 1
+                continue
+
+            papers[source.openalex_id] = {
+                "status": "skipped",
+                "skip_reason": reason,
+                "source_drive_link": source.drive_link,
+                "json_file_id": "",
+                "image_file_ids": [],
+            }
+            _write_index(
                 drive_service,
-                output_folder_id,
+                output_folder,
                 settings.index_file_name,
+                papers,
             )
+            logger.warning("Skipped %s: %s", source.openalex_id, reason)
             outcomes["skipped"] += 1
             continue
 
-        if converter is None:
-            converter = pdf_parsing.build_docling_converter()
-
-        parsed = pdf_parsing.parse_pdf(pdf_bytes, converter)
-        if not parsed.markdown.strip() and not parsed.tables and not parsed.content_blocks:
-            _record_skipped_paper(
-                source,
-                "no_extracted_text_tables_or_content_blocks",
-                papers,
-                drive_service,
-                output_folder_id,
-                settings.index_file_name,
-            )
-            outcomes["skipped"] += 1
-            continue
-
-        paper_folder_id = drive_storage.ensure_subfolder(
-            drive_service, output_folder_id, source.openalex_id
-        )
-        image_folder_id = drive_storage.ensure_subfolder(drive_service, paper_folder_id, "images")
-
-        image_references: list[dict[str, object]] = []
-        image_file_ids: list[str] = []
-        for image in parsed.images:
-            mime_type = mimetypes.guess_type(image.file_name)[0] or "application/octet-stream"
-            image_file_id = drive_storage.write_file(
-                drive_service,
-                image_folder_id,
-                image.file_name,
-                image.image_bytes,
-                mime_type,
-            )
-            image_file_ids.append(image_file_id)
-            image_references.append(
-                {
-                    "xref": image.xref,
-                    "file_name": image.file_name,
-                    "file_id": image_file_id,
-                    "width": image.width,
-                    "height": image.height,
-                    "placements": [
-                        {"page_number": placement.page_number, "bbox": list(placement.bbox)}
-                        for placement in image.placements
-                    ],
-                }
-            )
-
-        json_file_id = drive_storage.write_file(
+        paper_folder = drive_storage.ensure_subfolder(
             drive_service,
-            paper_folder_id,
-            "parsed.json",
-            _serialize_document(source, parsed, image_references),
-            "application/json",
+            output_folder,
+            source.openalex_id,
+        )
+        image_folder = drive_storage.ensure_subfolder(
+            drive_service,
+            paper_folder,
+            "images",
         )
 
+        published = publish_parse(
+            drive_service,
+            paper_folder,
+            image_folder,
+            source,
+            pdf_bytes,
+            parsed,
+            revision,
+        )
         papers[source.openalex_id] = {
+            "status": "parsed",
             "source_drive_link": source.drive_link,
-            "paper_folder_id": paper_folder_id,
-            "json_file_id": json_file_id,
-            "image_folder_id": image_folder_id,
-            "image_file_ids": image_file_ids,
-            "content_schema_version": _CONTENT_SCHEMA_VERSION,
+            "paper_folder_id": paper_folder,
+            "image_folder_id": image_folder,
+            "json_file_id": published.json_file_id,
+            "image_file_ids": published.image_file_ids,
+            "content_schema_version": CONTENT_SCHEMA_VERSION,
+            "parser_revision": revision,
+            "parse_generation": published.manifest.parse_generation,
         }
 
-        index_bytes = json.dumps(
-            {"schema_version": parsed_index.INDEX_SCHEMA_VERSION, "papers": papers},
-            ensure_ascii=False,
-            indent=2,
-        ).encode("utf-8")
+        _write_index(
+            drive_service,
+            output_folder,
+            settings.index_file_name,
+            papers,
+        )
         drive_storage.write_file(
             drive_service,
-            output_folder_id,
-            settings.index_file_name,
-            index_bytes,
+            paper_folder,
+            "parsed.json",
+            published.content,
             "application/json",
         )
+
         outcomes["parsed"] += 1
-        logger.info("Parsed paper %s", source.openalex_id)
+        logger.info(
+            "Published %s with %d figures",
+            source.openalex_id,
+            len(parsed.figures),
+        )
 
     logger.info("PDF parsing complete: %s", dict(outcomes))
     return outcomes
