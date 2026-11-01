@@ -37,6 +37,7 @@ def build_figure_converter() -> DocumentConverter:
         format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)}
     )
 
+
 def detect_figures(pdf_bytes: bytes, converter: DocumentConverter) -> DetectedLayout:
     """Return every figure region and caption block in the PDF, in top-left page coordinates.
 
@@ -80,7 +81,6 @@ def detect_figures_in_document(document: DoclingDocument) -> DetectedLayout:
             )
 
     return DetectedLayout(figures=figures, captions=captions)
-
 
 
 def _placements(item: Any, document: DoclingDocument) -> list[tuple[int, PageBox]]:

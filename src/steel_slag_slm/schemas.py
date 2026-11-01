@@ -121,14 +121,18 @@ class CaptionBlock:
 
 @dataclass(frozen=True, slots=True)
 class Figure:
-    """A figure region on a page, with the caption matched to it once cleanup has run."""
+    """Store a figure region and its matched caption metadata.
+    caption_block is None when no exact caption block is available, including captions
+    recovered from the figure region's text layer.
+    """
 
     page_number: int
     bbox: PageBox
-    figure_type: str  # Docling classifier's top class, e.g. "line_chart"; "" when unknown
+    figure_type: str
     type_confidence: float
     caption: str = ""
     figure_number: str | None = None
+    caption_block: CaptionBlock | None = None
 
 
 ChunkKind = Literal["text", "table", "figure_caption"]
