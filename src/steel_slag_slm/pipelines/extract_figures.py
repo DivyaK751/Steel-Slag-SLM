@@ -12,9 +12,11 @@ from docling.document_converter import DocumentConverter
 from docling.exceptions import ConversionError
 
 from steel_slag_slm.config import FigureExtractionSettings
-from steel_slag_slm.data.figure_cleanup import add_inner_captions, clean_figures
+
 from steel_slag_slm.data.figure_detection import DetectedLayout, detect_figures
-from steel_slag_slm.data.pdf_pages import BoxAnnotation, draw_boxes, region_text, render_regions
+from steel_slag_slm.data.figure_rendering import render_figures
+
+from steel_slag_slm.data.pdf_pages import BoxAnnotation, draw_boxes
 from steel_slag_slm.schemas import Figure
 
 logger = logging.getLogger(__name__)
@@ -97,22 +99,16 @@ def extract_paper_figures(
     The paper's folder is emptied first, so it always holds only this run's output.
     """
     layout = detect_figures(pdf_bytes, converter)
-    figures = clean_figures(layout.figures, layout.captions, settings)
-    regions = [(figure.page_number, figure.bbox) for figure in figures]
-    images = render_regions(pdf_bytes, regions, settings.render_dpi)
-    texts = region_text(pdf_bytes, regions)
-    figures = add_inner_captions(figures, texts)
+    rendered = render_figures(pdf_bytes, layout, settings)
+    figures = [item.figure for item in rendered]
 
     _reset_dir(paper_dir)
     annotated = draw_boxes(pdf_bytes, figure_annotations(layout, figures))
     (paper_dir / ANNOTATED_FILE_NAME).write_bytes(annotated)
     records = []
-    for position, (figure, png, text) in enumerate(
-        zip(figures, images, texts, strict=True), start=1
-    ):
-        file_name = f"figure_{position:02d}.png"
-        (paper_dir / file_name).write_bytes(png)
-        records.append(_figure_record(figure, file_name, text))
+    for item in rendered:
+        (paper_dir / item.file_name).write_bytes(item.image_bytes)
+        records.append(_figure_record(item.figure, item.file_name, item.pdf_text))
     (paper_dir / FIGURES_FILE_NAME).write_text(json.dumps(records, indent=2, ensure_ascii=False))
     logger.info(
         "%s: %d figure regions found, %d kept", paper_dir.name, len(layout.figures), len(figures)
