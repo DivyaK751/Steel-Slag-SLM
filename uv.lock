@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.15' and sys_platform == 'win32'",
@@ -1527,6 +1527,15 @@ sdist = { url = "https://files.pythonhosted.org/packages/a9/75/f9edc5d7294501931
 wheels = [
     { url = "https://files.pythonhosted.org/packages/dd/c1/d10b371bcba7abce05e2b33910e39c33cfa496a53f13640b7b8e10bb4d2b/langcodes-3.5.1-py3-none-any.whl", hash = "sha256:b6a9c25c603804e2d169165091d0cdb23934610524a21d226e4f463e8e958a72", size = 183050, upload-time = "2025-12-02T16:21:59.954Z" },
 ]
+
+[[package]]
+name = "langdetect"
+version = "1.0.9"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "six" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/0e/72/a3add0e4eec4eb9e2569554f7c70f4a3c27712f40e3284d483e88094cc0e/langdetect-1.0.9.tar.gz", hash = "sha256:cbc1fef89f8d062739774bd51eda3da3274006b3661d199c2655f6b3f6d605a0", size = 981474, upload-time = "2021-05-07T07:54:13.562Z" }
 
 [[package]]
 name = "latex2mathml"
@@ -4160,6 +4169,7 @@ dependencies = [
     { name = "google-auth" },
     { name = "google-auth-oauthlib" },
     { name = "google-cloud-bigquery" },
+    { name = "langdetect" },
     { name = "openpyxl" },
     { name = "pydantic" },
     { name = "pymupdf" },
@@ -4189,6 +4199,7 @@ requires-dist = [
     { name = "google-auth", specifier = ">=2.23" },
     { name = "google-auth-oauthlib", specifier = ">=1.5.0" },
     { name = "google-cloud-bigquery", specifier = ">=3.46.2" },
+    { name = "langdetect", specifier = ">=1.0.9" },
     { name = "openpyxl", specifier = ">=3.1.5" },
     { name = "pydantic", specifier = ">=2.5" },
     { name = "pymupdf", specifier = ">=1.28.2" },

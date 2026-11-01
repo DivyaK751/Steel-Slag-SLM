@@ -7,7 +7,7 @@ from steel_slag_slm.evaluation.metrics import compute_metrics
 
 
 def _row(paper_id: str, human: str | None, agent: str, match: str) -> PredictionRow:
-    return PredictionRow(paper_id, "t", human, agent, match, 0.9, "High", "r", None)
+    return PredictionRow(paper_id, "t", human, agent, match, 0.9, "High", "r", None, 10, 2, None)
 
 
 def test_write_report_has_three_sheets_and_only_mismatches_in_disagreements(

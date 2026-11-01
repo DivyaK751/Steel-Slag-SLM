@@ -34,13 +34,22 @@ class FakeRunner:
 
     async def run_async(self, **_kwargs: Any) -> Any:
         part = SimpleNamespace(text=self._text)
-        yield SimpleNamespace(is_final_response=lambda: True, content=SimpleNamespace(parts=[part]))
+        usage = SimpleNamespace(
+            prompt_token_count=100, candidates_token_count=20, thoughts_token_count=5
+        )
+        yield SimpleNamespace(
+            is_final_response=lambda: True,
+            content=SimpleNamespace(parts=[part]),
+            usage_metadata=usage,
+        )
 
 
 def test_run_structured_parses_answer_and_deletes_session() -> None:
     runner = FakeRunner('{"value": 3}')
-    answer = asyncio.run(run_structured(runner, "hi", Answer))  # type: ignore[arg-type]
+    answer, usage = asyncio.run(run_structured(runner, "hi", Answer))  # type: ignore[arg-type]
     assert answer.value == 3
+    # Thinking tokens are billed as output, so they count there
+    assert (usage.input_tokens, usage.output_tokens) == (100, 25)
     assert not runner.session_service.live
 
 

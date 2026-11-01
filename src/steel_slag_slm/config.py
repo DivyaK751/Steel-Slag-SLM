@@ -96,11 +96,20 @@ class ScreeningSettings(AgentSettings):
     papers_table: str  # fully qualified: project.dataset.table
 
 
+class ModelPrice(BaseModel):
+    """Gemini list price in USD per 1 million tokens."""
+
+    input: float
+    output: float
+
+
 class EvaluationSettings(BaseModel):
-    """Where the human-labelled papers live and where run reports are saved."""
+    """Where the human-labelled papers live, where run reports go, and model prices."""
 
     labels_table: str  # fully qualified: project.dataset.table
     output_dir: Path
+    # Only models with both prices filled in; others get token counts without a cost
+    prices: dict[str, ModelPrice] = {}
 
 
 class Settings(BaseModel):
@@ -199,11 +208,17 @@ def load_evaluation_settings(
     papers_table: str, config_path: Path = BASE_CONFIG_PATH
 ) -> EvaluationSettings:
     """Build evaluation settings; the labels table sits next to the papers table."""
-    raw_config = _read_base_config(config_path)["evaluation"]
+    raw_config = _read_base_config(config_path)
     project_and_dataset = papers_table.rsplit(".", 1)[0]
+    prices = {
+        model: ModelPrice(**price)
+        for model, price in (raw_config.get("pricing") or {}).items()
+        if price.get("input") is not None and price.get("output") is not None
+    }
     return EvaluationSettings(
-        labels_table=f"{project_and_dataset}.{raw_config['table']}",
-        output_dir=PROJECT_ROOT / raw_config["output_dir"],
+        labels_table=f"{project_and_dataset}.{raw_config['evaluation']['table']}",
+        output_dir=PROJECT_ROOT / raw_config["evaluation"]["output_dir"],
+        prices=prices,
     )
 
 

@@ -5,8 +5,12 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+# Bands from prompts/screen_relevance.yaml (v2): the score is P(relevant), so a score near
+# either end is a confident decision and the middle is not
 HIGH_CONFIDENCE_MIN_SCORE = 0.85
-MEDIUM_CONFIDENCE_MIN_SCORE = 0.60
+HIGH_CONFIDENCE_MAX_SCORE = 0.15
+MEDIUM_CONFIDENCE_MIN_SCORE = 0.70
+MEDIUM_CONFIDENCE_MAX_SCORE = 0.30  # exclusive
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,10 +73,10 @@ class PaperForScreening:
 
 
 def confidence_for_score(score: float) -> Literal["High", "Medium", "Low"]:
-    """Map a 0-1 score to the confidence band the screening prompt defines."""
-    if score >= HIGH_CONFIDENCE_MIN_SCORE:
+    """Map a 0-1 relevance probability to the confidence band the screening prompt defines."""
+    if score >= HIGH_CONFIDENCE_MIN_SCORE or score <= HIGH_CONFIDENCE_MAX_SCORE:
         return "High"
-    if score >= MEDIUM_CONFIDENCE_MIN_SCORE:
+    if score >= MEDIUM_CONFIDENCE_MIN_SCORE or score < MEDIUM_CONFIDENCE_MAX_SCORE:
         return "Medium"
     return "Low"
 
