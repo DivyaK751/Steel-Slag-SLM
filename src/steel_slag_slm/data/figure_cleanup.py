@@ -165,11 +165,21 @@ def is_kept(figure: Figure, settings: FigureExtractionSettings) -> bool:
     return bool(figure.caption) or shortest_side >= settings.min_uncaptioned_side_pt
 
 
+def prepare_figures(
+    figures: list[Figure], captions: list[CaptionBlock], settings: FigureExtractionSettings
+) -> list[Figure]:
+    """Split and match figure regions in reading order, without filtering them."""
+    split = split_merged_figures(figures, captions, settings.min_split_height_pt)
+    matched = match_captions(split, captions, settings.caption_max_gap_pt)
+    return sorted(matched, key=lambda figure: (figure.page_number, figure.bbox[1], figure.bbox[0]))
+
+
 def clean_figures(
     figures: list[Figure], captions: list[CaptionBlock], settings: FigureExtractionSettings
 ) -> list[Figure]:
     """Split merged regions, match captions and drop non-figures, in reading order."""
-    split = split_merged_figures(figures, captions, settings.min_split_height_pt)
-    matched = match_captions(split, captions, settings.caption_max_gap_pt)
-    kept = [figure for figure in matched if is_kept(figure, settings)]
-    return sorted(kept, key=lambda figure: (figure.page_number, figure.bbox[1], figure.bbox[0]))
+    return [
+        figure
+        for figure in prepare_figures(figures, captions, settings)
+        if is_kept(figure, settings)
+    ]
