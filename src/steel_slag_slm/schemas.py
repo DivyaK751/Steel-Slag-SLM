@@ -135,6 +135,22 @@ class Figure:
     caption_block: CaptionBlock | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class RenderedFigure:
+    """Store a figure crop and its source metadata before artifact publication.
+    Width and height are PNG pixels; the figure's boxes are top-left PDF points.
+    pdf_text is the source PDF text layer inside the crop, not OCR or model output.
+    """
+
+    figure: Figure
+    file_name: str
+    width: int
+    height: int
+    render_dpi: int
+    pdf_text: str
+    image_bytes: bytes
+
+
 ChunkKind = Literal["text", "table", "figure_caption"]
 
 
