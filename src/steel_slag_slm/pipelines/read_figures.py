@@ -8,9 +8,12 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from hashlib import sha256
+
 from google.adk.runners import Runner
 from google.genai.errors import APIError
 
+from steel_slag_slm.data.parsed_manifest import ParsedManifest
 from steel_slag_slm.agents.figure_reader import figure_label, read_figure
 from steel_slag_slm.agents.runner import gather_bounded
 from steel_slag_slm.config import FigureReadingSettings
@@ -60,14 +63,21 @@ class CostSummary:
 
 
 def list_paper_dirs(
-    figures_dir: Path, max_papers: int | None, paper_ids: list[str] | None = None
+    figures_dir: Path,
+    max_papers: int | None,
+    paper_ids: list[str] | None = None,
 ) -> list[Path]:
-    """Paper folders written by extract-figures, in name order, at most max_papers of them.
+    """Find unified or legacy local paper directories without returning duplicates."""
+    if max_papers is not None and max_papers <= 0:
+        raise ValueError("max_papers must be greater than zero")
 
-    Raises:
-        PapersNotFoundError: If paper_ids names a paper with no figures folder.
-    """
-    paper_dirs = sorted(path.parent for path in figures_dir.glob(f"*/{FIGURES_FILE_NAME}"))
+    paper_dirs = sorted(
+        {
+            path.parent
+            for name in (FIGURES_FILE_NAME, "parsed.json")
+            for path in figures_dir.glob(f"*/{name}")
+        }
+    )
     paper_dirs = select_papers(paper_dirs, paper_ids)
     return paper_dirs[:max_papers] if max_papers is not None else paper_dirs
 

@@ -225,15 +225,16 @@ class ExtractedAbstract(BaseModel):
 
 @dataclass(frozen=True, slots=True)
 class FigureToRead:
-    """One extracted figure, as listed in its paper's figures.json, ready for a model."""
-
+    """Store one local figure and optional immutable-source identity for model reading."""
+    
     paper_id: str
     image_path: Path
     figure_number: str | None
     caption: str
     pdf_text: str  # words the PDF stores inside the figure; "" for pasted-in pictures
     detected_type: str  # Docling's label, e.g. "line_chart"
-
+    figure_id: str | None = None
+    image_sha256: str | None = None
 
 FigureKind = Literal["data_plot", "xrd_pattern", "process_diagram", "micrograph_or_photo", "other"]
 
