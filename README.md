@@ -149,8 +149,17 @@ How it works:
 For callers that already have a converted Docling document,
 `detect_figures_in_document(document)` reuses the figure and caption detection without another PDF conversion. The standalone command continues to convert PDFs through `detect_figures(pdf_bytes, converter)`.
 
-Settings: the `figure_extraction:` section of `configs/base.yaml`. A figure whose caption is
-printed inside the image keeps an empty caption and no figure number.
+
+Settings: the `figure_extraction:` section of `configs/base.yaml`.
+
+Internally, matched figures retain their caption's page and bounding box in
+`Figure.caption_block`. Captions recovered from a figure's PDF text layer have text and a
+number but no exact caption box. Raster-only captions cannot be recovered from that text
+layer. Internal-caption recovery currently runs after filtering.
+
+`RenderedFigure` holds a crop's PNG bytes, pixel dimensions, render DPI, region text and
+source figure metadata for publication. These internal records do not change the current
+local output layout or JSON format.
 
 ## Reading figures with Gemini (local)
 
