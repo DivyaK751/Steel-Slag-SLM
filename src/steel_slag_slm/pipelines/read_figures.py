@@ -133,6 +133,8 @@ def reading_path(figure: FigureToRead) -> Path:
 def _result_record(result: FigureResult) -> dict[str, Any]:
     return {
         "image": result.figure.image_path.name,
+        "figure_id": result.figure.figure_id,
+        "image_sha256": result.figure.image_sha256,
         "figure_number": result.figure.figure_number,
         "reading": result.reading.model_dump() if result.reading else None,
         "check": asdict(result.check) if result.check else None,
@@ -148,8 +150,11 @@ async def _read_paper(
     figures = load_figures_to_read(paper_dir)
 
     async def read_one(figure: FigureToRead) -> FigureResult:
+        png = figure.image_path.read_bytes()
+        if figure.image_sha256 is not None and sha256(png).hexdigest() != figure.image_sha256:
+            raise ValueError(f"Image changed before reading: {figure.image_path}")
         reading, usage = await asyncio.wait_for(
-            read_figure(runner, prompt, figure, figure.image_path.read_bytes()),
+            read_figure(runner, prompt, figure, png),
             settings.call_timeout_s,
         )
         result = FigureResult(
