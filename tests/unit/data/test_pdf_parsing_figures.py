@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock
 
 import pymupdf
@@ -11,8 +12,13 @@ from docling_core.types.doc.document import DoclingDocument
 from docling_core.types.doc.items.table.table_data import TableCell, TableData
 from docling_core.types.doc.labels import DocItemLabel
 
-from steel_slag_slm.config import FigureExtractionSettings
-from steel_slag_slm.data import pdf_parsing
+from steel_slag_slm.config import FigureExtractionSettings, PdfParsingSettings
+from steel_slag_slm.data import drive_storage, pdf_parsing, pdf_parsing_source
+from steel_slag_slm.data.parsed_manifest import ParsedManifest
+from steel_slag_slm.data.pdf_parsing_source import PdfSource
+from steel_slag_slm.pipelines.export_parsed import run_export_parsed
+from steel_slag_slm.pipelines.parse_pdfs import run_pdf_parsing
+from steel_slag_slm.pipelines.read_figures import load_figures_to_read
 
 
 def _settings() -> FigureExtractionSettings:
@@ -128,6 +134,56 @@ def test_parse_pdf_with_figures_converts_once_and_preserves_all_content(
     assert caption is not None
     assert caption.bbox == (50.0, 310.0, 300.0, 330.0)
     assert (parsed.figures[0].width, parsed.figures[0].height) == (250, 200)
+
+
+def test_unified_parse_publishes_and_exports_one_manifest_in_isolated_folder(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_drive: Any,
+    tmp_path: Path,
+) -> None:
+    settings = PdfParsingSettings(
+        source_table="project.dataset.papers",
+        output_folder_name="_parsed_v2",
+        index_file_name="index.json",
+    )
+    source = PdfSource("W123", "https://drive.google.com/file/d/SOURCE123/view")
+    converter = MagicMock()
+    converter.convert.return_value.status = ConversionStatus.SUCCESS
+    converter.convert.return_value.document = _document()
+    monkeypatch.setattr(pdf_parsing_source, "list_pdf_sources", lambda *_: [source])
+    monkeypatch.setattr(pdf_parsing, "build_docling_converter", lambda **_: converter)
+    monkeypatch.setattr(drive_storage, "download_pdf", fake_drive.download_file)
+    fake_drive.contents["SOURCE123"] = _pdf()
+
+    outcomes = run_pdf_parsing(settings, MagicMock(), None, "root", figure_settings=_settings())
+
+    assert outcomes["parsed"] == 1
+    converter.convert.assert_called_once()
+    assert fake_drive.find_subfolder_id(None, "root", "_parsed") is None
+    folder = fake_drive.find_subfolder_id(None, "root", "_parsed_v2")
+    assert folder is not None
+    paper_folder = fake_drive.find_subfolder_id(None, folder, "W123")
+    assert paper_folder is not None
+    assert set(fake_drive.list_file_names(None, paper_folder)) == {"parsed.json"}
+    content = fake_drive.read_file_bytes(None, paper_folder, "parsed.json")
+    assert content is not None
+    manifest = ParsedManifest.model_validate_json(content)
+    assert "Sample text" in manifest.markdown
+    assert len(manifest.tables) == 1
+    table = next(block for block in manifest.content_blocks if block.kind == "table")
+    assert [placement.page_number for placement in table.placements] == [1, 2]
+    assert len(manifest.images) == 1
+    assert manifest.images[0].placements[0].page_number == 2
+    assert manifest.images[0].caption_placements[0].bbox == (50, 310, 300, 330)
+    assert (manifest.images[0].width, manifest.images[0].height) == (250, 200)
+
+    assert run_export_parsed(settings, None, folder, tmp_path)["exported"] == 1
+    figures = load_figures_to_read(tmp_path / "W123")
+    assert len(figures) == 1
+    assert figures[0].figure_id == manifest.images[0].figure_id
+    assert figures[0].image_sha256 == manifest.images[0].sha256
+    assert figures[0].image_path.parent.name == "images"
+    converter.convert.assert_called_once()
 
 
 @pytest.mark.parametrize(

@@ -50,8 +50,8 @@ def run_pdf_parsing(
 ) -> Counter[str]:
     """Publish pending papers, recording parse failures while letting storage errors abort.
 
-    Keep old generations for readers and rollback. The root index points to an immutable
-    manifest; parsed.json is a browsing copy updated only after the index is committed.
+    Each paper has one mutable parsed.json. Upload images before replacing the manifest,
+    then update the root index. Run only one publisher against an output folder.
     """
     if max_papers is not None and max_papers <= 0:
         raise ValueError("max_papers must be greater than zero")
@@ -92,7 +92,6 @@ def run_pdf_parsing(
         )
 
         if complete and current and not reparse:
-            # Repair a browsing copy left stale by an interrupted post-index write.
             content = drive_storage.download_file(
                 drive_service,
                 str(entry["json_file_id"]),
@@ -101,14 +100,18 @@ def run_pdf_parsing(
             if manifest.openalex_id != source.openalex_id:
                 raise ValueError("Indexed paper does not match its manifest")
 
-            drive_storage.write_file(
-                drive_service,
-                str(entry["paper_folder_id"]),
-                "parsed.json",
-                content,
-                "application/json",
-            )
-            outcomes["already_parsed"] += 1
+            if (
+                manifest.parse_generation != entry.get("parse_generation")
+                or manifest.parser_revision != revision
+                or manifest.source_drive_link != source.drive_link
+            ):
+                logger.warning(
+                    "Manifest metadata differs from index for %s; scheduling reparse",
+                    source.openalex_id,
+                )
+                pending.append(source)
+            else:
+                outcomes["already_parsed"] += 1
         else:
             pending.append(source)
 
@@ -211,14 +214,6 @@ def run_pdf_parsing(
             settings.index_file_name,
             papers,
         )
-        drive_storage.write_file(
-            drive_service,
-            paper_folder,
-            "parsed.json",
-            published.content,
-            "application/json",
-        )
-
         outcomes["parsed"] += 1
         logger.info(
             "Published %s with %d figures",

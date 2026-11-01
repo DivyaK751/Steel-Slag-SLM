@@ -1,4 +1,4 @@
-"""Publish immutable figure assets and a validated paper manifest to Drive."""
+"""Publish figure assets and a single current paper manifest to Drive."""
 
 from dataclasses import asdict, dataclass
 from hashlib import sha256
@@ -13,7 +13,7 @@ from steel_slag_slm.schemas import ParsedDocument
 
 @dataclass(frozen=True, slots=True)
 class PublishedParse:
-    """Identify the immutable manifest and image assets for one successful publication."""
+    """Identify the current manifest and its image assets."""
 
     manifest: ParsedManifest
     json_file_id: str
@@ -30,10 +30,11 @@ def publish_parse(
     parsed: ParsedDocument,
     revision: str,
 ) -> PublishedParse:
-    """Upload generation-specific assets and manifest, without changing the root index.
+    """Upload generation-specific images, then replace the paper's parsed.json.
 
-    Leave existing artifacts untouched. A failed upload may leave unreferenced new artifacts;
-    they are not published to readers until the caller successfully updates the index.
+    Leave the root index update to the caller. Failed image uploads leave the previous
+    manifest intact. An index failure after manifest replacement can leave index metadata
+    stale; publication is not transactional.
     """
     if parsed.images:
         raise ValueError("Unified publication must not receive legacy embedded images")
@@ -116,7 +117,7 @@ def publish_parse(
     json_file_id = drive_storage.write_file(
         service,
         paper_folder_id,
-        f"parsed_{generation}.json",
+        "parsed.json",
         content,
         "application/json",
     )

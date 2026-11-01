@@ -90,7 +90,6 @@ _parsed/
 ├── index.json
 └── <paper_id>/
     ├── parsed.json
-    ├── parsed_<generation>.json
     └── images/
         ├── <generation>_figure_01.png
         └── <generation>_figure_02.png
@@ -104,13 +103,21 @@ Text/table placements preserve their coordinate origin. Figure and matched-capti
 use top-left coordinates. Captions recovered from the figure's PDF text have no exact caption
 placement.
 
-`index.json` points to the immutable generation-specific manifest. `parsed.json` is a browsing
-copy of the current manifest. Publication uploads images and the immutable manifest before
-updating the index, then updates the browsing copy.
+Each paper has one `parsed.json` containing its current text, tables, provenance and figure
+references. The root `index.json` records that file's Drive ID.
 
-A failed reparse does not overwrite the previous generation's assets. Failed uploads can
-leave unreferenced artifacts; historical generations are retained without automatic cleanup.
-If the browsing-copy update fails after the index update, the next normal run repairs it.
+On reparse, new figure images are uploaded before `parsed.json` is replaced, then the root
+index is updated. Historical JSON snapshots are not retained. These writes are not
+transactional: an index-update failure can leave stale index metadata. A normal retry detects
+the generation mismatch and schedules a reparse to reconcile it.
+
+Figure images retain generation-specific filenames. Previous image generations and partial
+uploads are not automatically deleted.
+
+Previously published `parsed_<generation>.json` files are not automatically migrated or
+deleted. With no publisher running, identify the snapshot referenced by the root index,
+remove its unindexed `parsed.json` duplicate, and rename the indexed snapshot to `parsed.json`.
+Preserve the indexed file's Drive ID. Repeat for each existing paper before resuming publication.
 
 Run only one parser process against an output folder at a time.
 
@@ -193,7 +200,8 @@ uv run search-index "free lime volume stability"
 uv run evaluate-retrieval               # score search quality on a fixed test
 ```
 
-- The parse workflow runs `build-index` after parsing, so new papers are added automatically.
+- The `_parsed_v2` pilot workflow only parses; it does not build embeddings. Run `build-index`
+  separately for the configured production folder after an approved migration.
 - `evaluate-retrieval` asks 22 fixed questions about one paper, whose answers were found by
   reading the paper, and reports how high the right passage ranks.
 - Settings are in the `embedding:` section of `configs/base.yaml`. Design notes are in
@@ -254,10 +262,10 @@ Docling conversion for text, tables and figure crops, returning crops in
 containing Markdown, tables, provenance-bearing content blocks and figure image references.
 The legacy `parse_pdf` API remains available but is not used by Drive publication.
 
-Each paper retains its existing folder and images/ subfolder. Images and indexed manifests
-have generation-specific names so a failed reparse does not overwrite the previous parse.
-index.json points to the immutable current manifest; parsed.json is a browsing copy.
-Historical generations are retained and are not automatically deleted.
+Each paper retains its existing folder and images/ subfolder. A single `parsed.json` holds
+the current result and is replaced on reparse; the root index references its Drive ID.
+Images keep generation-specific names, and previous image generations are not automatically
+deleted. JSON snapshots are not retained.
 
 Extraction-setting or parser-version changes trigger reparsing. Use --reparse when a source
 PDF changes behind the same Drive link, and --retry-skipped to reconsider deliberately

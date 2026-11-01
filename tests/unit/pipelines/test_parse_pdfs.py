@@ -88,14 +88,19 @@ def _entry(drive: Any, folder: str) -> dict[str, Any]:
     return dict(content["papers"]["W123"])
 
 
-def test_unified_pipeline_publishes_indexed_manifest_and_browsing_copy(
+def test_unified_pipeline_publishes_single_indexed_manifest(
     monkeypatch: pytest.MonkeyPatch,
     fake_drive: Any,
 ) -> None:
     folder = _prepare(monkeypatch, fake_drive)
+    write = MagicMock(wraps=drive_storage.write_file)
+    monkeypatch.setattr(drive_storage, "write_file", write)
     assert _run()["parsed"] == 1
 
     entry = _entry(fake_drive, folder)
+    assert fake_drive.list_file_names(None, entry["paper_folder_id"]) == {
+        "parsed.json": entry["json_file_id"],
+    }
     manifest = ParsedManifest.model_validate_json(fake_drive.contents[entry["json_file_id"]])
     assert entry["content_schema_version"] == 4
     assert entry["parse_generation"] == manifest.parse_generation
@@ -105,25 +110,32 @@ def test_unified_pipeline_publishes_indexed_manifest_and_browsing_copy(
         fake_drive.read_file_bytes(None, entry["paper_folder_id"], "parsed.json")
         == fake_drive.contents[entry["json_file_id"]]
     )
+    assert sum(call.args[2] == "parsed.json" for call in write.call_args_list) == 1
+    write.reset_mock()
     assert _run()["already_parsed"] == 1
+    write.assert_not_called()
 
 
-def test_reparse_preserves_old_assets_and_changes_generation(
+def test_reparse_replaces_manifest_and_preserves_old_images(
     monkeypatch: pytest.MonkeyPatch,
     fake_drive: Any,
 ) -> None:
     folder = _prepare(monkeypatch, fake_drive)
     _run()
     old = _entry(fake_drive, folder)
-    old_contents = {
-        key: fake_drive.contents[key] for key in [old["json_file_id"], *old["image_file_ids"]]
-    }
+    old_manifest = fake_drive.contents[old["json_file_id"]]
+    old_images = {file_id: fake_drive.contents[file_id] for file_id in old["image_file_ids"]}
 
     assert _run(reparse=True)["parsed"] == 1
 
     new = _entry(fake_drive, folder)
     assert old["parse_generation"] != new["parse_generation"]
-    assert all(fake_drive.contents[key] == value for key, value in old_contents.items())
+    assert new["json_file_id"] == old["json_file_id"]
+    assert fake_drive.contents[new["json_file_id"]] != old_manifest
+    assert fake_drive.list_file_names(None, new["paper_folder_id"]) == {
+        "parsed.json": new["json_file_id"],
+    }
+    assert all(fake_drive.contents[key] == value for key, value in old_images.items())
 
 
 @pytest.mark.parametrize("failed_name", ["image", "manifest", "index"])
@@ -146,7 +158,7 @@ def test_upload_failure_preserves_old_index(
     ) -> str:
         matches = (
             (failed_name == "image" and name.endswith(".png"))
-            or (failed_name == "manifest" and name.startswith("parsed_"))
+            or (failed_name == "manifest" and name == "parsed.json")
             or (failed_name == "index" and name == "index.json")
         )
         if matches:
@@ -159,6 +171,19 @@ def test_upload_failure_preserves_old_index(
         _run(reparse=True)
 
     assert fake_drive.read_text_file(None, folder, "index.json") == old_index
+    entry = _entry(fake_drive, folder)
+    manifest = ParsedManifest.model_validate_json(fake_drive.contents[entry["json_file_id"]])
+    if failed_name == "index":
+        assert manifest.parse_generation != entry["parse_generation"]
+    else:
+        assert manifest.parse_generation == entry["parse_generation"]
+
+    monkeypatch.setattr(drive_storage, "write_file", original)
+    outcomes = _run()
+    assert outcomes["parsed" if failed_name == "index" else "already_parsed"] == 1
+    entry = _entry(fake_drive, folder)
+    manifest = ParsedManifest.model_validate_json(fake_drive.contents[entry["json_file_id"]])
+    assert manifest.parse_generation == entry["parse_generation"]
 
 
 def test_failed_reparse_keeps_previous_success(
