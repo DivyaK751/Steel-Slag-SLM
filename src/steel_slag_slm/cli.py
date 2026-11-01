@@ -55,6 +55,7 @@ from steel_slag_slm.pipelines.read_figures import (
 from steel_slag_slm.pipelines.screen_papers import run_screening
 from steel_slag_slm.pipelines.search_index import run_search
 from steel_slag_slm.pipelines.sync_registry import run_registry_sync
+from steel_slag_slm.pipelines.export_parsed import run_export_parsed
 from steel_slag_slm.rag.embeddings import Embedder
 from steel_slag_slm.schemas import ChunkKind
 
@@ -266,6 +267,35 @@ def parse_pdfs() -> None:
     print("Summary:", dict(outcomes))
     if outcomes["failed"]:
         raise SystemExit(f"{outcomes['failed']} paper(s) failed parsing; see errors above")
+
+
+def export_parsed() -> None:
+    """Export unified Drive parses locally for optional figure reading."""
+    parser = argparse.ArgumentParser(description=export_parsed.__doc__)
+    parser.add_argument("--out-dir", type=Path, required=True)
+    parser.add_argument("--paper-ids", nargs="+", default=None)
+    parser.add_argument("--max-papers", type=int, default=None)
+    parser.add_argument("--output-folder", default=None)
+    args = parser.parse_args()
+
+    if args.max_papers is not None and args.max_papers <= 0:
+        parser.error("--max-papers must be greater than zero")
+
+    _setup_logging()
+    settings = load_pdf_parsing_settings()
+    if args.output_folder is not None:
+        settings = settings.model_copy(
+            update={"output_folder_name": args.output_folder}
+        )
+
+    outcomes = run_export_parsed(
+        settings,
+        *_connect_to_parsed_folder(settings.output_folder_name),
+        args.out_dir,
+        args.paper_ids,
+        args.max_papers,
+    )
+    print("Summary:", dict(outcomes))
 
 
 def fill_abstracts() -> None:
