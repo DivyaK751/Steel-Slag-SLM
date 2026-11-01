@@ -67,7 +67,7 @@ def load_index(
         if skip_reason is not None:
             papers[paper_id]["skip_reason"] = skip_reason
 
-        for key in ("paper_folder_id", "image_folder_id", "source_drive_link"):
+        for key in ("paper_folder_id", "image_folder_id","source_drive_link", "parser_revision", "parse_generation",):
             value = entry.get(key)
             if value is not None:
                 if not isinstance(value, str):
