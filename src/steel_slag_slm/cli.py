@@ -501,7 +501,7 @@ def read_figures() -> None:
         "--figures-dir",
         type=Path,
         default=extraction.output_dir,
-        help=f"folder written by extract-figures (default: {extraction.output_dir})",
+        help=f"local output from export-parsed or extract-figures (default: {extraction.output_dir})",
     )
     parser.add_argument(
         "--paper-ids",
@@ -522,9 +522,12 @@ def read_figures() -> None:
     try:
         paper_dirs = list_paper_dirs(args.figures_dir, args.max_papers, args.paper_ids)
     except PapersNotFoundError as error:
-        parser.error(f"{error}; run extract-figures on them first")
+        parser.error(f"{error}; run export-parsed or extract-figures first")
     if not paper_dirs:
-        parser.error(f"no figures.json found under {args.figures_dir}; run extract-figures first")
+        parser.error(
+            f"no parsed.json or figures.json found under {args.figures_dir}; "
+            "run export-parsed or extract-figures first"
+        )
 
     _setup_logging()
     _quiet_gemini_logs()
@@ -556,4 +559,4 @@ def read_figures() -> None:
         f"{checks.values_out_of_range} of {checks.values_checked} values outside their axes; "
         f"{checks.rows_malformed} rows with missing cells"
     )
-    print(f"Each reading is saved beside its figure (figure_NN.json) in {args.figures_dir}")
+    print(f"Each reading is saved beside its source image under {args.figures_dir}")
