@@ -1,0 +1,41 @@
+name: Screen papers
+
+# Runs nightly as the last step of "Fetch papers", and can also be started by hand
+on:
+  workflow_call:
+  workflow_dispatch:
+    inputs:
+      # Not "max_papers": a called workflow sees the caller's inputs, so the fetch limit
+      # would otherwise cap this job too
+      max_screened:
+        description: "Stop after screening this many papers (blank = every unscreened paper)"
+        required: false
+        type: string
+
+concurrency:
+  group: screen-papers
+  cancel-in-progress: false
+
+env:
+  GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+  GOOGLE_CLOUD_LOCATION: global
+  GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
+
+jobs:
+  screen-papers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Write Google credentials
+        run: .github/scripts/write_google_credentials.sh
+      - name: Screen unscreened papers for relevance
+        run: |
+          if [ -z "$GOOGLE_CLOUD_PROJECT" ] || [ -z "$GCP_SERVICE_ACCOUNT_JSON" ]; then
+            echo "GOOGLE_CLOUD_PROJECT or GCP_SERVICE_ACCOUNT_JSON secret not set; skipping."
+            exit 0
+          fi
+          uv run screen-papers ${MAX_SCREENED:+--max-papers "$MAX_SCREENED"}
+        env:
+          MAX_SCREENED: ${{ inputs.max_screened }}
