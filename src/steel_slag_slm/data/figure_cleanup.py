@@ -33,7 +33,12 @@ def add_inner_captions(figures: list[Figure], region_texts: list[str]) -> list[F
     for figure, text in zip(figures, region_texts, strict=True):
         match = None if figure.caption else _INNER_CAPTION.search(text)
         if match:
-            figure = replace(figure, caption=match.group(1), figure_number=match.group(2).lower())
+            figure = replace(
+                figure,
+                caption=match.group(1),
+                figure_number=match.group(2).lower(),
+                caption_block=None,
+            )
         result.append(figure)
     return result
 
