@@ -14,3 +14,7 @@ service_account*.json
 /reports/extraction/
 pdf_parsing_implementation_guide.pdf
 
+
+# OS / Office clutter
+.DS_Store
+~$*

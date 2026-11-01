@@ -27,6 +27,9 @@ class PredictionRow:
     relevance_confidence: str | None
     relevance_reason: str
     supporting_excerpt: str | None
+    input_tokens: int | None
+    output_tokens: int | None
+    cost_usd: float | None  # None when the model has no price in base.yaml
 
 
 def _percent(value: float | None) -> str:

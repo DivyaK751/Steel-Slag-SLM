@@ -7,7 +7,7 @@ import steel_slag_slm.pipelines.screen_papers as screen_papers
 from steel_slag_slm.config import ScreeningSettings
 from steel_slag_slm.exceptions import AgentOutputError
 from steel_slag_slm.llm.prompts import load_prompt
-from steel_slag_slm.schemas import PaperForScreening, RelevanceDecision
+from steel_slag_slm.schemas import PaperForScreening, RelevanceDecision, TokenUsage
 
 
 class FakeTable:
@@ -50,7 +50,7 @@ def _install(monkeypatch: pytest.MonkeyPatch, table: FakeTable, failing: set[str
             relevance_confidence="High",
             relevance_reason="r",
             supporting_excerpt="BOF slag binder.",
-        )
+        ), TokenUsage(100, 0, 10)
 
     monkeypatch.setattr(screen_papers, "fetch_unscreened", table.fetch)
     monkeypatch.setattr(screen_papers, "merge_updates", table.merge)
@@ -71,6 +71,7 @@ def test_run_screening_writes_all_batches_keyed_by_paper_id(
     _install(monkeypatch, table, failing=set())
     outcomes = _run(settings, max_papers=None)
     assert outcomes["yes"] == 3 and outcomes["written"] == 3
+    assert (outcomes["input_tokens"], outcomes["output_tokens"]) == (300, 30)
     assert [row["openalex_id"] for row in table.written] == ["W1", "W2", "W3"]
 
 

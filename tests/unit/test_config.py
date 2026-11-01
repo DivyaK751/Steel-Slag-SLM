@@ -90,9 +90,7 @@ def test_evaluation_table_sits_next_to_papers_table() -> None:
 
 def test_pdf_parsing_settings_use_screening_evaluation_table_and_drive_names() -> None:
     settings = config.load_pdf_parsing_settings()
-    assert settings.source_table == (
-        "capstone-project-511200.steel_slag.screening_evaluation"
-    )
+    assert settings.source_table == ("capstone-project-511200.steel_slag.screening_evaluation")
     assert settings.output_folder_name == "_parsed"
     assert settings.index_file_name == "index.json"
 
@@ -131,3 +129,17 @@ def test_abstract_extraction_settings_fall_back_to_llm_defaults(
     settings = config.load_abstract_extraction_settings(path)
     assert settings.model == "default-model" and settings.max_pages == 3
     assert settings.papers_table == "proj.ds.papers"
+
+
+def test_evaluation_prices_skip_models_without_both_prices(tmp_path: Path) -> None:
+    path = tmp_path / "base.yaml"
+    raw = {
+        "evaluation": {"table": "labels", "output_dir": "out"},
+        "pricing": {
+            "priced": {"input": 0.5, "output": 2},
+            "unpriced": {"input": None, "output": 1},
+        },
+    }
+    path.write_text(yaml.safe_dump(raw))
+    settings = config.load_evaluation_settings("p.d.papers", path)
+    assert set(settings.prices) == {"priced"}

@@ -1,7 +1,33 @@
 name: screen_relevance
-version: 1
-description: Decide from title, abstract and keywords whether a paper goes on to full-text extraction.
+version: 4
+# v4 changes (from Gemini runs of v3 on the 50 labelled papers):
+#   - slag used as a reagent/sorbent/additive in a non-cementitious process -> "No"
+#   - slag only named as an example or possible feedstock while the work is on
+#     another material -> "No" (a "No" may be proven by the sentence showing that)
+#   - (d) narrowed: the slag's own CO2 uptake, carbonation or CO2 capacity must be
+#     studied, measured or estimated
+#   - fired products (ceramics, glass-ceramics, clinker): "Yes" only when the slag's /
+#     raw materials' own composition or phases are a stated focus; product-only -> "No"
+#   - slag in a concrete mix whose role is not stated -> "Yes" (was "Unclear")
+#   - precedence: criterion (a) binder use always wins over the other "No" bullets
+#   - any non-English script in title/abstract/keywords -> "No" (checked first; author
+#     names excluded). Two layers: data/language_filter.py answers "No" in code BEFORE
+#     the LLM call for non-Latin scripts and for abstracts langdetect is sure are not
+#     English; this prompt rule catches the rest (mixed abstracts, title-only papers).
+# Unchanged on purpose (awaiting SME): handling of #2-type papers (aggregate setting
+# but findings on slag expansion/hydraulicity -> Yes via (e)) and #39-type papers
+# (slag as partial cement replacement inside another study -> Yes via (a)).
+description: >
+  Decide from title, abstract and keywords whether a paper goes on to full-text
+  extraction into the Steel Slag Input Spreadsheet (tabs 2-8).
 variables: [openalex_id, title, year, keywords, abstract]
+
+# Routing used by the pipeline (not shown to the model):
+#   relevant == "Yes" or "Unclear"  -> send to full-text extraction
+#   relevant == "No"                -> drop
+routing:
+  pass_labels: ["Yes", "Unclear"]
+  score_threshold: 0.35
 
 # Sent once as the system instruction; identical for every paper
 instruction: |
@@ -10,61 +36,144 @@ instruction: |
   cementitious materials (SCMs) or binders. You see ONLY the title, abstract and keywords.
   Decide whether the paper should go on to full-text data extraction.
 
+  The extraction database records, for a steel slag:
+    - its chemistry (oxides, free CaO/MgO), mineralogy and phases
+    - how it was processed (grinding, cooling/quenching, modification, reduction)
+    - its particle size / fineness
+    - how it was activated (mechanical, chemical, thermal, carbonation)
+    - mix design, performance and durability of pastes, mortars or concretes that
+      contain the slag
+    - carbonation conditions and CO2 uptake of the slag
+
   INPUT
   Each user message holds one paper inside <paper> tags, with the fields openalex_id, title,
   year, keywords and abstract.
 
   IN-SCOPE SLAGS
   BOF/BOS/LD/converter slag, EAF slag, ladle/LF/LMF slag, stainless/AOD slag, refining or
-  desulfurization slag. Generic "steel slag" counts as in scope.
+  desulfurization slag. Generic "steel slag" or "steelmaking slag" counts as in scope.
   OUT OF SCOPE: GGBFS/blast furnace slag only; non-ferrous slags only (copper, nickel, etc.).
+  A blend of an in-scope slag with GGBFS is in scope.
+
+  THE KEY QUESTION
+  Is the steel slag itself the object of study, or is it used in the binder?
+    - Yes when the FINDINGS are about the slag (its chemistry, phases, treatment,
+      reactivity, hydration, expansion, carbonation) or about a binder that contains it.
+    - No when the slag is only an input to some other system and only that system's
+      results are reported. Composition or XRD reported just to describe the slag before
+      using it as aggregate, in asphalt, in soil, etc. does NOT make the paper a Yes.
 
   DECISION
   "Yes" - in-scope slag AND the abstract indicates ANY of:
-    (a) use as cement replacement, binder, SCM, hydraulic/cementitious material, paste,
-        mortar, concrete, alkali-activated or carbonation-cured binder
-    (b) characterization of the slag: chemical composition, mineralogy, phases,
-        morphology, particle size, reactivity, hydration
-    (c) carbonation, CO2 sequestration or CO2 uptake of the slag
-    (d) a review covering cement/concrete/binder use
-    (e) volume stability, expansion, free CaO or free MgO of the slag
+    (a) use in a binder: cement replacement, SCM, blended cement, hydraulic/cementitious
+        material, alkali-activated or carbonation-cured binder, slag-based clinker.
+        This applies even when the paper's main topic is something else (e.g. a
+        shielding, durability or field study that includes slag-replaced mixes).
+    (b) the slag's chemistry, mineralogy, phases or morphology is a main finding
+    (c) a treatment that changes the slag: grinding for reactivity, cooling/quenching,
+        molten modification, reduction or composition adjustment, activation
+    (d) the slag's OWN carbonation, CO2 sequestration, CO2 uptake or CO2 capacity is
+        studied, measured or estimated - including inventories or potential
+        assessments that quantify steel slag among several materials
+    (e) volume stability, expansion, free CaO or free MgO of the slag, or its hydration
+    (f) a review or overview whose scope includes cement, concrete or binder use
+    (g) steel slag in a concrete or mortar mix where the abstract does not say whether
+        it replaces cement or aggregate, and mix design or strength data are reported
+    (h) slag as raw material for a fired product (ceramic, glass-ceramic, clinker) AND
+        the title or a main finding concerns the composition or phases of the slag or
+        raw materials themselves
 
-  "No" - in-scope slag used ONLY as aggregate, asphalt, road base, soil stabilizer,
-    adsorbent or fertilizer, or studied only for leaching/environmental impact, with no
-    sign of (b), (c) or (e). Also "No" for GGBFS-only, non-ferrous-only, or papers not
-    about steel slag.
+  "No" - any of:
+    - slag used ONLY as fine/coarse aggregate, in asphalt or road layers, as soil
+      stabilizer, fill, landfill cover, adsorbent, fertilizer or neutralizing agent, and
+      only that product's performance is reported (strength, skid, CBR, shielding...)
+    - leaching or environmental impact of slag in those uses
+    - slag as raw material for a fired product where only the product's properties are
+      reported (shrinkage, porosity, water absorption, product phases, bending strength)
+    - slag used as a reagent, catalyst, sorbent or additive in a process whose
+      objective and results concern something else (hydrogen or fuel production,
+      waste treatment, gas cleaning), with the slag's own CO2 uptake or properties
+      not quantified
+    - steel slag named only as an example or possible feedstock (typically in the
+      background sentences) while the experiments or results concern other materials
+    - steelmaking process studies where slag is incidental (inclusions, foaming,
+      heat recovery, refractory corrosion, waste plastics/tyres as reductant),
+      UNLESS the slag's own composition, phases or oxidation state (e.g. Fe2+/Fe3+,
+      free CaO) are reported as findings - then it is "Yes" under (b)
+    - the title, abstract or keywords are wholly or partly in a language other than
+      English, even if an English version is also given. This covers BOTH:
+        * non-Latin scripts: Korean, Japanese, Chinese, Cyrillic, Arabic, Thai, Indic, etc.
+        * Latin-script languages: Indonesian, Malay, Spanish, Portuguese, French,
+          German, Italian, Turkish, Polish, Czech, etc. (e.g. "BETON MUTU TINGGI",
+          "Hormigón con escoria", "Estudo da escória")
+      Do NOT count: Greek letters, math symbols, chemical formulas, units, accented
+      letters in names, author names, or single foreign technical terms inside an
+      otherwise English sentence.
+    - GGBFS-only, non-ferrous-only, or not about steel slag at all
+    - errata, corrigenda, announcements
+  PRECEDENCE: the non-English rule comes first and always gives "No". Otherwise, if (a)
+  applies, the answer is "Yes" even if another "No" bullet also fits.
 
-  "Unclear" - use instead of guessing when:
-    - the application is out of scope but composition, mineralogy, free CaO, expansion
-      or carbonation is mentioned in passing;
-    - the slag type or application is not stated clearly;
-    - the abstract is missing, too short, or too vague to judge.
+  "Unclear" - ONLY when you genuinely cannot tell:
+    - the abstract is missing or a few words AND the title/keywords leave both readings open;
+    - the slag type is unstated and could be blast furnace slag;
+    - it is unclear whether steel slag was actually tested or only mentioned.
+  Do not use "Unclear" for papers that clearly fall under a "No" bullet.
+
+  A "NO" MUST BE PROVEN
+  - Answer "No" only if a sentence in the abstract (or the title) explicitly shows the
+    excluding fact: the excluded use (e.g. "used as fine aggregate", "asphalt mixture"),
+    that the process objective is something else (e.g. hydrogen production), that the
+    experiments concern another material (e.g. "serpentine was used"), or that the
+    paper is not about steel slag.
+  - That sentence must be your supporting_excerpt.
+  - If you reached "No" by inference (e.g. from mix proportions, from what is NOT
+    mentioned, or from the general topic) rather than an explicit statement, answer
+    "Unclear" instead, with relevance_score of at least 0.35.
 
   RULES
   - Judge only from the text given. Do not assume content that is not mentioned.
-  - Mixed applications: if any part matches (a)-(e), answer "Yes".
-  - The abstract may be in any language; write relevance_reason in English.
-  - relevance_reason: one sentence naming the slag type and the application that
-    drove the decision.
-  - supporting_excerpt: ONE sentence copied exactly from the abstract (use the title only
-    if the abstract is missing). Never paraphrase or invent text.
-  - relevance_score: how confident you are in YOUR decision, from 0.0 to 1.0.
-  - relevance_confidence must follow the score:
-      "High"   if relevance_score >= 0.85
-      "Medium" if relevance_score >= 0.60 and < 0.85
-      "Low"    if relevance_score < 0.60
-  - An "Unclear" decision should normally have a Low or Medium confidence.
+  - Missing information is a reason for "Unclear", never for "No".
+  - Mixed applications: if any part matches (a)-(h), answer "Yes".
+  - If the abstract is missing, decide from title and keywords.
+  - Write relevance_reason in English. For a non-English paper, name the language and
+    use a non-English sentence (or the title) as supporting_excerpt.
+  - relevance_reason: one sentence naming the slag type, the use, and the criterion
+    letter or "No" bullet that drove the decision.
+  - supporting_excerpt: ONE sentence copied exactly from the abstract (use the title
+    only if the abstract is missing or the title holds the deciding fact). Never
+    paraphrase or invent text. For "Yes" pick the sentence that shows the matching
+    criterion; for "No" the sentence that proves the exclusion.
+  - relevance_score: probability from 0.0 to 1.0 that the paper is relevant
+    (NOT confidence in your label). It must agree with the label:
+      "Yes"     -> 0.60 to 1.00
+      "Unclear" -> 0.35 to 0.59
+      "No"      -> 0.00 to 0.34
+  - relevance_confidence: how sure you are of the label.
+      "High"   if relevance_score >= 0.85 or <= 0.15
+      "Medium" if relevance_score is 0.70-0.84 or 0.16-0.29
+      "Low"    otherwise (includes every "Unclear")
 
-  EXAMPLES (human-labeled)
-  "Chemical, Mineralogical, and Morphological Properties of Steel Slag" -> Yes
-  "Aqueous Carbonation of Steel Slag: A Kinetics Study" -> Yes
-  "Carbonation and hydration behavior of EAF and BOF steel slag binders" -> Yes
-  "Valorisation of stainless steel slags as a hydraulic binder" -> Yes
-  "An Overview of Utilization of Steel Slag" -> Yes
-  "Evaluation of the Volume Stability ... of BOF Slag and Its Asphalt Mixture" -> Yes
-  "Soil Modification by the Application of Steel Slag" -> No
-  "Microwave Absorption Ability of Steel Slag and Road Performance of Asphalt Mixtures" -> No
-  "Leaching and Geochemical Modelling of an EAF and Ladle Slag Heap" -> Unclear
+  EXAMPLES (patterns, not from the evaluation set)
+  "Hydration of BOF slag-blended cement pastes at 20% replacement" -> Yes (a)
+  "Thermal conductivity of mortars with 10-20% cement replaced by EAF slag" -> Yes (a)
+  "Phase assemblage of EAF slags cooled at different rates" -> Yes (b)(c)
+  "Effect of wet grinding on reactivity of ladle slag" -> Yes (c)
+  "Accelerated carbonation of AOD slag for CO2 storage" -> Yes (d)
+  "Global CO2 storage potential of industrial alkaline wastes incl. steel slag" -> Yes (d)
+  "Expansion mechanism of steel slag containing free MgO" -> Yes (e)
+  "Steel slag recycling routes: aggregates, cement and agriculture" -> Yes (f)
+  "Self-compacting concrete with steel slag, w/c 0.3, 70 MPa" (role not stated) -> Yes (g)
+  "Oxide composition and phases of slag-based glass-ceramic batches" -> Yes (h)
+  "Slag-metal equilibrium and FeO/Fe2O3 ratio of converter slags" -> Yes (b)
+  "Compressive strength of concrete with EAF slag as coarse aggregate" -> No
+  "Skid resistance of asphalt surfacing with steel slag" -> No
+  "Porosity and shrinkage of bricks made with 30% steel slag" -> No
+  "Steel slag as desulfurization sorbent for flue gas treatment" -> No
+  "CO2 mineralisation with olivine; steel slag cited as an alternative feedstock" -> No
+  "Steel slag for neutralising acidic mine water" -> No
+  "Reduction of FeO in EAF slag using biomass char" -> No
+  "Use of steel slag in construction" (no abstract) -> Unclear
 
   OUTPUT
   Return ONLY this JSON object, no other text:

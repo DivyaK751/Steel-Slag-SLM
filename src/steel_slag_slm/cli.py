@@ -94,12 +94,19 @@ def _quiet_gemini_logs() -> None:
         logging.getLogger(noisy_logger).setLevel(logging.WARNING)
 
 
-def _build_screening() -> tuple[ScreeningSettings, PromptTemplate, Runner, bigquery.Client]:
-    """Set up logging, settings, prompt, agent and BigQuery for the screening commands."""
+def _build_screening(
+    model: str | None = None,
+) -> tuple[ScreeningSettings, PromptTemplate, Runner, bigquery.Client]:
+    """Set up logging, settings, prompt, agent and BigQuery for the screening commands.
+
+    model, if given, replaces the configured model for this run only.
+    """
     _setup_logging()
     _quiet_gemini_logs()
     gcp = load_gcp_settings()
     settings = load_screening_settings()
+    if model:
+        settings = settings.model_copy(update={"model": model})
     prompt = load_prompt(settings.prompt_name)
     runner = build_runner(build_screener_agent(settings, prompt))
     return settings, prompt, runner, build_bigquery_client(gcp.project, gcp.credentials_file)
@@ -217,8 +224,19 @@ def screen_papers() -> None:
 
 def evaluate_screening() -> None:
     """Screen the human-labelled papers and save an Excel report comparing the two."""
-    argparse.ArgumentParser(description=evaluate_screening.__doc__).parse_args()
-    settings, prompt, runner, bq_client = _build_screening()
+    parser = argparse.ArgumentParser(description=evaluate_screening.__doc__)
+    parser.add_argument(
+        "--model",
+        default=None,
+        help="Gemini model to evaluate, e.g. gemini-4-argon (default: the one in base.yaml)",
+    )
+    parser.add_argument(
+        "--write",
+        action="store_true",
+        help="also save this run's answers in the labels table, replacing the previous run's",
+    )
+    args = parser.parse_args()
+    settings, prompt, runner, bq_client = _build_screening(args.model)
     evaluation = load_evaluation_settings(settings.papers_table)
     run_info = {
         "Run at": datetime.now().isoformat(timespec="seconds"),
@@ -227,14 +245,16 @@ def evaluate_screening() -> None:
         "Prompt": f"{prompt.name} v{prompt.version}",
         "Git commit": _git_commit(),
     }
-    path, metrics = asyncio.run(
-        run_evaluation(settings, evaluation, bq_client, runner, prompt, run_info)
+    path, metrics, updated = asyncio.run(
+        run_evaluation(settings, evaluation, bq_client, runner, prompt, run_info, args.write)
     )
     accuracy = "n/a" if metrics.accuracy is None else f"{metrics.accuracy:.0%}"
     print(
         f"Agreed with humans on {metrics.matched}/{metrics.labelled} labelled papers ({accuracy})"
     )
     print(f"Report: {path}")
+    if args.write:
+        print(f"Updated {updated} rows in {evaluation.labels_table}")
 
 
 def parse_pdfs() -> None:
