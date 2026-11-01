@@ -67,8 +67,8 @@ class ParsedContentBlock:
 
 @dataclass(frozen=True, slots=True)
 class ParsedDocument:
-    """Store text, tables, and image resources parsed from one PDF."""
-
+    """Store parsed text, tables, legacy image resources and optional figure crops."""
+    
     text_parser: str
     image_parser: str
     page_count: int
@@ -76,6 +76,7 @@ class ParsedDocument:
     tables: tuple[str, ...]
     images: tuple[ParsedImage, ...]
     content_blocks: tuple[ParsedContentBlock, ...] = ()
+    figures: tuple["RenderedFigure", ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
