@@ -148,3 +148,68 @@ def test_add_inner_captions_reads_a_caption_printed_inside_an_uncaptioned_figure
         "Figure 4. XRD trace of un-reacted GGBS.",
     )
     assert result[1] == captioned
+
+
+@pytest.mark.parametrize(
+    "caption_bbox",
+    [
+        (50.0, 310.0, 400.0, 330.0),
+        (50.0, 70.0, 400.0, 90.0),
+        (410.0, 100.0, 450.0, 200.0),
+    ],
+    ids=["below", "above", "beside"],
+)
+def test_match_captions_preserves_caption_provenance(caption_bbox: PageBox) -> None:
+    figure = _figure((50, 100, 400, 300))
+    caption = _caption(caption_bbox, "Fig. 1 Strength")
+
+    matched = match_captions([figure], [caption], max_gap_pt=60)[0]
+
+    assert matched.caption_block is caption
+    assert matched.caption == caption.text
+    assert matched.figure_number == caption.figure_number
+    assert matched.caption_block.page_number == 1
+    assert matched.caption_block.bbox == caption_bbox
+
+
+def test_match_captions_clears_stale_caption_metadata() -> None:
+    figure = _figure((50, 100, 400, 300))
+    caption = _caption((50, 310, 400, 330), "Fig. 1 Strength")
+    previously_matched = match_captions([figure], [caption], max_gap_pt=60)[0]
+
+    unmatched = match_captions([previously_matched], [], max_gap_pt=60)[0]
+
+    assert unmatched.caption == ""
+    assert unmatched.figure_number is None
+    assert unmatched.caption_block is None
+
+
+def test_add_inner_captions_preserves_known_boxes_and_leaves_recovered_boxes_unknown() -> None:
+    figure = _figure((50, 100, 400, 300))
+    caption = _caption((50, 310, 400, 330), "Fig. 1 Strength")
+    matched = match_captions([figure], [caption], max_gap_pt=60)[0]
+
+    recovered, unchanged = add_inner_captions(
+        [figure, matched],
+        ["Axis Figure 4. Strength vs age", "Fig. 9 ignored"],
+    )
+
+    assert recovered.caption == "Figure 4. Strength vs age"
+    assert recovered.figure_number == "4"
+    assert recovered.caption_block is None
+    assert unchanged == matched
+    assert unchanged.caption_block is caption
+
+
+def test_split_figures_retain_the_caption_assigned_to_each_part() -> None:
+    merged = _figure((50, 100, 400, 700))
+    caption = _caption((50, 380, 400, 400), "Figure 5. Upper")
+
+    parts = split_merged_figures([merged], [caption], min_part_height_pt=50)
+    matched = match_captions(parts, [caption], max_gap_pt=60)
+
+    assert len(matched) == 2
+    assert matched[0].caption_block is caption
+    assert matched[0].bbox == (50, 100, 400, 380)
+    assert matched[1].caption_block is None
+    assert matched[1].figure_number is None
