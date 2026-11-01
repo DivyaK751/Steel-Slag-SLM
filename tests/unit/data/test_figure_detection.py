@@ -1,9 +1,24 @@
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
+from docling.document_converter import DocumentConverter
+from docling_core.types.doc import (
+    BoundingBox,
+    CoordOrigin,
+    DocItemLabel,
+    DoclingDocument,
+    Size,
+)
+from docling_core.types.doc.common.reference import ProvenanceItem
 
-from steel_slag_slm.data.figure_detection import detect_figures, top_figure_class
-
+from steel_slag_slm.data import figure_detection
+from steel_slag_slm.data.figure_detection import (
+    detect_figures,
+    detect_figures_in_document,
+    top_figure_class,
+)
+from steel_slag_slm.schemas import CaptionBlock, Figure
 
 def _prediction(name: str, confidence: float) -> SimpleNamespace:
     return SimpleNamespace(class_name=name, confidence=confidence)
