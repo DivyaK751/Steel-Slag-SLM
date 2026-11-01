@@ -146,6 +146,8 @@ How it works:
 2. Cleanup matches each figure to the "Fig. N" caption below, beside or above it, splits regions
    that hold two stacked figures, and drops logos, icons and small uncaptioned images.
 3. PyMuPDF renders each region from the page, so crops are sharp at any size.
+For callers that already have a converted Docling document,
+`detect_figures_in_document(document)` reuses the figure and caption detection without another PDF conversion. The standalone command continues to convert PDFs through `detect_figures(pdf_bytes, converter)`.
 
 Settings: the `figure_extraction:` section of `configs/base.yaml`. A figure whose caption is
 printed inside the image keeps an empty caption and no figure number.
