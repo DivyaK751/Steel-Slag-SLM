@@ -215,12 +215,32 @@ def parse_pdfs() -> None:
         default=None,
         help="stop after parsing this many unindexed papers (default: all)",
     )
+    parser.add_argument(
+        "--reparse",
+        action="store_true",
+        help="reparse current successful papers",
+    )
+    parser.add_argument(
+        "--retry-skipped",
+        action="store_true",
+        help="retry deliberately skipped papers",
+    )
+    parser.add_argument(
+        "--output-folder",
+        default=None,
+        help="override the parsed Drive folder name",
+    )
     args = parser.parse_args()
     if args.max_papers is not None and args.max_papers <= 0:
         parser.error("--max-papers must be greater than zero")
 
     _setup_logging()
     parsing_settings = load_pdf_parsing_settings()
+
+    if args.output_folder is not None:
+        parsing_settings = parsing_settings.model_copy(
+            update={"output_folder_name": args.output_folder}
+        )
     drive_settings = load_drive_connection_settings()
     gcp_settings = load_gcp_settings()
 
@@ -239,8 +259,13 @@ def parse_pdfs() -> None:
         drive_service,
         drive_settings.folder_id,
         args.max_papers,
+        figure_settings=load_figure_extraction_settings(),
+        reparse=args.reparse,
+        retry_skipped=args.retry_skipped,
     )
     print("Summary:", dict(outcomes))
+    if outcomes["failed"]:
+        raise SystemExit(f"{outcomes['failed']} paper(s) failed parsing; see errors above")
 
 
 def fill_abstracts() -> None:
