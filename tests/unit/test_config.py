@@ -131,6 +131,12 @@ def test_abstract_extraction_settings_fall_back_to_llm_defaults(
     assert settings.papers_table == "proj.ds.papers"
 
 
+def test_figure_reading_settings_use_llm_defaults() -> None:
+    settings = config.load_figure_reading_settings()
+    assert settings.model  # falls back to llm.model
+    assert settings.prices.output_usd_per_million > settings.prices.input_usd_per_million
+
+
 def test_evaluation_prices_skip_models_without_both_prices(tmp_path: Path) -> None:
     path = tmp_path / "base.yaml"
     raw = {

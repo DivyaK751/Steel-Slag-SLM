@@ -15,6 +15,7 @@ from google.cloud import bigquery
 
 from steel_slag_slm.agents.abstract_extractor import build_extractor_agent
 from steel_slag_slm.agents.data_extractor import build_data_extractor_agent
+from steel_slag_slm.agents.figure_reader import build_figure_reader_agent
 from steel_slag_slm.agents.relevance_screener import build_screener_agent
 from steel_slag_slm.agents.runner import build_runner
 from steel_slag_slm.config import (
@@ -26,6 +27,8 @@ from steel_slag_slm.config import (
     load_embedding_settings,
     load_evaluation_settings,
     load_extraction_tables_settings,
+    load_figure_extraction_settings,
+    load_figure_reading_settings,
     load_gcp_settings,
     load_pdf_parsing_settings,
     load_retrieval_eval_set,
@@ -39,17 +42,28 @@ from steel_slag_slm.data.drive_storage import (
 )
 from steel_slag_slm.data.extraction_export import export_workbook
 from steel_slag_slm.data.extraction_tables import ensure_extraction_tables
+from steel_slag_slm.data.figure_detection import build_figure_converter
 from steel_slag_slm.data.openalex import OpenAlexClient
 from steel_slag_slm.data.paper_registry import build_bigquery_client
+from steel_slag_slm.evaluation.figure_checks import total_checks
 from steel_slag_slm.evaluation.retrieval_metrics import mean_scores
+from steel_slag_slm.exceptions import PapersNotFoundError
 from steel_slag_slm.llm.prompts import PromptTemplate, load_prompt
 from steel_slag_slm.pipelines.build_index import run_build_index
 from steel_slag_slm.pipelines.evaluate_retrieval import run_retrieval_eval
 from steel_slag_slm.pipelines.evaluate_screening import run_evaluation
+from steel_slag_slm.pipelines.export_parsed import run_export_parsed
 from steel_slag_slm.pipelines.extract_data import run_data_extraction
+from steel_slag_slm.pipelines.extract_figures import collect_pdf_paths, run_figure_extraction
 from steel_slag_slm.pipelines.fetch_papers import run_fetch
 from steel_slag_slm.pipelines.fill_abstracts import run_fill_abstracts
+from steel_slag_slm.pipelines.paper_selection import select_papers
 from steel_slag_slm.pipelines.parse_pdfs import run_pdf_parsing
+from steel_slag_slm.pipelines.read_figures import (
+    list_paper_dirs,
+    run_figure_reading,
+    summarize_costs,
+)
 from steel_slag_slm.pipelines.screen_papers import run_screening
 from steel_slag_slm.pipelines.search_index import run_search
 from steel_slag_slm.pipelines.sync_registry import run_registry_sync
@@ -270,6 +284,21 @@ def parse_pdfs() -> None:
         help="stop after parsing this many unindexed papers (default: all)",
     )
     parser.add_argument(
+        "--reparse",
+        action="store_true",
+        help="reparse current successful papers",
+    )
+    parser.add_argument(
+        "--retry-skipped",
+        action="store_true",
+        help="retry deliberately skipped papers",
+    )
+    parser.add_argument(
+        "--output-folder",
+        default=None,
+        help="override the parsed Drive folder name",
+    )
+    parser.add_argument(
         "--paper-ids",
         nargs="+",
         default=None,
@@ -281,6 +310,11 @@ def parse_pdfs() -> None:
 
     _setup_logging()
     parsing_settings = load_pdf_parsing_settings()
+
+    if args.output_folder is not None:
+        parsing_settings = parsing_settings.model_copy(
+            update={"output_folder_name": args.output_folder}
+        )
     drive_settings = load_drive_connection_settings()
     gcp_settings = load_gcp_settings()
 
@@ -300,6 +334,38 @@ def parse_pdfs() -> None:
         drive_settings.folder_id,
         args.max_papers,
         args.paper_ids,
+        figure_settings=load_figure_extraction_settings(),
+        reparse=args.reparse,
+        retry_skipped=args.retry_skipped,
+    )
+    print("Summary:", dict(outcomes))
+    if outcomes["failed"]:
+        raise SystemExit(f"{outcomes['failed']} paper(s) failed parsing; see errors above")
+
+
+def export_parsed() -> None:
+    """Export unified Drive parses locally for optional figure reading."""
+    parser = argparse.ArgumentParser(description=export_parsed.__doc__)
+    parser.add_argument("--out-dir", type=Path, required=True)
+    parser.add_argument("--paper-ids", nargs="+", default=None)
+    parser.add_argument("--max-papers", type=int, default=None)
+    parser.add_argument("--output-folder", default=None)
+    args = parser.parse_args()
+
+    if args.max_papers is not None and args.max_papers <= 0:
+        parser.error("--max-papers must be greater than zero")
+
+    _setup_logging()
+    settings = load_pdf_parsing_settings()
+    if args.output_folder is not None:
+        settings = settings.model_copy(update={"output_folder_name": args.output_folder})
+
+    outcomes = run_export_parsed(
+        settings,
+        *_connect_to_parsed_folder(settings.output_folder_name),
+        args.out_dir,
+        args.paper_ids,
+        args.max_papers,
     )
     print("Summary:", dict(outcomes))
 
@@ -351,8 +417,9 @@ def fill_abstracts() -> None:
     print("Summary:", dict(outcomes))
 
 
-def _connect_to_parsed_folder() -> tuple[Any, str]:
-    """Sign in to Drive and find the _parsed folder inside DRIVE_FOLDER_ID."""
+def _connect_to_parsed_folder(folder_name: str | None = None) -> tuple[Any, str]:
+    """Connect to the configured parsed Drive folder, optionally overriding its name."""
+
     drive_settings = load_drive_connection_settings()
     drive_service = build_drive_service(
         drive_settings.service_account_file,
@@ -360,10 +427,12 @@ def _connect_to_parsed_folder() -> tuple[Any, str]:
         drive_settings.oauth_token_file,
     )
     parsed_folder_id = find_subfolder_id(
-        drive_service, drive_settings.folder_id, load_pdf_parsing_settings().output_folder_name
+        drive_service,
+        drive_settings.folder_id,
+        folder_name if folder_name is not None else load_pdf_parsing_settings().output_folder_name,
     )
     if parsed_folder_id is None:
-        raise SystemExit("No _parsed folder in DRIVE_FOLDER_ID yet; run parse-pdfs first")
+        raise SystemExit("Configured parsed folder is missing in Drive; run parse-pdfs first")
     return drive_service, parsed_folder_id
 
 
@@ -514,3 +583,105 @@ def evaluate_retrieval() -> None:
             print(
                 f"STALE LABEL {question_id}: {evidence.paper_id} {evidence.kind} {evidence.text!r}"
             )
+
+
+def extract_figures() -> None:
+    """Extract the figures of local PDFs into PNGs plus a figures.json per paper."""
+    settings = load_figure_extraction_settings()
+    parser = argparse.ArgumentParser(description=extract_figures.__doc__)
+    parser.add_argument("paths", nargs="+", type=Path, help="PDF files or folders of PDFs")
+    parser.add_argument(
+        "--paper-ids",
+        nargs="+",
+        default=None,
+        help="only these papers, by OpenAlex ID (PDFs named e.g. W2114885577.pdf)",
+    )
+    parser.add_argument(
+        "--out-dir",
+        type=Path,
+        default=settings.output_dir,
+        help=f"where each paper's folder is written (default: {settings.output_dir})",
+    )
+    args = parser.parse_args()
+    try:
+        pdf_paths = select_papers(collect_pdf_paths(args.paths), args.paper_ids)
+    except PapersNotFoundError as error:
+        parser.error(str(error))
+    if not pdf_paths:
+        parser.error("no PDF files found in the given paths")
+
+    _setup_logging()
+    outcomes = run_figure_extraction(pdf_paths, args.out_dir, build_figure_converter(), settings)
+    print("Summary:", dict(outcomes))
+    print(f"Figures written to {args.out_dir}")
+
+
+def read_figures() -> None:
+    """Read extracted figures with Gemini, check each reading, and report what it cost."""
+    extraction = load_figure_extraction_settings()
+    parser = argparse.ArgumentParser(description=read_figures.__doc__)
+    parser.add_argument(
+        "--figures-dir",
+        type=Path,
+        default=extraction.output_dir,
+        help=(
+            f"local output from export-parsed or extract-figures (default: {extraction.output_dir})"
+        ),
+    )
+    parser.add_argument(
+        "--paper-ids",
+        nargs="+",
+        default=None,
+        help="only these papers, by OpenAlex ID (default: every extracted paper)",
+    )
+    parser.add_argument(
+        "--max-papers", type=int, default=None, help="read only this many papers (default: all)"
+    )
+    parser.add_argument(
+        "--project-papers",
+        type=int,
+        default=2000,
+        help="number of papers to project the full-corpus cost for (default: 2000)",
+    )
+    args = parser.parse_args()
+    try:
+        paper_dirs = list_paper_dirs(args.figures_dir, args.max_papers, args.paper_ids)
+    except PapersNotFoundError as error:
+        parser.error(f"{error}; run export-parsed or extract-figures first")
+    if not paper_dirs:
+        parser.error(
+            f"no parsed.json or figures.json found under {args.figures_dir}; "
+            "run export-parsed or extract-figures first"
+        )
+
+    _setup_logging()
+    _quiet_gemini_logs()
+    load_gcp_settings()  # checks GOOGLE_CLOUD_PROJECT / GOOGLE_CLOUD_LOCATION, selects Vertex AI
+    settings = load_figure_reading_settings()
+    prompt = load_prompt(settings.prompt_name)
+    runner = build_runner(build_figure_reader_agent(settings, prompt))
+    results = asyncio.run(run_figure_reading(paper_dirs, runner, prompt, settings))
+
+    cost = summarize_costs(results)
+    checks = total_checks([result.check for result in results if result.check])
+    lines = [
+        f"Read {cost.figures_read} figures ({cost.figures_failed} failed) "
+        f"from {cost.papers} papers with {settings.model}",
+        f"Cost: total ${cost.total_usd:.4f} | per figure ${cost.mean_per_figure_usd:.4f} "
+        f"(min ${cost.min_per_figure_usd:.4f}, max ${cost.max_per_figure_usd:.4f}) | "
+        f"per paper ${cost.mean_per_paper_usd:.4f}",
+        *(
+            f"  {kind}: ${mean:.4f} per figure"
+            for kind, mean in sorted(cost.mean_per_type_usd.items())
+        ),
+        f"Projected for {args.project_papers} papers: "
+        f"${cost.mean_per_paper_usd * args.project_papers:.2f}",
+    ]
+    print("\n" + "\n".join(lines))
+    print(
+        f"Checks: {checks.labels_unsupported} of {checks.labels_checked} labels not in the PDF "
+        f"text ({checks.figures_with_pdf_text} figures had text to check); "
+        f"{checks.values_out_of_range} of {checks.values_checked} values outside their axes; "
+        f"{checks.rows_malformed} rows with missing cells"
+    )
+    print(f"Each reading is saved beside its source image under {args.figures_dir}")

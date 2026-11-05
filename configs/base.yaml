@@ -336,6 +336,38 @@ embedding:
   papers_per_save: 25
   top_k: 5
 
+figure_extraction:
+  # Local output for now (git-ignored): one folder per paper with PNGs and figures.json
+  output_dir: data/interim/figures
+  # Crops are re-rendered from the page, so vector plots come out sharp at any size
+  render_dpi: 200
+  # A caption counts as a figure's own when it is within this distance below, beside or above it
+  caption_max_gap_pt: 60
+  # Regions narrower or shorter than this (1 inch) are logos, icons or rules, not figures
+  min_side_pt: 72
+  # A region holding a caption is split there only if both parts are at least this tall
+  min_split_height_pt: 50
+  # Docling classifier labels that are never figures worth keeping
+  drop_types: [logo, icon, signature, stamp, qr_code, bar_code]
+  # Uncaptioned regions are kept only this large (some papers print the caption inside the
+  # image); smaller ones are author photos, ads and journal artwork
+  min_uncaptioned_side_pt: 150
+
+figure_reading:
+  prompt_name: read_figure
+  model: null  # null = use llm.model
+  # Reading a chart needs little reasoning, and thinking tokens were half the cost at default
+  thinking_level: low
+  # Gemini calls in flight at once; raise slowly, Vertex quotas are per minute
+  max_concurrency: 4
+  # A call taking longer is skipped and reported, so it can't stall the run
+  call_timeout_s: 120
+  # Vertex AI price of llm.model per million tokens, for the run's cost report. Gemini Flash
+  # is on an introductory $0.75 / $3.75 until 2026-12-31, then $1.50 / $7.50; re-check it
+  prices:
+    input_usd_per_million: 0.75
+    output_usd_per_million: 3.75
+
 # USD per 1 million tokens, standard on-demand text pricing, used only to estimate run costs.
 # Copy from https://cloud.google.com/vertex-ai/generative-ai/pricing (thinking tokens are billed
 # as output). Leave null when unknown and the report shows tokens without a cost.

@@ -11,3 +11,11 @@ class OpenAlexRequestError(Exception):
 
 class AgentOutputError(Exception):
     """An agent returned no answer, or one that doesn't match its output schema."""
+
+
+class PapersNotFoundError(ValueError):
+    """Some requested paper IDs have no matching PDF or figures folder."""
+
+    def __init__(self, missing_ids: list[str]) -> None:
+        super().__init__(f"No PDF or figures folder for: {', '.join(missing_ids)}")
+        self.missing_ids = missing_ids

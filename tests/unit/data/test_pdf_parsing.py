@@ -5,7 +5,9 @@ import pytest
 
 from steel_slag_slm.data.pdf_parsing import parse_pdf
 
-from docling_core.types.doc import BoundingBox, DocItemLabel, TextItem
+from docling_core.types.doc.base import BoundingBox
+from docling_core.types.doc.items.text import TextItem
+from docling_core.types.doc.labels import DocItemLabel
 from docling_core.types.doc.common.reference import ProvenanceItem
 
 
@@ -25,7 +27,7 @@ def _make_pdf_with_image() -> bytes:
         stream=pixmap.tobytes("png"),
     )
 
-    pdf_bytes = pdf.tobytes()
+    pdf_bytes = bytes(pdf.tobytes())
     pdf.close()
     return pdf_bytes
 

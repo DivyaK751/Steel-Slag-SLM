@@ -126,11 +126,21 @@ class GcpSettings(BaseModel):
     credentials_file: Path | None = None
 
 
+class ModelPrices(BaseModel):
+    """What one million tokens cost, to estimate the price of a run."""
+
+    input_usd_per_million: float
+    output_usd_per_million: float
+
+
 class AgentSettings(BaseModel):
     """Model settings shared by every agent: the `llm:` defaults plus the agent's overrides."""
 
     model: str
     temperature: float
+    # Gemini's reasoning depth (minimal, low, medium, high); None keeps the model's default.
+    # Thinking tokens are billed as output, so lower levels cut cost on simple tasks
+    thinking_level: Literal["minimal", "low", "medium", "high"] | None = None
 
 
 class ScreeningSettings(AgentSettings):
@@ -151,6 +161,27 @@ class AbstractExtractionSettings(AgentSettings):
     max_concurrency: int
     call_timeout_s: float
     papers_table: str  # fully qualified: project.dataset.table
+
+
+class FigureExtractionSettings(BaseModel):
+    """How figures are found, cleaned up and rendered from parsed PDFs."""
+
+    output_dir: Path
+    render_dpi: int
+    caption_max_gap_pt: float
+    min_side_pt: float
+    min_split_height_pt: float
+    drop_types: list[str]
+    min_uncaptioned_side_pt: float
+
+
+class FigureReadingSettings(AgentSettings):
+    """How the figure-reading agent describes extracted figures and what its tokens cost."""
+
+    prompt_name: str
+    max_concurrency: int
+    call_timeout_s: float
+    prices: ModelPrices
 
 
 class TokenPrices(BaseModel):
@@ -358,6 +389,25 @@ def load_drive_connection_settings() -> DriveConnectionSettings:
             os.environ.get("GOOGLE_OAUTH_TOKEN_FILE", "").strip() or DEFAULT_GOOGLE_TOKEN_PATH
         ).expanduser(),
     )
+
+
+def load_figure_extraction_settings(
+    config_path: Path = BASE_CONFIG_PATH,
+) -> FigureExtractionSettings:
+    """Build figure-extraction settings; the output folder is resolved from the project root."""
+    raw_config = _read_base_config(config_path)["figure_extraction"]
+    return FigureExtractionSettings(
+        **{**raw_config, "output_dir": PROJECT_ROOT / raw_config["output_dir"]}
+    )
+
+
+def load_figure_reading_settings(
+    config_path: Path = BASE_CONFIG_PATH,
+) -> FigureReadingSettings:
+    """Build the figure-reading agent's settings; needs no OpenAlex, Drive or BigQuery secrets."""
+    raw_config = _read_base_config(config_path)
+    section = _agent_section(raw_config, "figure_reading")
+    return FigureReadingSettings(**section)
 
 
 def load_embedding_settings(config_path: Path = BASE_CONFIG_PATH) -> EmbeddingSettings:

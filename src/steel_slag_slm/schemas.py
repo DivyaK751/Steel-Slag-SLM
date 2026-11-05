@@ -1,6 +1,7 @@
 """Record types shared across modules."""
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -70,7 +71,7 @@ class ParsedContentBlock:
 
 @dataclass(frozen=True, slots=True)
 class ParsedDocument:
-    """Store text, tables, and image resources parsed from one PDF."""
+    """Store parsed text, tables, legacy image resources and optional figure crops."""
 
     text_parser: str
     image_parser: str
@@ -79,6 +80,7 @@ class ParsedDocument:
     tables: tuple[str, ...]
     images: tuple[ParsedImage, ...]
     content_blocks: tuple[ParsedContentBlock, ...] = ()
+    figures: tuple["RenderedFigure", ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,6 +92,70 @@ class ParsedPaper:
     tables: tuple[str, ...]
     # Empty for papers parsed before content blocks existed; the Markdown is used then
     content_blocks: tuple[ParsedContentBlock, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class TokenUsage:
+    """Tokens one or more model calls used, as reported by the provider."""
+
+    input_tokens: int = 0  # prompt text plus attachments such as images
+    cached_tokens: int = 0  # part of input_tokens billed at the cached rate
+    output_tokens: int = 0  # includes thinking for calls made through the shared runner
+    thinking_tokens: int = 0  # separately reported reasoning for legacy callers only
+
+    def __add__(self, other: "TokenUsage") -> "TokenUsage":
+        return TokenUsage(
+            input_tokens=self.input_tokens + other.input_tokens,
+            cached_tokens=self.cached_tokens + other.cached_tokens,
+            output_tokens=self.output_tokens + other.output_tokens,
+            thinking_tokens=self.thinking_tokens + other.thinking_tokens,
+        )
+
+
+# x0, y0, x1, y1 in PDF points, measured from the page's top-left corner
+PageBox = tuple[float, float, float, float]
+
+
+@dataclass(frozen=True, slots=True)
+class CaptionBlock:
+    """A "Fig. N ..." text block on a page, used to name the figure above or below it."""
+
+    page_number: int
+    bbox: PageBox
+    text: str
+    figure_number: str  # as printed after "Fig."/"Figure", e.g. "3" or "3a"
+
+
+@dataclass(frozen=True, slots=True)
+class Figure:
+    """Store a figure region and its matched caption metadata.
+    caption_block is None when no exact caption block is available, including captions
+    recovered from the figure region's text layer.
+    """
+
+    page_number: int
+    bbox: PageBox
+    figure_type: str
+    type_confidence: float
+    caption: str = ""
+    figure_number: str | None = None
+    caption_block: CaptionBlock | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class RenderedFigure:
+    """Store a figure crop and its source metadata before artifact publication.
+    Width and height are PNG pixels; the figure's boxes are top-left PDF points.
+    pdf_text is the source PDF text layer inside the crop, not OCR or model output.
+    """
+
+    figure: Figure
+    file_name: str
+    width: int
+    height: int
+    render_dpi: int
+    pdf_text: str
+    image_bytes: bytes
 
 
 ChunkKind = Literal["text", "table", "figure_caption"]
@@ -163,6 +229,70 @@ class ExtractedAbstract(BaseModel):
     language: str | None = None  # ISO 639-1 code of the abstract text
 
 
+@dataclass(frozen=True, slots=True)
+class FigureToRead:
+    """Store one local figure and optional immutable-source identity for model reading."""
+
+    paper_id: str
+    image_path: Path
+    figure_number: str | None
+    caption: str
+    pdf_text: str  # words the PDF stores inside the figure; "" for pasted-in pictures
+    detected_type: str  # Docling's label, e.g. "line_chart"
+    figure_id: str | None = None
+    image_sha256: str | None = None
+
+
+FigureKind = Literal["data_plot", "xrd_pattern", "process_diagram", "micrograph_or_photo", "other"]
+
+
+# Where in the figure a table column's name was printed
+ColumnSource = Literal["x_axis", "y_axis", "legend", "label", "other"]
+
+
+class TableColumn(BaseModel):
+    """One column of the values read off a figure, named exactly as printed."""
+
+    label: str
+    unit: str | None = None
+    source: ColumnSource
+    # First and last tick values when the column is a numeric axis; None otherwise
+    axis_min: float | None = None
+    axis_max: float | None = None
+
+
+class ProcessStep(BaseModel):
+    """One box or stage of a process diagram, with any conditions printed in it."""
+
+    id: str
+    label: str
+    conditions: list[str] = Field(default_factory=list)
+
+
+class ProcessFlow(BaseModel):
+    """An arrow between two steps of a process diagram."""
+
+    source: str
+    target: str
+    label: str | None = None
+
+
+class FigureReading(BaseModel):
+    """Gemini's reading of one figure as printed; values read off plots are approximate.
+
+    Plots are read as a table: columns named as on the axes and legend, one row per value.
+    """
+
+    figure_type: FigureKind
+    summary: str
+    columns: list[TableColumn] = Field(default_factory=list)
+    # One list per row, a cell per column, copied as printed (e.g. "12-Hour", "10.3")
+    rows: list[list[str]] = Field(default_factory=list)
+    phases: list[str] = Field(default_factory=list)  # phases labelled on an XRD pattern
+    steps: list[ProcessStep] = Field(default_factory=list)
+    flows: list[ProcessFlow] = Field(default_factory=list)
+
+
 # Controlled vocabulary of the CNS input workbook ("10 Controlled Vocab" sheet)
 SteelSlagType = Literal[
     "EAF", "BOF", "Ladle", "Stainless Steel", "Electric Arc Furnace Dust-derived",
@@ -233,12 +363,3 @@ class PaperExtraction(BaseModel):
     literature: ExtractedLiterature
     materials: list[ExtractedMaterial]
     facts: list[ExtractedFact]
-
-
-@dataclass(frozen=True, slots=True)
-class TokenUsage:
-    """Tokens one Gemini call used, as Vertex bills them."""
-
-    input_tokens: int
-    cached_tokens: int  # part of input_tokens, billed at the lower cached rate
-    output_tokens: int  # includes thinking tokens, which are billed as output

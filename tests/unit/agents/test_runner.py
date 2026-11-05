@@ -5,8 +5,15 @@ from typing import Any
 import pytest
 from pydantic import BaseModel
 
-from steel_slag_slm.agents.runner import gather_bounded, run_structured, run_structured_with_usage
+from steel_slag_slm.agents.runner import (
+    build_structured_agent,
+    gather_bounded,
+    run_structured,
+    run_structured_with_usage,
+)
+from steel_slag_slm.config import AgentSettings
 from steel_slag_slm.exceptions import AgentOutputError
+from steel_slag_slm.schemas import TokenUsage
 
 
 class Answer(BaseModel):
@@ -52,14 +59,14 @@ def test_run_structured_parses_answer_and_deletes_session() -> None:
 def test_run_structured_with_usage_counts_thinking_as_output() -> None:
     usage = SimpleNamespace(
         prompt_token_count=1000,
-        cached_content_token_count=None,
+        cached_content_token_count=400,
         candidates_token_count=200,
         thoughts_token_count=300,
     )
     runner = FakeRunner('{"value": 3}', usage)
     answer = asyncio.run(run_structured_with_usage(runner, "hi", Answer))  # type: ignore[arg-type]
     assert answer.result.value == 3
-    assert (answer.usage.input_tokens, answer.usage.cached_tokens) == (1000, 0)
+    assert (answer.usage.input_tokens, answer.usage.cached_tokens) == (1000, 400)
     assert answer.usage.output_tokens == 500
 
 
@@ -67,6 +74,19 @@ def test_run_structured_with_usage_counts_thinking_as_output() -> None:
 def test_run_structured_rejects_missing_or_malformed_answer(text: str) -> None:
     with pytest.raises(AgentOutputError):
         asyncio.run(run_structured(FakeRunner(text), "hi", Answer))  # type: ignore[arg-type]
+
+
+def test_run_structured_with_usage_returns_the_tokens_the_call_used() -> None:
+    usage = SimpleNamespace(
+        prompt_token_count=1200,
+        cached_content_token_count=None,
+        candidates_token_count=300,
+        thoughts_token_count=None,
+    )
+    runner = FakeRunner('{"value": 3}', usage)
+    answer = asyncio.run(run_structured_with_usage(runner, "hi", Answer))  # type: ignore[arg-type]
+    assert answer.result.value == 3
+    assert answer.usage == TokenUsage(input_tokens=1200, output_tokens=300)
 
 
 def test_gather_bounded_keeps_order_caps_concurrency_and_returns_errors() -> None:
@@ -87,3 +107,14 @@ def test_gather_bounded_keeps_order_caps_concurrency_and_returns_errors() -> Non
     assert results[0] == 10 and results[2:] == [30, 40]
     assert isinstance(results[1], ValueError)
     assert peak == 2
+
+
+def test_build_structured_agent_sets_the_thinking_level_only_when_configured() -> None:
+    low = AgentSettings(model="m", temperature=0.0, thinking_level="low")
+    default = AgentSettings(model="m", temperature=0.0)
+    low_config = build_structured_agent("a", low, "i", Answer).generate_content_config
+    default_config = build_structured_agent("a", default, "i", Answer).generate_content_config
+    assert low_config is not None and default_config is not None
+    assert low_config.thinking_config is not None
+    assert low_config.thinking_config.thinking_level == "LOW"
+    assert default_config.thinking_config is None

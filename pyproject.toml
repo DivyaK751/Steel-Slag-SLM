@@ -35,6 +35,9 @@ parse-pdfs = "steel_slag_slm.cli:parse_pdfs"
 build-index = "steel_slag_slm.cli:build_index"
 search-index = "steel_slag_slm.cli:search_index"
 evaluate-retrieval = "steel_slag_slm.cli:evaluate_retrieval"
+extract-figures = "steel_slag_slm.cli:extract_figures"
+read-figures = "steel_slag_slm.cli:read_figures"
+export-parsed = "steel_slag_slm.cli:export_parsed"
 
 [dependency-groups]
 dev = [
