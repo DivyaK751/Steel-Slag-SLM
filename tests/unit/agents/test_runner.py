@@ -56,6 +56,20 @@ def test_run_structured_parses_answer_and_deletes_session() -> None:
     assert not runner.session_service.live
 
 
+def test_run_structured_with_usage_counts_thinking_as_output() -> None:
+    usage = SimpleNamespace(
+        prompt_token_count=1000,
+        cached_content_token_count=400,
+        candidates_token_count=200,
+        thoughts_token_count=300,
+    )
+    runner = FakeRunner('{"value": 3}', usage)
+    answer = asyncio.run(run_structured_with_usage(runner, "hi", Answer))  # type: ignore[arg-type]
+    assert answer.result.value == 3
+    assert (answer.usage.input_tokens, answer.usage.cached_tokens) == (1000, 400)
+    assert answer.usage.output_tokens == 500
+
+
 @pytest.mark.parametrize("text", ["", '{"value": "three"}'])
 def test_run_structured_rejects_missing_or_malformed_answer(text: str) -> None:
     with pytest.raises(AgentOutputError):
@@ -64,12 +78,15 @@ def test_run_structured_rejects_missing_or_malformed_answer(text: str) -> None:
 
 def test_run_structured_with_usage_returns_the_tokens_the_call_used() -> None:
     usage = SimpleNamespace(
-        prompt_token_count=1200, candidates_token_count=300, thoughts_token_count=None
+        prompt_token_count=1200,
+        cached_content_token_count=None,
+        candidates_token_count=300,
+        thoughts_token_count=None,
     )
     runner = FakeRunner('{"value": 3}', usage)
-    answer, tokens = asyncio.run(run_structured_with_usage(runner, "hi", Answer))  # type: ignore[arg-type]
-    assert answer.value == 3
-    assert tokens == TokenUsage(input_tokens=1200, output_tokens=300, thinking_tokens=0)
+    answer = asyncio.run(run_structured_with_usage(runner, "hi", Answer))  # type: ignore[arg-type]
+    assert answer.result.value == 3
+    assert answer.usage == TokenUsage(input_tokens=1200, output_tokens=300)
 
 
 def test_gather_bounded_keeps_order_caps_concurrency_and_returns_errors() -> None:

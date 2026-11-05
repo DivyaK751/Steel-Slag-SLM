@@ -1,6 +1,6 @@
 name: Fill missing abstracts
 
-# Runs nightly as the last step of "Fetch papers", and can also be started by hand
+# Runs nightly in "Fetch papers" after the fetch, and can also be started by hand
 on:
   workflow_call:
   workflow_dispatch:

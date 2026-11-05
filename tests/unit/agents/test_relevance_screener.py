@@ -1,4 +1,11 @@
-from steel_slag_slm.agents.relevance_screener import check_excerpt, render_paper
+import asyncio
+
+from steel_slag_slm.agents.relevance_screener import (
+    NON_ENGLISH_PREFIX,
+    check_excerpt,
+    render_paper,
+    screen_paper,
+)
 from steel_slag_slm.llm.prompts import load_prompt
 from steel_slag_slm.schemas import PaperForScreening, RelevanceDecision
 
@@ -46,3 +53,18 @@ def test_paper_from_row_accepts_keyword_list_or_comma_string() -> None:
     assert paper_from_row({**base, "keywords": ["a", "b"]}).keywords == ("a", "b")
     assert paper_from_row({**base, "keywords": "a, b,"}).keywords == ("a", "b")
     assert paper_from_row({**base, "keywords": None}).title == ""
+
+
+def test_screen_paper_answers_no_for_non_english_paper_without_calling_gemini() -> None:
+    korean = "전기로 산화슬래그를 콘크리트용 잔골재로 사용하기 위해서는 에이징처리하여야 한다"
+    # A runner of None would fail if the agent were called
+    decision, usage = asyncio.run(
+        screen_paper(None, load_prompt("screen_relevance"), _paper(abstract=korean))  # type: ignore[arg-type]
+    )
+    assert (decision.relevant, decision.relevance_score, decision.relevance_confidence) == (
+        "No",
+        0.0,
+        "High",
+    )
+    assert decision.relevance_reason.startswith(NON_ENGLISH_PREFIX)
+    assert (usage.input_tokens, usage.output_tokens) == (0, 0)

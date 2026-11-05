@@ -6,8 +6,12 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+# Bands from prompts/screen_relevance.yaml (v2): the score is P(relevant), so a score near
+# either end is a confident decision and the middle is not
 HIGH_CONFIDENCE_MIN_SCORE = 0.85
-MEDIUM_CONFIDENCE_MIN_SCORE = 0.60
+HIGH_CONFIDENCE_MAX_SCORE = 0.15
+MEDIUM_CONFIDENCE_MIN_SCORE = 0.70
+MEDIUM_CONFIDENCE_MAX_SCORE = 0.30  # exclusive
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,14 +99,16 @@ class TokenUsage:
     """Tokens one or more model calls used, as reported by the provider."""
 
     input_tokens: int = 0  # prompt text plus attachments such as images
-    output_tokens: int = 0  # the answer itself
-    thinking_tokens: int = 0  # reasoning the model did before answering
+    cached_tokens: int = 0  # part of input_tokens billed at the cached rate
+    output_tokens: int = 0  # includes thinking for calls made through the shared runner
+    thinking_tokens: int = 0  # separately reported reasoning for legacy callers only
 
     def __add__(self, other: "TokenUsage") -> "TokenUsage":
         return TokenUsage(
-            self.input_tokens + other.input_tokens,
-            self.output_tokens + other.output_tokens,
-            self.thinking_tokens + other.thinking_tokens,
+            input_tokens=self.input_tokens + other.input_tokens,
+            cached_tokens=self.cached_tokens + other.cached_tokens,
+            output_tokens=self.output_tokens + other.output_tokens,
+            thinking_tokens=self.thinking_tokens + other.thinking_tokens,
         )
 
 
@@ -180,10 +186,10 @@ class PaperForScreening:
 
 
 def confidence_for_score(score: float) -> Literal["High", "Medium", "Low"]:
-    """Map a 0-1 score to the confidence band the screening prompt defines."""
-    if score >= HIGH_CONFIDENCE_MIN_SCORE:
+    """Map a 0-1 relevance probability to the confidence band the screening prompt defines."""
+    if score >= HIGH_CONFIDENCE_MIN_SCORE or score <= HIGH_CONFIDENCE_MAX_SCORE:
         return "High"
-    if score >= MEDIUM_CONFIDENCE_MIN_SCORE:
+    if score >= MEDIUM_CONFIDENCE_MIN_SCORE or score < MEDIUM_CONFIDENCE_MAX_SCORE:
         return "Medium"
     return "Low"
 
@@ -285,3 +291,75 @@ class FigureReading(BaseModel):
     phases: list[str] = Field(default_factory=list)  # phases labelled on an XRD pattern
     steps: list[ProcessStep] = Field(default_factory=list)
     flows: list[ProcessFlow] = Field(default_factory=list)
+
+
+# Controlled vocabulary of the CNS input workbook ("10 Controlled Vocab" sheet)
+SteelSlagType = Literal[
+    "EAF", "BOF", "Ladle", "Stainless Steel", "Electric Arc Furnace Dust-derived",
+    "Other Steel Slag",
+]  # fmt: skip
+PublicationType = Literal[
+    "Journal Article", "Conference Paper", "Thesis/Dissertation", "Patent", "Government Report",
+    "Technical Report", "Dataset", "Standard", "Other",
+]  # fmt: skip
+ExtractionConfidence = Literal["High", "Medium", "Low"]
+# The workbook sheets that hold experimental data (sheet 1 is per paper, sheet 9 is provenance)
+DataSheet = Literal[
+    "sheet_02_feedstock_chemistry", "sheet_03_processing", "sheet_04_particle_size",
+    "sheet_05_activation", "sheet_06_concrete_performance", "sheet_07_durability",
+    "sheet_08_carbon_uptake",
+]  # fmt: skip
+
+
+@dataclass(frozen=True, slots=True)
+class PaperCitation:
+    """Bibliographic fields of a paper, taken from the registry rather than the model."""
+
+    title: str | None
+    authors: tuple[str, ...]
+    year: int | None
+    doi: str | None
+
+
+class ExtractedLiterature(BaseModel):
+    """Paper-level fields of the Scientific Literature sheet that come from the paper's text."""
+
+    publication_type: PublicationType | None
+    journal_or_source: str | None
+    country_or_region: str | None
+    study_objective: str | None
+    abstract_or_key_finding: str | None
+    full_text_access: Literal["Open", "Abstract Only", "Restricted", "Unknown"] | None
+    relevant_to_scm: Literal["Yes", "No", "Unclear"]
+    notes: str | None
+
+
+class ExtractedMaterial(BaseModel):
+    """One distinct steel slag in the paper; every fact about it carries its material_id."""
+
+    material_id: str  # MAT-0001, MAT-0002, ... within this paper
+    steel_slag_type: SteelSlagType
+    description: str
+
+
+class ExtractedFact(BaseModel):
+    """One value the paper reports, destined for one column of one data sheet."""
+
+    sheet: DataSheet
+    field: str  # workbook column header, e.g. "CaO_pct"
+    value: str  # in the column's unit, e.g. "20" for a reported 0.20 mass fraction
+    reported_value: str  # exactly as printed, with its unit
+    material_id: str
+    experiment_id: str | None
+    mix_id: str | None
+    location: str  # page, table or figure
+    excerpt: str
+    confidence: ExtractionConfidence
+
+
+class PaperExtraction(BaseModel):
+    """Gemini's answer when asked for every workbook value one paper reports."""
+
+    literature: ExtractedLiterature
+    materials: list[ExtractedMaterial]
+    facts: list[ExtractedFact]

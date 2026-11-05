@@ -8,6 +8,11 @@ on:
         required: false
         default: "1"
         type: string
+      paper_ids:
+        description: "OpenAlex IDs to parse, space-separated (e.g. W123 W456); max_papers still applies"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -58,11 +63,16 @@ jobs:
       - name: Parse PDFs into _parsed_v2
         env:
           MAX_PAPERS: ${{ inputs.max_papers }}
+          PAPER_IDS: ${{ inputs.paper_ids }}
         run: |
           set -euo pipefail
           echo "Publishing unified parsing results to _parsed_v2"
+          args=(--output-folder _parsed_v2)
           if [ -n "$MAX_PAPERS" ]; then
-            uv run parse-pdfs --output-folder _parsed_v2 --max-papers "$MAX_PAPERS"
-          else
-            uv run parse-pdfs --output-folder _parsed_v2
+            args+=(--max-papers "$MAX_PAPERS")
           fi
+          if [ -n "$PAPER_IDS" ]; then
+            read -r -a paper_ids <<< "$PAPER_IDS"
+            args+=(--paper-ids "${paper_ids[@]}")
+          fi
+          uv run parse-pdfs "${args[@]}"

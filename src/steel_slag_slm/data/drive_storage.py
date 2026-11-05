@@ -95,7 +95,9 @@ def parse_openalex_id(file_name: str) -> str | None:
     return match.group(1) if match else None
 
 
-def _list_children(service: Any, folder_id: str, extra_query: str = "") -> list[dict[str, str]]:
+def _list_children(
+    service: Any, folder_id: str, extra_query: str = "", file_fields: str = "id, name"
+) -> list[dict[str, str]]:
     """List every non-trashed item directly inside a folder, following pagination."""
     query = f"'{folder_id}' in parents and trashed = false{extra_query}"
     items: list[dict[str, str]] = []
@@ -105,7 +107,7 @@ def _list_children(service: Any, folder_id: str, extra_query: str = "") -> list[
             service.files()
             .list(
                 q=query,
-                fields="nextPageToken, files(id, name)",
+                fields=f"nextPageToken, files({file_fields})",
                 pageSize=1000,
                 pageToken=page_token,
                 **_LIST_ALL_DRIVES,
@@ -223,6 +225,25 @@ def list_paper_files(service: Any, folder_id: str) -> dict[str, str]:
         for item in _list_children(service, folder_id, " and mimeType = 'application/pdf'")
         if (paper_id := parse_openalex_id(item["name"]))
     }
+
+
+def list_paper_titles(service: Any, folder_id: str) -> dict[str, str]:
+    """Map each OpenAlex ID in the folder to its paper's full title.
+
+    The title is the first line of the description upload_pdf writes. Without one, the
+    file name's title is used, cut at MAX_TITLE_CHARS_IN_NAME; old 'W123.pdf' names give "".
+    """
+    titles: dict[str, str] = {}
+    items = _list_children(
+        service, folder_id, " and mimeType = 'application/pdf'", "id, name, description"
+    )
+    for item in items:
+        if paper_id := parse_openalex_id(item["name"]):
+            description_title = item.get("description", "").split("\n", 1)[0].strip()
+            stem = item["name"].removesuffix(".pdf")
+            name_title = stem.removeprefix(paper_id).removeprefix(" - ").strip()
+            titles[paper_id] = description_title or name_title
+    return titles
 
 
 def has_paper(service: Any, folder_id: str, openalex_id: str) -> bool:

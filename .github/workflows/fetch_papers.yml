@@ -76,3 +76,10 @@ jobs:
     if: ${{ !cancelled() }}
     uses: ./.github/workflows/fill_abstracts.yml
     secrets: inherit
+
+  # Screens the night's new papers once their abstracts are in. Skipped if any earlier
+  # job failed, leaving papers unscreened until the next clean run.
+  screen-papers:
+    needs: fill-abstracts
+    uses: ./.github/workflows/screen_papers.yml
+    secrets: inherit

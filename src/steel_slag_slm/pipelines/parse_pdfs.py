@@ -4,6 +4,7 @@ import json
 import logging
 import re
 from collections import Counter
+from collections.abc import Sequence
 from typing import Any
 
 import pymupdf
@@ -43,6 +44,7 @@ def run_pdf_parsing(
     drive_service: Any,
     source_folder_id: str,
     max_papers: int | None = None,
+    paper_ids: Sequence[str] | None = None,
     *,
     figure_settings: FigureExtractionSettings,
     reparse: bool = False,
@@ -52,12 +54,18 @@ def run_pdf_parsing(
 
     Each paper has one mutable parsed.json. Upload images before replacing the manifest,
     then update the root index. Run only one publisher against an output folder.
+    paper_ids limits the run to selected papers in the source table.
     """
     if max_papers is not None and max_papers <= 0:
         raise ValueError("max_papers must be greater than zero")
 
     sources = pdf_parsing_source.list_pdf_sources(bigquery_client, settings.source_table)
     outcomes: Counter[str] = Counter()
+    if paper_ids:
+        requested = set(paper_ids)
+        # Only papers in the source table have a Drive link to their PDF
+        outcomes["not_in_source_table"] = len(requested - {s.openalex_id for s in sources})
+        sources = [source for source in sources if source.openalex_id in requested]
     if not sources:
         return outcomes
 

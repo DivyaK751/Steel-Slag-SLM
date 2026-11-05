@@ -11,6 +11,7 @@ from steel_slag_slm.data.drive_storage import (
     ensure_subfolder,
     has_paper,
     list_paper_files,
+    list_paper_titles,
     parse_openalex_id,
     read_id_list,
     read_text_file,
@@ -62,6 +63,27 @@ def test_list_paper_files_maps_ids_to_file_ids_and_skips_other_files() -> None:
         "files": [{"id": "f1", "name": "W1 - Slag.pdf"}, {"id": "f2", "name": "notes.pdf"}]
     }
     assert list_paper_files(service, "F") == {"W1": "f1"}
+
+
+def test_list_paper_titles_prefers_the_description_over_the_file_name() -> None:
+    service = MagicMock()
+    service.files().list().execute.return_value = {
+        "files": [
+            {
+                "id": "f1",
+                "name": "W1 - CO2 H2O a study.pdf",
+                "description": "CO2/H2O: a study?\nDOI: n/a\nYear: 2020",
+            },
+            {"id": "f2", "name": "W2 - Steel slag binders.pdf"},
+            {"id": "f3", "name": "W3.pdf"},
+            {"id": "f4", "name": "notes.pdf"},
+        ]
+    }
+    assert list_paper_titles(service, "F") == {
+        "W1": "CO2/H2O: a study?",
+        "W2": "Steel slag binders",
+        "W3": "",
+    }
 
 
 def test_read_text_file_is_empty_when_the_file_does_not_exist_yet() -> None:

@@ -5,6 +5,7 @@ import asyncio
 import logging
 import os
 import subprocess
+import textwrap
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
@@ -13,6 +14,7 @@ from google.adk.runners import Runner
 from google.cloud import bigquery
 
 from steel_slag_slm.agents.abstract_extractor import build_extractor_agent
+from steel_slag_slm.agents.data_extractor import build_data_extractor_agent
 from steel_slag_slm.agents.figure_reader import build_figure_reader_agent
 from steel_slag_slm.agents.relevance_screener import build_screener_agent
 from steel_slag_slm.agents.runner import build_runner
@@ -20,9 +22,11 @@ from steel_slag_slm.config import (
     ScreeningSettings,
     Settings,
     load_abstract_extraction_settings,
+    load_data_extraction_settings,
     load_drive_connection_settings,
     load_embedding_settings,
     load_evaluation_settings,
+    load_extraction_tables_settings,
     load_figure_extraction_settings,
     load_figure_reading_settings,
     load_gcp_settings,
@@ -31,7 +35,13 @@ from steel_slag_slm.config import (
     load_screening_settings,
     load_settings,
 )
-from steel_slag_slm.data.drive_storage import build_drive_service, find_subfolder_id
+from steel_slag_slm.data.drive_storage import (
+    build_drive_service,
+    find_subfolder_id,
+    list_paper_titles,
+)
+from steel_slag_slm.data.extraction_export import export_workbook
+from steel_slag_slm.data.extraction_tables import ensure_extraction_tables
 from steel_slag_slm.data.figure_detection import build_figure_converter
 from steel_slag_slm.data.openalex import OpenAlexClient
 from steel_slag_slm.data.paper_registry import build_bigquery_client
@@ -43,6 +53,7 @@ from steel_slag_slm.pipelines.build_index import run_build_index
 from steel_slag_slm.pipelines.evaluate_retrieval import run_retrieval_eval
 from steel_slag_slm.pipelines.evaluate_screening import run_evaluation
 from steel_slag_slm.pipelines.export_parsed import run_export_parsed
+from steel_slag_slm.pipelines.extract_data import run_data_extraction
 from steel_slag_slm.pipelines.extract_figures import collect_pdf_paths, run_figure_extraction
 from steel_slag_slm.pipelines.fetch_papers import run_fetch
 from steel_slag_slm.pipelines.fill_abstracts import run_fill_abstracts
@@ -97,12 +108,22 @@ def _quiet_gemini_logs() -> None:
         logging.getLogger(noisy_logger).setLevel(logging.WARNING)
 
 
-def _build_screening() -> tuple[ScreeningSettings, PromptTemplate, Runner, bigquery.Client]:
-    """Set up logging, settings, prompt, agent and BigQuery for the screening commands."""
+def _build_screening(
+    model: str | None = None,
+) -> tuple[ScreeningSettings, PromptTemplate, Runner, bigquery.Client]:
+    """Set up logging, settings, prompt, agent and BigQuery for the screening commands.
+
+    model, if given, replaces the configured model for this run only.
+    """
     _setup_logging()
     _quiet_gemini_logs()
     gcp = load_gcp_settings()
     settings = load_screening_settings()
+    if model:
+        settings = settings.model_copy(update={"model": model})
+    if gcp.credentials_file:
+        # Gemini uses ADC; on GitHub this variable otherwise points at the Drive sign-in file
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(gcp.credentials_file)
     prompt = load_prompt(settings.prompt_name)
     runner = build_runner(build_screener_agent(settings, prompt))
     return settings, prompt, runner, build_bigquery_client(gcp.project, gcp.credentials_file)
@@ -163,6 +184,39 @@ def sync_registry() -> None:
     _print_remaining_budget(client)
 
 
+def create_extraction_tables() -> None:
+    """Create the BigQuery tables (one per input-workbook sheet) for extracted paper data."""
+    argparse.ArgumentParser(description=create_extraction_tables.__doc__).parse_args()
+    _setup_logging()
+    gcp = load_gcp_settings()
+    client = build_bigquery_client(gcp.project, gcp.credentials_file)
+    for table_id in ensure_extraction_tables(client, load_extraction_tables_settings()):
+        print("Ready:", table_id)
+
+
+def export_extraction() -> None:
+    """Export the nine extraction tables from BigQuery to one Excel workbook."""
+    parser = argparse.ArgumentParser(description=export_extraction.__doc__)
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="where to save the .xlsx (default: a timestamped file in reports/extraction/)",
+    )
+    args = parser.parse_args()
+    _setup_logging()
+    gcp = load_gcp_settings()
+    settings = load_extraction_tables_settings()
+    client = build_bigquery_client(gcp.project, gcp.credentials_file)
+    output = args.output or (
+        settings.export_dir / f"steel_slag_extraction_{datetime.now():%Y%m%d_%H%M%S}.xlsx"
+    )
+    row_counts = export_workbook(client, f"{client.project}.{settings.dataset}", output)
+    for table, count in row_counts.items():
+        print(f"{table:32} {count} rows")
+    print("Saved:", output)
+
+
 def screen_papers() -> None:
     """Fill the relevance columns of unscreened papers in BigQuery using Gemini."""
     parser = argparse.ArgumentParser(description=screen_papers.__doc__)
@@ -187,8 +241,19 @@ def screen_papers() -> None:
 
 def evaluate_screening() -> None:
     """Screen the human-labelled papers and save an Excel report comparing the two."""
-    argparse.ArgumentParser(description=evaluate_screening.__doc__).parse_args()
-    settings, prompt, runner, bq_client = _build_screening()
+    parser = argparse.ArgumentParser(description=evaluate_screening.__doc__)
+    parser.add_argument(
+        "--model",
+        default=None,
+        help="Gemini model to evaluate, e.g. gemini-4-argon (default: the one in base.yaml)",
+    )
+    parser.add_argument(
+        "--write",
+        action="store_true",
+        help="also save this run's answers in the labels table, replacing the previous run's",
+    )
+    args = parser.parse_args()
+    settings, prompt, runner, bq_client = _build_screening(args.model)
     evaluation = load_evaluation_settings(settings.papers_table)
     run_info = {
         "Run at": datetime.now().isoformat(timespec="seconds"),
@@ -197,14 +262,16 @@ def evaluate_screening() -> None:
         "Prompt": f"{prompt.name} v{prompt.version}",
         "Git commit": _git_commit(),
     }
-    path, metrics = asyncio.run(
-        run_evaluation(settings, evaluation, bq_client, runner, prompt, run_info)
+    path, metrics, updated = asyncio.run(
+        run_evaluation(settings, evaluation, bq_client, runner, prompt, run_info, args.write)
     )
     accuracy = "n/a" if metrics.accuracy is None else f"{metrics.accuracy:.0%}"
     print(
         f"Agreed with humans on {metrics.matched}/{metrics.labelled} labelled papers ({accuracy})"
     )
     print(f"Report: {path}")
+    if args.write:
+        print(f"Updated {updated} rows in {evaluation.labels_table}")
 
 
 def parse_pdfs() -> None:
@@ -230,6 +297,12 @@ def parse_pdfs() -> None:
         "--output-folder",
         default=None,
         help="override the parsed Drive folder name",
+    )
+    parser.add_argument(
+        "--paper-ids",
+        nargs="+",
+        default=None,
+        help="parse only these OpenAlex IDs from the source table (default: every paper)",
     )
     args = parser.parse_args()
     if args.max_papers is not None and args.max_papers <= 0:
@@ -260,6 +333,7 @@ def parse_pdfs() -> None:
         drive_service,
         drive_settings.folder_id,
         args.max_papers,
+        args.paper_ids,
         figure_settings=load_figure_extraction_settings(),
         reparse=args.reparse,
         retry_skipped=args.retry_skipped,
@@ -362,6 +436,51 @@ def _connect_to_parsed_folder(folder_name: str | None = None) -> tuple[Any, str]
     return drive_service, parsed_folder_id
 
 
+def extract_data() -> None:
+    """Extract workbook data values from parsed papers into the BigQuery sheet tables."""
+    parser = argparse.ArgumentParser(description=extract_data.__doc__)
+    parser.add_argument(
+        "--paper-ids",
+        nargs="+",
+        default=None,
+        help="OpenAlex IDs to (re-)extract (default: every parsed paper not extracted yet)",
+    )
+    parser.add_argument(
+        "--max-papers",
+        type=int,
+        default=None,
+        help="stop after this many papers (default: no limit)",
+    )
+    args = parser.parse_args()
+    if args.max_papers is not None and args.max_papers <= 0:
+        parser.error("--max-papers must be greater than zero")
+    _setup_logging()
+    _quiet_gemini_logs()
+
+    gcp = load_gcp_settings()
+    settings = load_data_extraction_settings()
+    drive_service, parsed_folder_id = _connect_to_parsed_folder()
+    if gcp.credentials_file:
+        # Set only after Drive signs in, as in fill-abstracts: Gemini uses ADC
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(gcp.credentials_file)
+    prompt = load_prompt(settings.prompt_name)
+    runner = build_runner(build_data_extractor_agent(settings, prompt))
+    outcomes = asyncio.run(
+        run_data_extraction(
+            settings,
+            load_pdf_parsing_settings(),
+            build_bigquery_client(gcp.project, gcp.credentials_file),
+            drive_service,
+            parsed_folder_id,
+            runner,
+            prompt,
+            args.paper_ids,
+            args.max_papers,
+        )
+    )
+    print("Summary:", dict(outcomes))
+
+
 def build_index() -> None:
     """Embed every parsed paper and save the search index to the _parsed Drive folder."""
     parser = argparse.ArgumentParser(description=build_index.__doc__)
@@ -415,19 +534,25 @@ def search_index() -> None:
     _setup_logging()
     settings = load_embedding_settings()
     kinds = cast(set[ChunkKind], set(args.kind)) if args.kind else None
+    drive_service, parsed_folder_id = _connect_to_parsed_folder()
     hits = run_search(
         settings,
-        *_connect_to_parsed_folder(),
+        drive_service,
+        parsed_folder_id,
         Embedder(settings.model),
         args.query,
         args.top_k,
         kinds,
     )
+    titles = list_paper_titles(drive_service, load_drive_connection_settings().folder_id)
     for rank, hit in enumerate(hits, start=1):
         chunk = hit.chunk
+        title = titles.get(chunk.paper_id) or "(title unknown)"
         pages = f" · pages {', '.join(str(page) for page in chunk.pages)}" if chunk.pages else ""
-        print(f"{rank}. [{hit.score:.3f}] {chunk.paper_id} · {chunk.kind} · {chunk.section}{pages}")
-        print(f"   {' '.join(chunk.text.split())[:300]}")
+        print(f"{rank}. [{hit.score:.3f}] {chunk.paper_id} · {title}")
+        print(f"   {chunk.kind} · {chunk.section}{pages}")
+        print(textwrap.fill(chunk.text, width=100, initial_indent="   ", subsequent_indent="   "))
+        print()
 
 
 def evaluate_retrieval() -> None:
@@ -499,7 +624,9 @@ def read_figures() -> None:
         "--figures-dir",
         type=Path,
         default=extraction.output_dir,
-        help=f"local output from export-parsed or extract-figures (default: {extraction.output_dir})",
+        help=(
+            f"local output from export-parsed or extract-figures (default: {extraction.output_dir})"
+        ),
     )
     parser.add_argument(
         "--paper-ids",

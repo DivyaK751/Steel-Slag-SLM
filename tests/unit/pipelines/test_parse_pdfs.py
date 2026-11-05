@@ -338,3 +338,26 @@ def test_manifest_rejects_unsafe_image_path(
 
     with pytest.raises(ValidationError):
         ParsedManifest.model_validate(raw)
+
+
+def test_run_pdf_parsing_parses_only_the_requested_papers(
+    monkeypatch: pytest.MonkeyPatch, fake_drive: Any
+) -> None:
+    folder = _prepare(monkeypatch, fake_drive)
+    sources = [
+        PdfSource(f"W{number}", f"https://drive.google.com/file/d/SOURCE{number}/view")
+        for number in (123, 124, 125)
+    ]
+    monkeypatch.setattr(pdf_parsing_source, "list_pdf_sources", lambda *_: sources)
+    for number in (123, 124, 125):
+        fake_drive.contents[f"SOURCE{number}"] = b"%PDF"
+    download = MagicMock(wraps=fake_drive.download_file)
+    monkeypatch.setattr(drive_storage, "download_pdf", download)
+
+    outcomes = _run(paper_ids=["W124", "W999"])
+
+    download.assert_called_once_with(None, "SOURCE124")
+    assert outcomes["parsed"] == 1
+    assert outcomes["not_in_source_table"] == 1
+    index = json.loads(fake_drive.read_text_file(None, folder, "index.json"))
+    assert set(index["papers"]) == {"W124"}

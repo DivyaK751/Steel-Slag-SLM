@@ -12,5 +12,6 @@ def test_estimate_cost_usd_bills_thinking_at_the_output_rate() -> None:
 
 
 def test_token_usage_adds_up_field_by_field() -> None:
-    total = TokenUsage(10, 2, 1) + TokenUsage(5, 3, 0)
-    assert total == TokenUsage(15, 5, 1)
+    total = TokenUsage(input_tokens=10, output_tokens=2, thinking_tokens=1, cached_tokens=4)
+    total += TokenUsage(input_tokens=5, output_tokens=3, cached_tokens=2)
+    assert total == TokenUsage(input_tokens=15, output_tokens=5, thinking_tokens=1, cached_tokens=6)

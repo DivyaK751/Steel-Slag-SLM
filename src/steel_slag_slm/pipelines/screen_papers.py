@@ -8,7 +8,12 @@ from google.adk.runners import Runner
 from google.cloud import bigquery
 from google.genai.errors import APIError
 
-from steel_slag_slm.agents.relevance_screener import paper_from_row, screen_paper
+from steel_slag_slm.agents.relevance_screener import (
+    DECISION_COLUMN_TYPES,
+    NON_ENGLISH_PREFIX,
+    paper_from_row,
+    screen_paper,
+)
 from steel_slag_slm.agents.runner import gather_bounded
 from steel_slag_slm.config import ScreeningSettings
 from steel_slag_slm.data.bigquery_store import merge_updates, query_rows
@@ -18,15 +23,6 @@ from steel_slag_slm.schemas import PaperForScreening, RelevanceDecision
 
 logger = logging.getLogger(__name__)
 
-# Columns this pipeline fills; everything else in the table belongs to the ingestion job
-DECISION_COLUMN_TYPES = {
-    "openalex_id": "STRING",
-    "relevant": "STRING",
-    "relevance_score": "FLOAT64",
-    "relevance_confidence": "STRING",
-    "relevance_reason": "STRING",
-    "supporting_excerpt": "STRING",
-}
 # Failures that cost one paper, not the run; the paper stays unscreened for the next run
 _PER_PAPER_ERRORS = (AgentOutputError, APIError)
 
@@ -71,7 +67,9 @@ async def run_screening(
     """Screen papers batch by batch until none are left or max_papers have been tried.
 
     Returns:
-        Counts of decisions and problems: yes, no, unclear, failed, no_excerpt, written.
+        Counts of decisions and problems (yes, no, unclear, non_english, failed, no_excerpt,
+        written)
+        plus the Gemini tokens used (input_tokens, output_tokens).
     """
     outcomes: Counter[str] = Counter()
     # Failed (and, in a dry run, all) papers stay NULL, so skip them or we'd fetch them forever
@@ -100,17 +98,22 @@ async def run_screening(
                 continue
             if isinstance(result, Exception):
                 raise result
-            outcomes[result.relevant.lower()] += 1
-            if result.supporting_excerpt is None:
+            decision, usage = result
+            outcomes[decision.relevant.lower()] += 1
+            outcomes["input_tokens"] += usage.input_tokens
+            outcomes["output_tokens"] += usage.output_tokens
+            if decision.relevance_reason.startswith(NON_ENGLISH_PREFIX):
+                outcomes["non_english"] += 1
+            elif decision.supporting_excerpt is None:
                 outcomes["no_excerpt"] += 1
             logger.info(
                 "%s %s (%.2f): %s",
                 paper.openalex_id,
-                result.relevant,
-                result.relevance_score,
-                result.relevance_reason,
+                decision.relevant,
+                decision.relevance_score,
+                decision.relevance_reason,
             )
-            rows.append(decision_row(paper, result))
+            rows.append(decision_row(paper, decision))
 
         if not dry_run:
             outcomes["written"] += merge_updates(

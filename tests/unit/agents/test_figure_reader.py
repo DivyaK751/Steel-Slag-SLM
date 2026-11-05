@@ -5,6 +5,7 @@ from typing import Any
 import pytest
 
 from steel_slag_slm.agents import figure_reader
+from steel_slag_slm.agents.runner import StructuredAnswer
 from steel_slag_slm.llm.prompts import PromptTemplate, load_prompt
 from steel_slag_slm.schemas import FigureReading, FigureToRead, TokenUsage
 
@@ -27,7 +28,10 @@ def test_read_figure_sends_the_image_caption_and_pdf_text(monkeypatch: pytest.Mo
 
     async def fake_run(_runner: object, message: str, _schema: object, attachments: Any) -> Any:
         sent["message"], sent["attachments"] = message, attachments
-        return FigureReading(figure_type="data_plot", summary="s"), TokenUsage(10, 5, 0)
+        return StructuredAnswer(
+            FigureReading(figure_type="data_plot", summary="s"),
+            TokenUsage(input_tokens=10, output_tokens=5),
+        )
 
     monkeypatch.setattr(figure_reader, "run_structured_with_usage", fake_run)
     figure = _figure("3", caption="Fig. 3 Strength", pdf_text="0 10 20 MPa")
@@ -36,7 +40,8 @@ def test_read_figure_sends_the_image_caption_and_pdf_text(monkeypatch: pytest.Mo
     )
     assert sent["message"] == "W1|Fig. 3|Fig. 3 Strength|0 10 20 MPa"
     assert sent["attachments"][0].inline_data.mime_type == "image/png"
-    assert reading.figure_type == "data_plot" and usage == TokenUsage(10, 5, 0)
+    assert reading.figure_type == "data_plot"
+    assert usage == TokenUsage(input_tokens=10, output_tokens=5)
 
 
 def test_figure_label_names_unnumbered_figures() -> None:

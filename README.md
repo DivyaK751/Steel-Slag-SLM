@@ -170,6 +170,8 @@ Additional options:
 - `--reparse`: force reparsing of successful current papers.
 - `--retry-skipped`: reconsider papers deliberately marked as skipped.
 - `--output-folder NAME`: publish to a different Drive output folder.
+- `--paper-ids W123 W456`: select actual OpenAlex IDs from the source table; the pending-paper
+  limit still applies. The GitHub pilot also accepts a space-separated `paper_ids` input.
 
 Use `--reparse` if PDF bytes change behind the same Drive link; the normal reuse path does not
 download the source to detect this change. Bump `PIPELINE_REVISION` when extraction code changes
@@ -182,6 +184,37 @@ Parsing accepts figure-only papers, but the text search index cannot index a pap
 produces no text/table chunks. Figure pixels and Gemini readings are not automatically
 embedded. After approved production migration, rebuild the existing text search index
 explicitly; ordinary indexing does not refresh papers already indexed.
+
+To parse particular papers from the source table, add `--paper-ids W123 W456` (the "Parse trial
+PDFs" workflow has a matching `paper_ids` input). On macOS, prefix the command with
+`OMP_NUM_THREADS=1`: Docling's PyTorch and faiss each bundle OpenMP, and running both in one
+process segfaults there.
+
+## Data extraction
+
+`extract-data` sends each parsed paper's Markdown to Gemini and stores every value it reports
+in nine BigQuery tables, one per data sheet of the CNS input workbook
+(`steel_slag_extraction.sheet_01_scientific_literature` ... `sheet_09_citations_provenance`).
+The model, prompt version and prices are in the `data_extraction:` section of
+`configs/base.yaml`; the prompts are `prompts/extract_data*.yaml`.
+
+```bash
+uv run create-extraction-tables                 # once per project: create the nine tables
+uv run extract-data --paper-ids W123 W456       # (re-)extract these papers
+uv run extract-data --max-papers 5              # extract parsed papers that have no rows yet
+uv run export-extraction                        # all nine tables -> reports/extraction/*.xlsx
+```
+
+On GitHub, the "Extract paper data" workflow takes a comma-separated list of paper IDs.
+
+- A paper's old rows are replaced on every run. Each material's slag type is copied to all
+  its rows; values that break a column rule (unit, allowed values, unknown material) are
+  dropped and logged.
+- Each fact's page is found from its excerpt, and its confidence drops from High to Medium
+  when the stored value isn't printed as such (a unit conversion, for example).
+- Every paper's token count and cost are logged. Images are not sent to the model yet.
+- Code: `agents/data_extractor.py`, `data/extraction_rows.py` (rules and rows),
+  `data/extraction_tables.py` (table definitions) and `pipelines/extract_data.py`.
 
 ## Semantic search
 

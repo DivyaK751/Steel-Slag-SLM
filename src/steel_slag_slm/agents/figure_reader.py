@@ -38,4 +38,5 @@ async def read_figure(
         pdf_text=figure.pdf_text or MISSING_FIELD,
     )
     image = types.Part.from_bytes(data=png, mime_type="image/png")
-    return await run_structured_with_usage(runner, message, FigureReading, attachments=[image])
+    answer = await run_structured_with_usage(runner, message, FigureReading, attachments=[image])
+    return answer.result, answer.usage

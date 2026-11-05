@@ -11,5 +11,10 @@ __pycache__/
 *.json.key
 service_account*.json
 /reports/evaluation/
+/reports/extraction/
 pdf_parsing_implementation_guide.pdf
 
+
+# OS / Office clutter
+.DS_Store
+~$*

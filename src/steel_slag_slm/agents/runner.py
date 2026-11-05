@@ -2,7 +2,8 @@
 
 import asyncio
 from collections.abc import Awaitable, Callable, Sequence
-from typing import Any, TypeVar
+from dataclasses import dataclass
+from typing import Any, Generic, TypeVar
 
 from google.adk.agents import LlmAgent
 from google.adk.runners import InMemoryRunner, Runner
@@ -21,6 +22,14 @@ LLM_RETRY_ATTEMPTS = 5
 SchemaT = TypeVar("SchemaT", bound=BaseModel)
 ItemT = TypeVar("ItemT")
 ResultT = TypeVar("ResultT")
+
+
+@dataclass(frozen=True, slots=True)
+class StructuredAnswer(Generic[SchemaT]):
+    """An agent's parsed answer and the tokens it took to produce it."""
+
+    result: SchemaT
+    usage: TokenUsage
 
 
 def build_structured_agent(
@@ -67,8 +76,8 @@ async def run_structured(
     Raises:
         AgentOutputError: If the agent gives no final answer or it doesn't match the schema.
     """
-    answer, _ = await run_structured_with_usage(runner, message, schema, attachments)
-    return answer
+    answer = await run_structured_with_usage(runner, message, schema, attachments)
+    return answer.result
 
 
 async def run_structured_with_usage(
@@ -76,8 +85,8 @@ async def run_structured_with_usage(
     message: str,
     schema: type[SchemaT],
     attachments: Sequence[types.Part] = (),
-) -> tuple[SchemaT, TokenUsage]:
-    """Like run_structured, but also return the tokens the call used, for cost tracking.
+) -> StructuredAnswer[SchemaT]:
+    """Like run_structured, but also return the tokens the agent's model calls used.
 
     Raises:
         AgentOutputError: If the agent gives no final answer or it doesn't match the schema.
@@ -86,12 +95,14 @@ async def run_structured_with_usage(
     session = await runner.session_service.create_session(app_name=APP_NAME, user_id=USER_ID)
     content = types.Content(role="user", parts=[types.Part(text=message), *attachments])
     final_text = ""
-    usage = TokenUsage()
+    usages: list[Any] = []
     try:
         async for event in runner.run_async(
             user_id=USER_ID, session_id=session.id, new_message=content
         ):
-            usage += _event_usage(event)
+            usage = getattr(event, "usage_metadata", None)
+            if usage is not None and not getattr(event, "partial", False):
+                usages.append(usage)
             if event.is_final_response() and event.content and event.content.parts:
                 final_text = "".join(part.text or "" for part in event.content.parts)
     finally:
@@ -101,20 +112,20 @@ async def run_structured_with_usage(
     if not final_text.strip():
         raise AgentOutputError("Agent returned no final answer")
     try:
-        return schema.model_validate_json(final_text), usage
+        result = schema.model_validate_json(final_text)
     except ValidationError as error:
         raise AgentOutputError(f"Answer doesn't match {schema.__name__}: {error}") from error
+    return StructuredAnswer(result, _total_usage(usages))
 
 
-def _event_usage(event: Any) -> TokenUsage:
-    """Token counts on one ADK event; events that didn't call the model report none."""
-    metadata = getattr(event, "usage_metadata", None)
-    if metadata is None:
-        return TokenUsage()
+def _total_usage(usages: Sequence[Any]) -> TokenUsage:
+    """Add up the usage metadata of every model call (one per call, without tools)."""
     return TokenUsage(
-        input_tokens=metadata.prompt_token_count or 0,
-        output_tokens=metadata.candidates_token_count or 0,
-        thinking_tokens=metadata.thoughts_token_count or 0,
+        input_tokens=sum(u.prompt_token_count or 0 for u in usages),
+        cached_tokens=sum(u.cached_content_token_count or 0 for u in usages),
+        output_tokens=sum(
+            (u.candidates_token_count or 0) + (u.thoughts_token_count or 0) for u in usages
+        ),
     )
 
 
