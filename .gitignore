@@ -18,3 +18,6 @@ pdf_parsing_implementation_guide.pdf
 # OS / Office clutter
 .DS_Store
 ~$*
+
+# Human-extraction sample PDFs (184 MB, kept in Drive)
+/human_extracted_data/pdfs/
