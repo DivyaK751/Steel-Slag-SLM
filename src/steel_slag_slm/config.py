@@ -77,6 +77,7 @@ class PdfParsingSettings(BaseModel):
     """Where PDF parsing reads paper rows and stores its Drive outputs."""
 
     source_table: str
+    relevant_labels: list[str] | None = None  # screening labels to parse; None parses every row
     output_folder_name: str
     index_file_name: str
 

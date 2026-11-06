@@ -59,7 +59,9 @@ def run_pdf_parsing(
     if max_papers is not None and max_papers <= 0:
         raise ValueError("max_papers must be greater than zero")
 
-    sources = pdf_parsing_source.list_pdf_sources(bigquery_client, settings.source_table)
+    sources = pdf_parsing_source.list_pdf_sources(
+        bigquery_client, settings.source_table, settings.relevant_labels
+    )
     outcomes: Counter[str] = Counter()
     if paper_ids:
         requested = set(paper_ids)
