@@ -56,4 +56,5 @@ def test_parse_pdfs_builds_clients_and_runs_pipeline(monkeypatch, capsys, paper_
         "reparse": False,
         "retry_skipped": False,
         "store_images": True,
+        "workers": 1,
     }

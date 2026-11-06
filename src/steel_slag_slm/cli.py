@@ -309,9 +309,17 @@ def parse_pdfs() -> None:
         action="store_true",
         help="write only parsed.json; keep figure boxes and captions but upload no PNGs",
     )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help="papers parsed at once, each in its own process (default: 1)",
+    )
     args = parser.parse_args()
     if args.max_papers is not None and args.max_papers <= 0:
         parser.error("--max-papers must be greater than zero")
+    if args.workers <= 0:
+        parser.error("--workers must be greater than zero")
 
     _setup_logging()
     parsing_settings = load_pdf_parsing_settings()
@@ -343,6 +351,7 @@ def parse_pdfs() -> None:
         reparse=args.reparse,
         retry_skipped=args.retry_skipped,
         store_images=not args.json_only,
+        workers=args.workers,
     )
     print("Summary:", dict(outcomes))
     if outcomes["failed"]:

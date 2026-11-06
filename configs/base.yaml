@@ -291,6 +291,7 @@ pdf_parsing:
   relevant_labels: ["Yes"]  # papers the relevance screening approved
   output_folder_name: _parsed
   index_file_name: index.json
+  torch_threads_per_worker: 2  # used with --workers above 1; 2 was fastest on an M4 Pro
 
 # Defaults shared by every Gemini agent; an agent's own section can override any of them
 llm:

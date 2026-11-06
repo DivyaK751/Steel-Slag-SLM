@@ -80,6 +80,7 @@ class PdfParsingSettings(BaseModel):
     relevant_labels: list[str] | None = None  # screening labels to parse; None parses every row
     output_folder_name: str
     index_file_name: str
+    torch_threads_per_worker: int = 2  # with several workers, more threads each only slow them
 
 
 class EmbeddingSettings(BaseModel):

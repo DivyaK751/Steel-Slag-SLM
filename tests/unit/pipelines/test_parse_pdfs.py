@@ -1,6 +1,7 @@
 """Exercise unified publication, migration and offline figure consumption."""
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -16,8 +17,9 @@ from steel_slag_slm.data import drive_storage, pdf_parsing, pdf_parsing_source
 from steel_slag_slm.data.parsed_manifest import ParsedManifest, parser_revision
 from steel_slag_slm.data.parsed_publication import publish_parse
 from steel_slag_slm.data.pdf_parsing_source import PdfSource
+from steel_slag_slm.pipelines import parse_pdfs
 from steel_slag_slm.pipelines.export_parsed import run_export_parsed
-from steel_slag_slm.pipelines.parse_pdfs import run_pdf_parsing
+from steel_slag_slm.pipelines.parse_pdfs import MAX_FAILURE_STREAK, run_pdf_parsing
 from steel_slag_slm.pipelines.read_figures import list_paper_dirs, load_figures_to_read
 from steel_slag_slm.schemas import CaptionBlock, Figure, ParsedDocument, RenderedFigure
 
@@ -167,8 +169,8 @@ def test_upload_failure_preserves_old_index(
 
     monkeypatch.setattr(drive_storage, "write_file", fail)
 
-    with pytest.raises(RuntimeError, match="upload failure"):
-        _run(reparse=True)
+    # The failed paper is reported, not fatal, and stays as it was so the next run retries it
+    assert _run(reparse=True)["failed"] == 1
 
     assert fake_drive.read_text_file(None, folder, "index.json") == old_index
     entry = _entry(fake_drive, folder)
@@ -397,3 +399,92 @@ def test_export_skips_figures_parsed_without_images(
     assert outcomes["exported"] == 1
     assert (tmp_path / "W123" / "parsed.json").exists()
     assert not any((tmp_path / "W123" / "images").iterdir())
+
+
+def _use_sources(monkeypatch: pytest.MonkeyPatch, fake_drive: Any, count: int) -> list[str]:
+    """Serve `count` papers, each with its own PDF in the fake Drive; return their IDs."""
+    sources = [
+        PdfSource(f"W{n}", f"https://drive.google.com/file/d/PDF{n}/view") for n in range(count)
+    ]
+    for n in range(count):
+        fake_drive.contents[f"PDF{n}"] = b"%PDF"
+    monkeypatch.setattr(pdf_parsing_source, "list_pdf_sources", lambda *_: sources)
+    return [source.openalex_id for source in sources]
+
+
+def test_download_failure_moves_on_and_the_next_run_retries_only_that_paper(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_drive: Any,
+) -> None:
+    _prepare(monkeypatch, fake_drive)
+    _use_sources(monkeypatch, fake_drive, 3)
+    download = fake_drive.download_file
+
+    def flaky(service: Any, file_id: str) -> bytes:
+        if file_id == "PDF1":
+            raise TimeoutError("Drive API timed out")
+        return bytes(download(service, file_id))
+
+    monkeypatch.setattr(drive_storage, "download_pdf", flaky)
+    outcomes = _run()
+    assert (outcomes["parsed"], outcomes["failed"]) == (2, 1)
+
+    monkeypatch.setattr(drive_storage, "download_pdf", download)
+    outcomes = _run()
+    assert (outcomes["parsed"], outcomes["already_parsed"]) == (1, 2)
+
+
+def test_unparsable_pdf_is_indexed_so_reruns_skip_it(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_drive: Any,
+) -> None:
+    folder = _prepare(monkeypatch, fake_drive)
+    monkeypatch.setattr(
+        pdf_parsing, "parse_pdf_with_figures", MagicMock(side_effect=RuntimeError("bad"))
+    )
+
+    assert _run()["skipped"] == 1
+    assert _entry(fake_drive, folder)["skip_reason"] == "parse_failed"
+    assert _run()["skipped"] == 1
+
+    monkeypatch.setattr(pdf_parsing, "parse_pdf_with_figures", lambda *_: _parsed())
+    assert _run(retry_skipped=True)["parsed"] == 1
+
+
+def test_run_stops_when_every_paper_keeps_failing(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_drive: Any,
+) -> None:
+    _prepare(monkeypatch, fake_drive)
+    _use_sources(monkeypatch, fake_drive, MAX_FAILURE_STREAK + 5)
+    download = MagicMock(side_effect=ConnectionError("offline"))
+    monkeypatch.setattr(drive_storage, "download_pdf", download)
+
+    with pytest.raises(RuntimeError, match="in a row"):
+        _run()
+    assert download.call_count == MAX_FAILURE_STREAK
+
+
+def test_parallel_workers_parse_and_index_every_paper(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_drive: Any,
+) -> None:
+    folder = _prepare(monkeypatch, fake_drive)
+    paper_ids = _use_sources(monkeypatch, fake_drive, 6)
+    # Threads stand in for worker processes, which wouldn't see this test's fakes
+    monkeypatch.setattr(
+        parse_pdfs,
+        "_make_executor",
+        lambda workers, _threads: ThreadPoolExecutor(
+            workers, initializer=parse_pdfs._start_worker, initargs=(None,)
+        ),
+    )
+
+    assert _run(workers=3)["parsed"] == 6
+    index = json.loads(fake_drive.read_text_file(None, folder, "index.json"))
+    assert sorted(index["papers"]) == sorted(paper_ids)
+
+
+def test_pipeline_rejects_nonpositive_workers() -> None:
+    with pytest.raises(ValueError, match="workers"):
+        _run(workers=0)
