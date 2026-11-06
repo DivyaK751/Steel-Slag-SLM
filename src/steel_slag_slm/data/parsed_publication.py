@@ -24,7 +24,7 @@ class PublishedParse:
 def publish_parse(
     service: Any,
     paper_folder_id: str,
-    image_folder_id: str,
+    image_folder_id: str | None,
     source: PdfSource,
     pdf_bytes: bytes,
     parsed: ParsedDocument,
@@ -32,9 +32,10 @@ def publish_parse(
 ) -> PublishedParse:
     """Upload generation-specific images, then replace the paper's parsed.json.
 
-    Leave the root index update to the caller. Failed image uploads leave the previous
-    manifest intact. An index failure after manifest replacement can leave index metadata
-    stale; publication is not transactional.
+    With no image_folder_id, no PNG is uploaded and every figure keeps only its metadata
+    (file_id None). Leave the root index update to the caller. Failed image uploads leave
+    the previous manifest intact. An index failure after manifest replacement can leave
+    index metadata stale; publication is not transactional.
     """
     if parsed.images:
         raise ValueError("Unified publication must not receive legacy embedded images")
@@ -102,6 +103,9 @@ def publish_parse(
 
     ids: list[str] = []
     for reference, item in zip(manifest.images, parsed.figures, strict=True):
+        if image_folder_id is None:
+            reference.file_id = None
+            continue
         file_id = drive_storage.write_file(
             service,
             image_folder_id,

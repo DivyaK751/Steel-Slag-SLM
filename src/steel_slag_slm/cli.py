@@ -304,6 +304,11 @@ def parse_pdfs() -> None:
         default=None,
         help="parse only these OpenAlex IDs from the source table (default: every paper)",
     )
+    parser.add_argument(
+        "--json-only",
+        action="store_true",
+        help="write only parsed.json; keep figure boxes and captions but upload no PNGs",
+    )
     args = parser.parse_args()
     if args.max_papers is not None and args.max_papers <= 0:
         parser.error("--max-papers must be greater than zero")
@@ -337,6 +342,7 @@ def parse_pdfs() -> None:
         figure_settings=load_figure_extraction_settings(),
         reparse=args.reparse,
         retry_skipped=args.retry_skipped,
+        store_images=not args.json_only,
     )
     print("Summary:", dict(outcomes))
     if outcomes["failed"]:

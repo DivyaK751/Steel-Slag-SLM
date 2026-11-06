@@ -74,6 +74,8 @@ def run_export_parsed(
         image_dir.mkdir(parents=True, exist_ok=True)
 
         for image in manifest.images:
+            if image.file_id is None:  # parsed JSON-only, so there is no PNG to fetch
+                continue
             png = drive_storage.download_file(service, image.file_id)
             if sha256(png).hexdigest() != image.sha256:
                 raise ValueError(f"Image checksum mismatch for {image.figure_id}")

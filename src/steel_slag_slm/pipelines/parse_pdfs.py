@@ -49,12 +49,14 @@ def run_pdf_parsing(
     figure_settings: FigureExtractionSettings,
     reparse: bool = False,
     retry_skipped: bool = False,
+    store_images: bool = True,
 ) -> Counter[str]:
     """Publish pending papers, recording parse failures while letting storage errors abort.
 
     Each paper has one mutable parsed.json. Upload images before replacing the manifest,
     then update the root index. Run only one publisher against an output folder.
-    paper_ids limits the run to selected papers in the source table.
+    paper_ids limits the run to selected papers in the source table. With store_images
+    False only parsed.json is written; figures keep their page, box and caption but no PNG.
     """
     if max_papers is not None and max_papers <= 0:
         raise ValueError("max_papers must be greater than zero")
@@ -91,9 +93,11 @@ def run_pdf_parsing(
             outcomes["skipped"] += 1
             continue
 
-        complete = all(
-            entry.get(key) for key in ("paper_folder_id", "image_folder_id", "json_file_id")
-        )
+        required: tuple[str, ...] = ("paper_folder_id", "json_file_id")
+        # A JSON-only parse is incomplete for a run that stores images
+        if store_images:
+            required += ("image_folder_id",)
+        complete = all(entry.get(key) for key in required)
         current = (
             entry.get("content_schema_version") == CONTENT_SCHEMA_VERSION
             and entry.get("parser_revision") == revision
@@ -191,10 +195,10 @@ def run_pdf_parsing(
             output_folder,
             source.openalex_id,
         )
-        image_folder = drive_storage.ensure_subfolder(
-            drive_service,
-            paper_folder,
-            "images",
+        image_folder = (
+            drive_storage.ensure_subfolder(drive_service, paper_folder, "images")
+            if store_images
+            else None
         )
 
         published = publish_parse(
@@ -210,7 +214,7 @@ def run_pdf_parsing(
             "status": "parsed",
             "source_drive_link": source.drive_link,
             "paper_folder_id": paper_folder,
-            "image_folder_id": image_folder,
+            "image_folder_id": image_folder or "",
             "json_file_id": published.json_file_id,
             "image_file_ids": published.image_file_ids,
             "content_schema_version": CONTENT_SCHEMA_VERSION,

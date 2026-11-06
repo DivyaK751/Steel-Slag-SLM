@@ -361,3 +361,39 @@ def test_run_pdf_parsing_parses_only_the_requested_papers(
     assert outcomes["not_in_source_table"] == 1
     index = json.loads(fake_drive.read_text_file(None, folder, "index.json"))
     assert set(index["papers"]) == {"W124"}
+
+
+def test_json_only_run_keeps_figure_metadata_without_uploading_images(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_drive: Any,
+) -> None:
+    folder = _prepare(monkeypatch, fake_drive)
+    assert _run(store_images=False)["parsed"] == 1
+
+    entry = _entry(fake_drive, folder)
+    assert entry["image_folder_id"] == "" and entry["image_file_ids"] == []
+    assert fake_drive.list_file_names(None, entry["paper_folder_id"]) == {
+        "parsed.json": entry["json_file_id"],
+    }
+    manifest = ParsedManifest.model_validate_json(fake_drive.contents[entry["json_file_id"]])
+    assert manifest.images[0].file_id is None
+    assert manifest.images[0].placements[0].bbox == (0, 0, 100, 10)
+    assert manifest.images[0].caption == "Fig. 1 Strength"
+
+    assert _run(store_images=False)["already_parsed"] == 1
+    # A later run that wants images redoes the JSON-only parse
+    assert _run()["parsed"] == 1
+
+
+def test_export_skips_figures_parsed_without_images(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_drive: Any,
+    tmp_path: Path,
+) -> None:
+    folder = _prepare(monkeypatch, fake_drive)
+    _run(store_images=False)
+    outcomes = run_export_parsed(PARSING, None, folder, tmp_path)
+
+    assert outcomes["exported"] == 1
+    assert (tmp_path / "W123" / "parsed.json").exists()
+    assert not any((tmp_path / "W123" / "images").iterdir())
