@@ -295,6 +295,7 @@ def run_pdf_parsing(
     queue = iter(pending)
     in_flight: dict[Future[ParsedDocument | None], tuple[PdfSource, bytes]] = {}
     failure_streak = 0
+    not_parsed: dict[str, str] = {}  # paper ID -> why, listed at the end of the run
 
     with _make_executor(workers, settings.torch_threads_per_worker) as pool:
         while True:
@@ -305,6 +306,7 @@ def run_pdf_parsing(
                 # Unindexed, so the next run retries it
                 except Exception as error:
                     logger.error("Could not download %s: %s", queued.openalex_id, error)
+                    not_parsed[queued.openalex_id] = "failed: could not download the PDF"
                     failure_streak = _tally(outcomes, "failed", failure_streak)
                     continue
                 future = pool.submit(_parse_pdf, pdf_bytes, figure_settings)
@@ -329,7 +331,38 @@ def run_pdf_parsing(
                 except Exception as error:
                     logger.error("Could not save %s: %s", source.openalex_id, error)
                     outcome = "failed"
+                    not_parsed[source.openalex_id] = "failed: could not save to Drive"
+                if outcome == "skipped":
+                    reason = output.papers[source.openalex_id]["skip_reason"]
+                    not_parsed[source.openalex_id] = f"skipped: {reason}"
+                elif outcome == "failed":
+                    not_parsed.setdefault(
+                        source.openalex_id, "failed: reparse failed, previous parse kept"
+                    )
                 failure_streak = _tally(outcomes, outcome, failure_streak)
 
-    logger.info("PDF parsing complete: %s", dict(outcomes))
+    if not_parsed:
+        listing = "\n".join(f"  {paper_id}  {why}" for paper_id, why in sorted(not_parsed.items()))
+        logger.warning("Not parsed in this run (%d):\n%s", len(not_parsed), listing)
     return outcomes
+
+
+# Each outcome's line in the end-of-run summary, in display order; zero counts are hidden
+# except for the first three
+_SUMMARY_LINES = {
+    "parsed": "Parsed in this run",
+    "skipped": "Skipped, PDF unusable (rerun with --retry-skipped to try again)",
+    "failed": "Failed, retried automatically on the next run",
+    "already_parsed": "Already parsed by an earlier run",
+    "deferred": "Not started yet (beyond --max-papers)",
+    "not_in_source_table": "Requested IDs not in the approved list",
+}
+
+
+def format_parse_summary(outcomes: Counter[str], output_folder_name: str) -> str:
+    """Describe a parsing run's counts and where its output went, for the terminal."""
+    lines = [f"Parsing summary (Drive folder {output_folder_name}/)"]
+    for position, (key, label) in enumerate(_SUMMARY_LINES.items()):
+        if position < 3 or outcomes[key]:
+            lines.append(f"  {outcomes[key]:>5}  {label}")
+    return "\n".join(lines)

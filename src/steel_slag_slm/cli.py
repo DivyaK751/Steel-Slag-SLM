@@ -58,7 +58,7 @@ from steel_slag_slm.pipelines.extract_figures import collect_pdf_paths, run_figu
 from steel_slag_slm.pipelines.fetch_papers import run_fetch
 from steel_slag_slm.pipelines.fill_abstracts import run_fill_abstracts
 from steel_slag_slm.pipelines.paper_selection import select_papers
-from steel_slag_slm.pipelines.parse_pdfs import run_pdf_parsing
+from steel_slag_slm.pipelines.parse_pdfs import format_parse_summary, run_pdf_parsing
 from steel_slag_slm.pipelines.read_figures import (
     list_paper_dirs,
     run_figure_reading,
@@ -353,9 +353,9 @@ def parse_pdfs() -> None:
         store_images=not args.json_only,
         workers=args.workers,
     )
-    print("Summary:", dict(outcomes))
+    print(format_parse_summary(outcomes, parsing_settings.output_folder_name))
     if outcomes["failed"]:
-        raise SystemExit(f"{outcomes['failed']} paper(s) failed parsing; see errors above")
+        raise SystemExit(f"{outcomes['failed']} paper(s) failed; rerun the same command to retry")
 
 
 def export_parsed() -> None:

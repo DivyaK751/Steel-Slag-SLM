@@ -1,6 +1,7 @@
 """Exercise unified publication, migration and offline figure consumption."""
 
 import json
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
@@ -19,7 +20,11 @@ from steel_slag_slm.data.parsed_publication import publish_parse
 from steel_slag_slm.data.pdf_parsing_source import PdfSource
 from steel_slag_slm.pipelines import parse_pdfs
 from steel_slag_slm.pipelines.export_parsed import run_export_parsed
-from steel_slag_slm.pipelines.parse_pdfs import MAX_FAILURE_STREAK, run_pdf_parsing
+from steel_slag_slm.pipelines.parse_pdfs import (
+    MAX_FAILURE_STREAK,
+    format_parse_summary,
+    run_pdf_parsing,
+)
 from steel_slag_slm.pipelines.read_figures import list_paper_dirs, load_figures_to_read
 from steel_slag_slm.schemas import CaptionBlock, Figure, ParsedDocument, RenderedFigure
 
@@ -415,6 +420,7 @@ def _use_sources(monkeypatch: pytest.MonkeyPatch, fake_drive: Any, count: int) -
 def test_download_failure_moves_on_and_the_next_run_retries_only_that_paper(
     monkeypatch: pytest.MonkeyPatch,
     fake_drive: Any,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     _prepare(monkeypatch, fake_drive)
     _use_sources(monkeypatch, fake_drive, 3)
@@ -426,8 +432,10 @@ def test_download_failure_moves_on_and_the_next_run_retries_only_that_paper(
         return bytes(download(service, file_id))
 
     monkeypatch.setattr(drive_storage, "download_pdf", flaky)
-    outcomes = _run()
+    with caplog.at_level("WARNING"):
+        outcomes = _run()
     assert (outcomes["parsed"], outcomes["failed"]) == (2, 1)
+    assert "W1  failed: could not download the PDF" in caplog.text
 
     monkeypatch.setattr(drive_storage, "download_pdf", download)
     outcomes = _run()
@@ -488,3 +496,14 @@ def test_parallel_workers_parse_and_index_every_paper(
 def test_pipeline_rejects_nonpositive_workers() -> None:
     with pytest.raises(ValueError, match="workers"):
         _run(workers=0)
+
+
+def test_parse_summary_always_shows_parsed_skipped_failed_and_hides_other_zeros() -> None:
+    summary = format_parse_summary(Counter(parsed=18, failed=2, deferred=954), "_parsed_approved")
+    assert summary.splitlines() == [
+        "Parsing summary (Drive folder _parsed_approved/)",
+        "     18  Parsed in this run",
+        "      0  Skipped, PDF unusable (rerun with --retry-skipped to try again)",
+        "      2  Failed, retried automatically on the next run",
+        "    954  Not started yet (beyond --max-papers)",
+    ]
