@@ -2,7 +2,8 @@
 
 import json
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -520,3 +521,42 @@ def test_parse_that_breaks_manifest_rules_is_skipped_not_retried(
     assert _run()["skipped"] == 1
     assert _entry(fake_drive, folder)["skip_reason"] == "invalid_manifest"
     assert _run()["skipped"] == 1
+
+
+class _CrashingPool(ThreadPoolExecutor):
+    """Threads standing in for worker processes; a PDF reading b"%CRASH" kills its worker."""
+
+    def __init__(self, workers: int) -> None:
+        super().__init__(workers, initializer=parse_pdfs._start_worker, initargs=(None,))
+
+    def submit(self, fn: Any, /, *args: Any, **kwargs: Any) -> Future[Any]:
+        if args[0] == b"%CRASH":
+            future: Future[Any] = Future()
+            future.set_exception(BrokenProcessPool("worker died"))
+            return future
+        return super().submit(fn, *args, **kwargs)
+
+
+def test_worker_crash_skips_only_the_paper_that_crashes_alone_and_keeps_going(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_drive: Any,
+) -> None:
+    folder = _prepare(monkeypatch, fake_drive)
+    _use_sources(monkeypatch, fake_drive, 5)
+    fake_drive.contents["PDF2"] = b"%CRASH"
+    pools: list[int] = []
+
+    def make_pool(workers: int, _threads: int, *, isolated: bool = False) -> _CrashingPool:
+        pools.append(workers)
+        return _CrashingPool(workers)
+
+    monkeypatch.setattr(parse_pdfs, "_make_executor", make_pool)
+
+    outcomes = _run(workers=2)
+
+    assert (outcomes["parsed"], outcomes["skipped"]) == (4, 1)
+    index = json.loads(fake_drive.read_text_file(None, folder, "index.json"))["papers"]
+    assert index["W2"]["skip_reason"] == "worker_crashed"
+    # The first pool, a solo pool for the crashing paper, then a fresh pool for the rest
+    assert pools[:3] == [2, 1, 2]
+    assert _run(workers=2)["skipped"] == 1

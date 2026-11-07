@@ -14,7 +14,7 @@ from concurrent.futures import (
     wait,
 )
 from concurrent.futures.process import BrokenProcessPool
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import torch
@@ -84,11 +84,40 @@ def _parse_pdf(
     return pdf_parsing.parse_pdf_with_figures(pdf_bytes, _worker_converter, figure_settings)
 
 
-def _make_executor(workers: int, torch_threads: int) -> Executor:
-    """One worker parses in this process; more run as separate processes, each with its models."""
-    if workers == 1:
+def _make_executor(workers: int, torch_threads: int, *, isolated: bool = False) -> Executor:
+    """One worker parses in this process; more run as separate processes, each with its models.
+
+    isolated forces separate processes even for one worker, so a crash can't take this one down.
+    """
+    if workers == 1 and not isolated:
         return ThreadPoolExecutor(1, initializer=_start_worker, initargs=(None,))
     return ProcessPoolExecutor(workers, initializer=_start_worker, initargs=(torch_threads,))
+
+
+def _submit(
+    pool: Executor, pdf_bytes: bytes, figure_settings: FigureExtractionSettings
+) -> Future[ParsedDocument | None]:
+    """Queue one PDF; if the pool already broke, return a future holding that error instead."""
+    try:
+        return pool.submit(_parse_pdf, pdf_bytes, figure_settings)
+    except BrokenProcessPool as error:
+        future: Future[ParsedDocument | None] = Future()
+        future.set_exception(error)
+        return future
+
+
+def _parse_alone(
+    pdf_bytes: bytes, figure_settings: FigureExtractionSettings, torch_threads: int
+) -> Future[ParsedDocument | None]:
+    """Parse one PDF in a fresh single-worker process, so a crash can only be this paper's."""
+    with _make_executor(1, torch_threads, isolated=True) as solo:
+        future = _submit(solo, pdf_bytes, figure_settings)
+        wait([future])
+    return future
+
+
+def _crashed(future: Future[ParsedDocument | None]) -> bool:
+    return future.done() and isinstance(future.exception(), BrokenProcessPool)
 
 
 def _download_pdf(drive_service: Any, source: PdfSource) -> bytes:
@@ -165,8 +194,10 @@ def _finish_paper(
     """Save a finished parse, or index why the paper can't be parsed; return the outcome."""
     try:
         parsed = future.result()
+    # Only reached for a paper parsed alone: it crashed its own worker (e.g. ran out of memory)
     except BrokenProcessPool:
-        raise
+        logger.error("Parsing %s crashed its worker", source.openalex_id)
+        return _save_skip(output, source, "worker_crashed")
     # Docling and PyMuPDF raise many error types on broken PDFs; one bad paper can't stop the run
     except Exception as error:
         logger.error("Failed to parse %s: %s", source.openalex_id, error)
@@ -184,16 +215,50 @@ def _finish_paper(
         return _save_skip(output, source, "invalid_manifest")
 
 
-def _tally(outcomes: Counter[str], outcome: str, failure_streak: int) -> int:
-    """Count an outcome and return the new failure streak, stopping the run if it's too long."""
-    outcomes[outcome] += 1
-    failure_streak = failure_streak + 1 if outcome == "failed" else 0
-    if failure_streak >= MAX_FAILURE_STREAK:
-        raise RuntimeError(
-            f"{failure_streak} papers failed in a row; check the network and Drive access, "
-            "then rerun to resume"
-        )
-    return failure_streak
+@dataclass
+class _Tally:
+    """Outcome counts of a run, the papers it couldn't parse, and its current failure streak."""
+
+    outcomes: Counter[str]
+    not_parsed: dict[str, str] = field(default_factory=dict)  # paper ID -> why
+    failure_streak: int = 0
+
+    def add(self, paper_id: str, outcome: str, why: str = "") -> None:
+        """Count an outcome, stopping the run if too many papers fail in a row."""
+        self.outcomes[outcome] += 1
+        if outcome != "parsed":
+            self.not_parsed.setdefault(paper_id, why or outcome)
+        self.failure_streak = self.failure_streak + 1 if outcome == "failed" else 0
+        if self.failure_streak >= MAX_FAILURE_STREAK:
+            raise RuntimeError(
+                f"{self.failure_streak} papers failed in a row; check the network and Drive "
+                "access, then rerun to resume"
+            )
+
+
+def _settle(
+    tally: _Tally,
+    future: Future[ParsedDocument | None],
+    output: _OutputFolder,
+    source: PdfSource,
+    pdf_bytes: bytes,
+    revision: str,
+    store_images: bool,
+) -> None:
+    """Save one finished parse and count its outcome."""
+    try:
+        outcome = _finish_paper(future, output, source, pdf_bytes, revision, store_images)
+    # A Drive upload failed; the paper stays unindexed, so the next run retries it
+    except Exception as error:
+        logger.error("Could not save %s: %s", source.openalex_id, error)
+        tally.add(source.openalex_id, "failed", "failed: could not save to Drive")
+        return
+
+    if outcome == "skipped":
+        why = f"skipped: {output.papers[source.openalex_id]['skip_reason']}"
+    else:
+        why = "failed: reparse failed, previous parse kept"
+    tally.add(source.openalex_id, outcome, why)
 
 
 def run_pdf_parsing(
@@ -298,12 +363,13 @@ def run_pdf_parsing(
         pending = pending[:max_papers]
 
     output = _OutputFolder(drive_service, output_folder, settings.index_file_name, papers)
+    threads = settings.torch_threads_per_worker
+    tally = _Tally(outcomes)
     queue = iter(pending)
     in_flight: dict[Future[ParsedDocument | None], tuple[PdfSource, bytes]] = {}
-    failure_streak = 0
-    not_parsed: dict[str, str] = {}  # paper ID -> why, listed at the end of the run
+    pool = _make_executor(workers, threads)
 
-    with _make_executor(workers, settings.torch_threads_per_worker) as pool:
+    try:
         while True:
             # Keep every worker busy plus one PDF waiting, without holding all PDFs in memory
             while len(in_flight) <= workers and (queued := next(queue, None)) is not None:
@@ -312,44 +378,42 @@ def run_pdf_parsing(
                 # Unindexed, so the next run retries it
                 except Exception as error:
                     logger.error("Could not download %s: %s", queued.openalex_id, error)
-                    not_parsed[queued.openalex_id] = "failed: could not download the PDF"
-                    failure_streak = _tally(outcomes, "failed", failure_streak)
+                    tally.add(queued.openalex_id, "failed", "failed: could not download the PDF")
                     continue
-                future = pool.submit(_parse_pdf, pdf_bytes, figure_settings)
-                in_flight[future] = (queued, pdf_bytes)
+                in_flight[_submit(pool, pdf_bytes, figure_settings)] = (queued, pdf_bytes)
 
             if not in_flight:
                 break
 
             done, _ = wait(in_flight, return_when=FIRST_COMPLETED)
-            for future in done:
-                source, pdf_bytes = in_flight.pop(future)
-                try:
-                    outcome = _finish_paper(
-                        future, output, source, pdf_bytes, revision, store_images
-                    )
-                except BrokenProcessPool as error:
-                    raise RuntimeError(
-                        "A parsing worker crashed (often out of memory); "
-                        "rerun with fewer --workers to resume"
-                    ) from error
-                # A Drive upload failed; the paper stays unindexed, so the next run retries it
-                except Exception as error:
-                    logger.error("Could not save %s: %s", source.openalex_id, error)
-                    outcome = "failed"
-                    not_parsed[source.openalex_id] = "failed: could not save to Drive"
-                if outcome == "skipped":
-                    reason = output.papers[source.openalex_id]["skip_reason"]
-                    not_parsed[source.openalex_id] = f"skipped: {reason}"
-                elif outcome == "failed":
-                    not_parsed.setdefault(
-                        source.openalex_id, "failed: reparse failed, previous parse kept"
-                    )
-                failure_streak = _tally(outcomes, outcome, failure_streak)
+            if not any(_crashed(future) for future in done):
+                for future in done:
+                    source, pdf_bytes = in_flight.pop(future)
+                    _settle(tally, future, output, source, pdf_bytes, revision, store_images)
+                continue
 
-    if not_parsed:
-        listing = "\n".join(f"  {paper_id}  {why}" for paper_id, why in sorted(not_parsed.items()))
-        logger.warning("Not parsed in this run (%d):\n%s", len(not_parsed), listing)
+            # A dead worker breaks the whole pool, and every unfinished paper with it. Reparse
+            # those alone so the one that crashes is found and skipped, then start a new pool.
+            wait(in_flight)
+            pool.shutdown(cancel_futures=True)
+            suspects = [(future, *in_flight[future]) for future in in_flight]
+            in_flight.clear()
+            logger.warning(
+                "A parsing worker crashed; reparsing %d papers one at a time", len(suspects)
+            )
+            for future, source, pdf_bytes in suspects:
+                if _crashed(future):
+                    future = _parse_alone(pdf_bytes, figure_settings, threads)
+                _settle(tally, future, output, source, pdf_bytes, revision, store_images)
+            pool = _make_executor(workers, threads)
+    finally:
+        pool.shutdown(cancel_futures=True)
+
+    if tally.not_parsed:
+        listing = "\n".join(
+            f"  {paper_id}  {why}" for paper_id, why in sorted(tally.not_parsed.items())
+        )
+        logger.warning("Not parsed in this run (%d):\n%s", len(tally.not_parsed), listing)
     return outcomes
 
 
