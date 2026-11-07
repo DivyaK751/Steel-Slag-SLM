@@ -10,7 +10,7 @@ import steel_slag_slm.cli as cli
 
 @pytest.mark.parametrize("paper_ids", [None, ["W123", "W456"]])
 def test_parse_pdfs_builds_clients_and_runs_pipeline(monkeypatch, capsys, paper_ids) -> None:
-    parsing_settings = object()
+    parsing_settings = MagicMock(output_folder_name="_parsed_approved")
     figure_settings = object()
     drive_settings = MagicMock(
         folder_id="source-folder",
@@ -49,10 +49,14 @@ def test_parse_pdfs_builds_clients_and_runs_pipeline(monkeypatch, capsys, paper_
         1,
         paper_ids,
     )
-    assert capsys.readouterr().out == "Summary: {'parsed': 2}\n"
+    out = capsys.readouterr().out
+    assert out.startswith("Parsing summary (Drive folder _parsed_approved/)")
+    assert "      2  Parsed in this run" in out
 
     assert calls["pipeline_kwargs"] == {
         "figure_settings": figure_settings,
         "reparse": False,
         "retry_skipped": False,
+        "store_images": True,
+        "workers": 1,
     }

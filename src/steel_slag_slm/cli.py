@@ -58,7 +58,7 @@ from steel_slag_slm.pipelines.extract_figures import collect_pdf_paths, run_figu
 from steel_slag_slm.pipelines.fetch_papers import run_fetch
 from steel_slag_slm.pipelines.fill_abstracts import run_fill_abstracts
 from steel_slag_slm.pipelines.paper_selection import select_papers
-from steel_slag_slm.pipelines.parse_pdfs import run_pdf_parsing
+from steel_slag_slm.pipelines.parse_pdfs import format_parse_summary, run_pdf_parsing
 from steel_slag_slm.pipelines.read_figures import (
     list_paper_dirs,
     run_figure_reading,
@@ -304,9 +304,22 @@ def parse_pdfs() -> None:
         default=None,
         help="parse only these OpenAlex IDs from the source table (default: every paper)",
     )
+    parser.add_argument(
+        "--json-only",
+        action="store_true",
+        help="write only parsed.json; keep figure boxes and captions but upload no PNGs",
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help="papers parsed at once, each in its own process (default: 1)",
+    )
     args = parser.parse_args()
     if args.max_papers is not None and args.max_papers <= 0:
         parser.error("--max-papers must be greater than zero")
+    if args.workers <= 0:
+        parser.error("--workers must be greater than zero")
 
     _setup_logging()
     parsing_settings = load_pdf_parsing_settings()
@@ -337,10 +350,12 @@ def parse_pdfs() -> None:
         figure_settings=load_figure_extraction_settings(),
         reparse=args.reparse,
         retry_skipped=args.retry_skipped,
+        store_images=not args.json_only,
+        workers=args.workers,
     )
-    print("Summary:", dict(outcomes))
+    print(format_parse_summary(outcomes, parsing_settings.output_folder_name))
     if outcomes["failed"]:
-        raise SystemExit(f"{outcomes['failed']} paper(s) failed parsing; see errors above")
+        raise SystemExit(f"{outcomes['failed']} paper(s) failed; rerun the same command to retry")
 
 
 def export_parsed() -> None:

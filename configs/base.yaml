@@ -287,9 +287,11 @@ data_extraction:
   bigquery_usd_per_tib: 6.25
 
 pdf_parsing:
-  source_table: capstone-project-511200.steel_slag.screening_evaluation
+  source_table: capstone-project-511200.steel_slag.papers
+  relevant_labels: ["Yes"]  # papers the relevance screening approved
   output_folder_name: _parsed
   index_file_name: index.json
+  torch_threads_per_worker: 2  # used with --workers above 1; 2 was fastest on an M4 Pro
 
 # Defaults shared by every Gemini agent; an agent's own section can override any of them
 llm:

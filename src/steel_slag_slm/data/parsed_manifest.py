@@ -54,7 +54,8 @@ class FigureReference(BaseModel):
     figure_id: str
     file_name: str
     relative_path: str
-    file_id: Annotated[str, Field(min_length=1)]
+    # None when the run kept JSON only; the PNG can be re-rendered from placements and render_dpi
+    file_id: Annotated[str, Field(min_length=1)] | None
     sha256: Digest
     width: PositiveInt
     height: PositiveInt

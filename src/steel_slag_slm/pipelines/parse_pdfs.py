@@ -5,11 +5,22 @@ import logging
 import re
 from collections import Counter
 from collections.abc import Sequence
+from concurrent.futures import (
+    FIRST_COMPLETED,
+    Executor,
+    Future,
+    ProcessPoolExecutor,
+    ThreadPoolExecutor,
+    wait,
+)
+from concurrent.futures.process import BrokenProcessPool
+from dataclasses import dataclass, field
 from typing import Any
 
-import pymupdf
-from docling.exceptions import ConversionError
+import torch
+from docling.document_converter import DocumentConverter
 from google.cloud import bigquery
+from pydantic import ValidationError
 
 from steel_slag_slm.config import FigureExtractionSettings, PdfParsingSettings
 from steel_slag_slm.data import drive_storage, parsed_index, pdf_parsing, pdf_parsing_source
@@ -19,9 +30,25 @@ from steel_slag_slm.data.parsed_manifest import (
     parser_revision,
 )
 from steel_slag_slm.data.parsed_publication import publish_parse
+from steel_slag_slm.data.pdf_parsing_source import PdfSource
+from steel_slag_slm.schemas import ParsedDocument
 
 logger = logging.getLogger(__name__)
 _PAPER_ID_PATTERN = re.compile(r"^W\d+$")
+# This many failures in a row means something shared is broken (network, Drive login)
+MAX_FAILURE_STREAK = 10
+# Each worker loads Docling's models once, in _start_worker, and reuses them for every paper
+_worker_converter: DocumentConverter | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _OutputFolder:
+    """The Drive folder a run publishes to, and the index it rewrites after every paper."""
+
+    service: Any
+    folder_id: str
+    index_file_name: str
+    papers: dict[str, Any]
 
 
 def _write_index(
@@ -38,6 +65,202 @@ def _write_index(
     drive_storage.write_file(service, folder_id, filename, content, "application/json")
 
 
+def _start_worker(torch_threads: int | None) -> None:
+    """Load Docling once per worker; cap torch threads so parallel workers share the cores."""
+    global _worker_converter
+    if torch_threads is not None:
+        torch.set_num_threads(torch_threads)
+    _worker_converter = pdf_parsing.build_docling_converter(include_figures=True)
+
+
+def _parse_pdf(
+    pdf_bytes: bytes, figure_settings: FigureExtractionSettings
+) -> ParsedDocument | None:
+    """Parse one PDF inside a worker; None means the downloaded file was empty."""
+    if not pdf_bytes:
+        return None
+    if _worker_converter is None:
+        raise RuntimeError("Parsing worker was started without a Docling converter")
+    return pdf_parsing.parse_pdf_with_figures(pdf_bytes, _worker_converter, figure_settings)
+
+
+def _make_executor(workers: int, torch_threads: int, *, isolated: bool = False) -> Executor:
+    """One worker parses in this process; more run as separate processes, each with its models.
+
+    isolated forces separate processes even for one worker, so a crash can't take this one down.
+    """
+    if workers == 1 and not isolated:
+        return ThreadPoolExecutor(1, initializer=_start_worker, initargs=(None,))
+    return ProcessPoolExecutor(workers, initializer=_start_worker, initargs=(torch_threads,))
+
+
+def _submit(
+    pool: Executor, pdf_bytes: bytes, figure_settings: FigureExtractionSettings
+) -> Future[ParsedDocument | None]:
+    """Queue one PDF; if the pool already broke, return a future holding that error instead."""
+    try:
+        return pool.submit(_parse_pdf, pdf_bytes, figure_settings)
+    except BrokenProcessPool as error:
+        future: Future[ParsedDocument | None] = Future()
+        future.set_exception(error)
+        return future
+
+
+def _parse_alone(
+    pdf_bytes: bytes, figure_settings: FigureExtractionSettings, torch_threads: int
+) -> Future[ParsedDocument | None]:
+    """Parse one PDF in a fresh single-worker process, so a crash can only be this paper's."""
+    with _make_executor(1, torch_threads, isolated=True) as solo:
+        future = _submit(solo, pdf_bytes, figure_settings)
+        wait([future])
+    return future
+
+
+def _crashed(future: Future[ParsedDocument | None]) -> bool:
+    return future.done() and isinstance(future.exception(), BrokenProcessPool)
+
+
+def _download_pdf(drive_service: Any, source: PdfSource) -> bytes:
+    if not _PAPER_ID_PATTERN.fullmatch(source.openalex_id):
+        raise ValueError(f"Invalid OpenAlex paper ID: {source.openalex_id!r}")
+    source_id = drive_storage.drive_file_id_from_link(source.drive_link)
+    return drive_storage.download_pdf(drive_service, source_id)
+
+
+def _save_skip(output: _OutputFolder, source: PdfSource, reason: str) -> str:
+    """Index a paper that can't be parsed so later runs skip it, unless it has a previous parse."""
+    if output.papers.get(source.openalex_id, {}).get("json_file_id"):
+        logger.error(
+            "Reparse of %s failed (%s); preserving previous parse", source.openalex_id, reason
+        )
+        return "failed"
+
+    output.papers[source.openalex_id] = {
+        "status": "skipped",
+        "skip_reason": reason,
+        "source_drive_link": source.drive_link,
+        "json_file_id": "",
+        "image_file_ids": [],
+    }
+    _write_index(output.service, output.folder_id, output.index_file_name, output.papers)
+    logger.warning("Skipped %s: %s", source.openalex_id, reason)
+    return "skipped"
+
+
+def _save_parse(
+    output: _OutputFolder,
+    source: PdfSource,
+    pdf_bytes: bytes,
+    parsed: ParsedDocument,
+    revision: str,
+    store_images: bool,
+) -> str:
+    """Publish one paper's manifest (and images if stored), then record it in the index."""
+    paper_folder = drive_storage.ensure_subfolder(
+        output.service, output.folder_id, source.openalex_id
+    )
+    image_folder = (
+        drive_storage.ensure_subfolder(output.service, paper_folder, "images")
+        if store_images
+        else None
+    )
+    published = publish_parse(
+        output.service, paper_folder, image_folder, source, pdf_bytes, parsed, revision
+    )
+    output.papers[source.openalex_id] = {
+        "status": "parsed",
+        "source_drive_link": source.drive_link,
+        "paper_folder_id": paper_folder,
+        "image_folder_id": image_folder or "",
+        "json_file_id": published.json_file_id,
+        "image_file_ids": published.image_file_ids,
+        "content_schema_version": CONTENT_SCHEMA_VERSION,
+        "parser_revision": revision,
+        "parse_generation": published.manifest.parse_generation,
+    }
+    _write_index(output.service, output.folder_id, output.index_file_name, output.papers)
+    logger.info("Published %s with %d figures", source.openalex_id, len(parsed.figures))
+    return "parsed"
+
+
+def _finish_paper(
+    future: Future[ParsedDocument | None],
+    output: _OutputFolder,
+    source: PdfSource,
+    pdf_bytes: bytes,
+    revision: str,
+    store_images: bool,
+) -> str:
+    """Save a finished parse, or index why the paper can't be parsed; return the outcome."""
+    try:
+        parsed = future.result()
+    # Only reached for a paper parsed alone: it crashed its own worker (e.g. ran out of memory)
+    except BrokenProcessPool:
+        logger.error("Parsing %s crashed its worker", source.openalex_id)
+        return _save_skip(output, source, "worker_crashed")
+    # Docling and PyMuPDF raise many error types on broken PDFs; one bad paper can't stop the run
+    except Exception as error:
+        logger.error("Failed to parse %s: %s", source.openalex_id, error)
+        return _save_skip(output, source, "parse_failed")
+
+    if parsed is None:
+        return _save_skip(output, source, "empty_pdf_file")
+    if not (parsed.markdown.strip() or parsed.tables or parsed.content_blocks or parsed.figures):
+        return _save_skip(output, source, "no_extracted_content")
+    try:
+        return _save_parse(output, source, pdf_bytes, parsed, revision, store_images)
+    # The parse breaks a manifest rule; parsing again would give the same result
+    except ValidationError as error:
+        logger.error("Parse of %s is not a valid manifest: %s", source.openalex_id, error)
+        return _save_skip(output, source, "invalid_manifest")
+
+
+@dataclass
+class _Tally:
+    """Outcome counts of a run, the papers it couldn't parse, and its current failure streak."""
+
+    outcomes: Counter[str]
+    not_parsed: dict[str, str] = field(default_factory=dict)  # paper ID -> why
+    failure_streak: int = 0
+
+    def add(self, paper_id: str, outcome: str, why: str = "") -> None:
+        """Count an outcome, stopping the run if too many papers fail in a row."""
+        self.outcomes[outcome] += 1
+        if outcome != "parsed":
+            self.not_parsed.setdefault(paper_id, why or outcome)
+        self.failure_streak = self.failure_streak + 1 if outcome == "failed" else 0
+        if self.failure_streak >= MAX_FAILURE_STREAK:
+            raise RuntimeError(
+                f"{self.failure_streak} papers failed in a row; check the network and Drive "
+                "access, then rerun to resume"
+            )
+
+
+def _settle(
+    tally: _Tally,
+    future: Future[ParsedDocument | None],
+    output: _OutputFolder,
+    source: PdfSource,
+    pdf_bytes: bytes,
+    revision: str,
+    store_images: bool,
+) -> None:
+    """Save one finished parse and count its outcome."""
+    try:
+        outcome = _finish_paper(future, output, source, pdf_bytes, revision, store_images)
+    # A Drive upload failed; the paper stays unindexed, so the next run retries it
+    except Exception as error:
+        logger.error("Could not save %s: %s", source.openalex_id, error)
+        tally.add(source.openalex_id, "failed", "failed: could not save to Drive")
+        return
+
+    if outcome == "skipped":
+        why = f"skipped: {output.papers[source.openalex_id]['skip_reason']}"
+    else:
+        why = "failed: reparse failed, previous parse kept"
+    tally.add(source.openalex_id, outcome, why)
+
+
 def run_pdf_parsing(
     settings: PdfParsingSettings,
     bigquery_client: bigquery.Client,
@@ -49,17 +272,27 @@ def run_pdf_parsing(
     figure_settings: FigureExtractionSettings,
     reparse: bool = False,
     retry_skipped: bool = False,
+    store_images: bool = True,
+    workers: int = 1,
 ) -> Counter[str]:
-    """Publish pending papers, recording parse failures while letting storage errors abort.
+    """Publish pending papers, parsing up to `workers` at once and continuing past failures.
 
     Each paper has one mutable parsed.json. Upload images before replacing the manifest,
-    then update the root index. Run only one publisher against an output folder.
-    paper_ids limits the run to selected papers in the source table.
+    then update the root index after every paper, so a rerun resumes where this one stopped.
+    Papers whose PDF can't be parsed are indexed as skipped (retry with retry_skipped);
+    Drive errors leave the paper unindexed, so the next run tries it again. Only this
+    process talks to Drive. Run only one publisher against an output folder.
+    paper_ids limits the run to selected papers in the source table. With store_images
+    False only parsed.json is written; figures keep their page, box and caption but no PNG.
     """
     if max_papers is not None and max_papers <= 0:
         raise ValueError("max_papers must be greater than zero")
+    if workers <= 0:
+        raise ValueError("workers must be greater than zero")
 
-    sources = pdf_parsing_source.list_pdf_sources(bigquery_client, settings.source_table)
+    sources = pdf_parsing_source.list_pdf_sources(
+        bigquery_client, settings.source_table, settings.relevant_labels
+    )
     outcomes: Counter[str] = Counter()
     if paper_ids:
         requested = set(paper_ids)
@@ -89,9 +322,11 @@ def run_pdf_parsing(
             outcomes["skipped"] += 1
             continue
 
-        complete = all(
-            entry.get(key) for key in ("paper_folder_id", "image_folder_id", "json_file_id")
-        )
+        required: tuple[str, ...] = ("paper_folder_id", "json_file_id")
+        # A JSON-only parse is incomplete for a run that stores images
+        if store_images:
+            required += ("image_folder_id",)
+        complete = all(entry.get(key) for key in required)
         current = (
             entry.get("content_schema_version") == CONTENT_SCHEMA_VERSION
             and entry.get("parser_revision") == revision
@@ -127,107 +362,77 @@ def run_pdf_parsing(
         outcomes["deferred"] = max(0, len(pending) - max_papers)
         pending = pending[:max_papers]
 
-    converter = None
+    output = _OutputFolder(drive_service, output_folder, settings.index_file_name, papers)
+    threads = settings.torch_threads_per_worker
+    tally = _Tally(outcomes)
+    queue = iter(pending)
+    in_flight: dict[Future[ParsedDocument | None], tuple[PdfSource, bytes]] = {}
+    pool = _make_executor(workers, threads)
 
-    for source in pending:
-        if not _PAPER_ID_PATTERN.fullmatch(source.openalex_id):
-            raise ValueError(f"Invalid OpenAlex paper ID: {source.openalex_id!r}")
+    try:
+        while True:
+            # Keep every worker busy plus one PDF waiting, without holding all PDFs in memory
+            while len(in_flight) <= workers and (queued := next(queue, None)) is not None:
+                try:
+                    pdf_bytes = _download_pdf(drive_service, queued)
+                # Unindexed, so the next run retries it
+                except Exception as error:
+                    logger.error("Could not download %s: %s", queued.openalex_id, error)
+                    tally.add(queued.openalex_id, "failed", "failed: could not download the PDF")
+                    continue
+                in_flight[_submit(pool, pdf_bytes, figure_settings)] = (queued, pdf_bytes)
 
-        source_id = drive_storage.drive_file_id_from_link(source.drive_link)
-        pdf_bytes = drive_storage.download_pdf(drive_service, source_id)
+            if not in_flight:
+                break
 
-        if not pdf_bytes:
-            reason = "empty_pdf_file"
-        else:
-            if converter is None:
-                converter = pdf_parsing.build_docling_converter(include_figures=True)
-
-            try:
-                parsed = pdf_parsing.parse_pdf_with_figures(
-                    pdf_bytes,
-                    converter,
-                    figure_settings,
-                )
-            except (ConversionError, pymupdf.FileDataError, ValueError) as error:
-                logger.error("Failed to parse %s: %s", source.openalex_id, error)
-                outcomes["failed"] += 1
+            done, _ = wait(in_flight, return_when=FIRST_COMPLETED)
+            if not any(_crashed(future) for future in done):
+                for future in done:
+                    source, pdf_bytes = in_flight.pop(future)
+                    _settle(tally, future, output, source, pdf_bytes, revision, store_images)
                 continue
 
-            if parsed.markdown.strip() or parsed.tables or parsed.content_blocks or parsed.figures:
-                reason = ""
-            else:
-                reason = "no_extracted_content"
-
-        if reason:
-            if papers.get(source.openalex_id, {}).get("json_file_id"):
-                logger.error(
-                    "Reparse of %s has no content; preserving previous parse",
-                    source.openalex_id,
-                )
-                outcomes["failed"] += 1
-                continue
-
-            papers[source.openalex_id] = {
-                "status": "skipped",
-                "skip_reason": reason,
-                "source_drive_link": source.drive_link,
-                "json_file_id": "",
-                "image_file_ids": [],
-            }
-            _write_index(
-                drive_service,
-                output_folder,
-                settings.index_file_name,
-                papers,
+            # A dead worker breaks the whole pool, and every unfinished paper with it. Reparse
+            # those alone so the one that crashes is found and skipped, then start a new pool.
+            wait(in_flight)
+            pool.shutdown(cancel_futures=True)
+            suspects = [(future, *in_flight[future]) for future in in_flight]
+            in_flight.clear()
+            logger.warning(
+                "A parsing worker crashed; reparsing %d papers one at a time", len(suspects)
             )
-            logger.warning("Skipped %s: %s", source.openalex_id, reason)
-            outcomes["skipped"] += 1
-            continue
+            for future, source, pdf_bytes in suspects:
+                if _crashed(future):
+                    future = _parse_alone(pdf_bytes, figure_settings, threads)
+                _settle(tally, future, output, source, pdf_bytes, revision, store_images)
+            pool = _make_executor(workers, threads)
+    finally:
+        pool.shutdown(cancel_futures=True)
 
-        paper_folder = drive_storage.ensure_subfolder(
-            drive_service,
-            output_folder,
-            source.openalex_id,
+    if tally.not_parsed:
+        listing = "\n".join(
+            f"  {paper_id}  {why}" for paper_id, why in sorted(tally.not_parsed.items())
         )
-        image_folder = drive_storage.ensure_subfolder(
-            drive_service,
-            paper_folder,
-            "images",
-        )
-
-        published = publish_parse(
-            drive_service,
-            paper_folder,
-            image_folder,
-            source,
-            pdf_bytes,
-            parsed,
-            revision,
-        )
-        papers[source.openalex_id] = {
-            "status": "parsed",
-            "source_drive_link": source.drive_link,
-            "paper_folder_id": paper_folder,
-            "image_folder_id": image_folder,
-            "json_file_id": published.json_file_id,
-            "image_file_ids": published.image_file_ids,
-            "content_schema_version": CONTENT_SCHEMA_VERSION,
-            "parser_revision": revision,
-            "parse_generation": published.manifest.parse_generation,
-        }
-
-        _write_index(
-            drive_service,
-            output_folder,
-            settings.index_file_name,
-            papers,
-        )
-        outcomes["parsed"] += 1
-        logger.info(
-            "Published %s with %d figures",
-            source.openalex_id,
-            len(parsed.figures),
-        )
-
-    logger.info("PDF parsing complete: %s", dict(outcomes))
+        logger.warning("Not parsed in this run (%d):\n%s", len(tally.not_parsed), listing)
     return outcomes
+
+
+# Each outcome's line in the end-of-run summary, in display order; zero counts are hidden
+# except for the first three
+_SUMMARY_LINES = {
+    "parsed": "Parsed in this run",
+    "skipped": "Skipped, PDF unusable (rerun with --retry-skipped to try again)",
+    "failed": "Failed, retried automatically on the next run",
+    "already_parsed": "Already parsed by an earlier run",
+    "deferred": "Not started yet (beyond --max-papers)",
+    "not_in_source_table": "Requested IDs not in the approved list",
+}
+
+
+def format_parse_summary(outcomes: Counter[str], output_folder_name: str) -> str:
+    """Describe a parsing run's counts and where its output went, for the terminal."""
+    lines = [f"Parsing summary (Drive folder {output_folder_name}/)"]
+    for position, (key, label) in enumerate(_SUMMARY_LINES.items()):
+        if position < 3 or outcomes[key]:
+            lines.append(f"  {outcomes[key]:>5}  {label}")
+    return "\n".join(lines)
