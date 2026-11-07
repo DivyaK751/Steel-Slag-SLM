@@ -88,6 +88,9 @@ def _extract_content_blocks(document: DoclingDocument) -> tuple[ParsedContentBlo
                 coordinate_origin=provenance.bbox.coord_origin.value,
             )
             for provenance in item.prov
+            # Docling sometimes gives empty or OCR-only lines a zero-width or zero-height box,
+            # which can't locate anything; the block's text is kept either way
+            if provenance.bbox.width > 0 and provenance.bbox.height > 0
         )
         content_blocks.append(
             ParsedContentBlock(

@@ -507,3 +507,16 @@ def test_parse_summary_always_shows_parsed_skipped_failed_and_hides_other_zeros(
         "      2  Failed, retried automatically on the next run",
         "    954  Not started yet (beyond --max-papers)",
     ]
+
+
+def test_parse_that_breaks_manifest_rules_is_skipped_not_retried(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_drive: Any,
+) -> None:
+    folder = _prepare(monkeypatch, fake_drive)
+    broken = replace(_parsed(), page_count=0)  # page_count must be positive
+    monkeypatch.setattr(pdf_parsing, "parse_pdf_with_figures", lambda *_: broken)
+
+    assert _run()["skipped"] == 1
+    assert _entry(fake_drive, folder)["skip_reason"] == "invalid_manifest"
+    assert _run()["skipped"] == 1

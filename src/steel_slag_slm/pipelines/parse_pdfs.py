@@ -20,6 +20,7 @@ from typing import Any
 import torch
 from docling.document_converter import DocumentConverter
 from google.cloud import bigquery
+from pydantic import ValidationError
 
 from steel_slag_slm.config import FigureExtractionSettings, PdfParsingSettings
 from steel_slag_slm.data import drive_storage, parsed_index, pdf_parsing, pdf_parsing_source
@@ -175,7 +176,12 @@ def _finish_paper(
         return _save_skip(output, source, "empty_pdf_file")
     if not (parsed.markdown.strip() or parsed.tables or parsed.content_blocks or parsed.figures):
         return _save_skip(output, source, "no_extracted_content")
-    return _save_parse(output, source, pdf_bytes, parsed, revision, store_images)
+    try:
+        return _save_parse(output, source, pdf_bytes, parsed, revision, store_images)
+    # The parse breaks a manifest rule; parsing again would give the same result
+    except ValidationError as error:
+        logger.error("Parse of %s is not a valid manifest: %s", source.openalex_id, error)
+        return _save_skip(output, source, "invalid_manifest")
 
 
 def _tally(outcomes: Counter[str], outcome: str, failure_streak: int) -> int:

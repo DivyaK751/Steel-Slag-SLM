@@ -94,3 +94,26 @@ def test_parse_pdf_preserves_text_item_page_and_bbox() -> None:
 def test_parse_pdf_rejects_empty_bytes() -> None:
     with pytest.raises(ValueError, match="PDF bytes must not be empty"):
         parse_pdf(b"", MagicMock())
+
+
+def test_parse_pdf_drops_zero_size_boxes_but_keeps_their_text() -> None:
+    flat_line = ProvenanceItem(
+        page_no=1, bbox=BoundingBox(l=10, t=40, r=100, b=40), charspan=(0, 4)
+    )
+    text_item = TextItem(
+        self_ref="#/texts/0",
+        label=DocItemLabel.TEXT,
+        orig="Line",
+        text="Line",
+        prov=[flat_line],
+    )
+    document = MagicMock()
+    document.export_to_markdown.return_value = "Line"
+    document.iterate_items.return_value = iter([(text_item, 0)])
+    converter = MagicMock()
+    converter.convert.return_value.document = document
+
+    block = parse_pdf(_make_pdf_with_image(), converter).content_blocks[0]
+
+    assert block.text == "Line"
+    assert block.placements == ()
