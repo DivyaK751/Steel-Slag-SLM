@@ -8,6 +8,49 @@ import pytest
 import steel_slag_slm.cli as cli
 
 
+@pytest.mark.parametrize(("flag", "budget"), [([], 60.0), (["--max-gemini-usd", "5"], 5.0)])
+def test_parse_pdfs_reads_figures_with_gemini_by_default(monkeypatch, capsys, flag, budget) -> None:
+    built: dict[str, object] = {}
+
+    class FakeReader:
+        spent_usd = 1.234
+        stop_reason = None
+
+        def __init__(self, _runner, _prompt, _settings, max_run_usd) -> None:
+            built["budget"] = max_run_usd
+
+        def close(self) -> None:
+            built["closed"] = True
+
+    reading_settings = MagicMock(prompt_name="read_figure", max_run_usd=60.0)
+    monkeypatch.setattr(sys, "argv", ["parse-pdfs", *flag])
+    monkeypatch.setattr(
+        cli, "load_pdf_parsing_settings", lambda: MagicMock(output_folder_name="_p")
+    )
+    monkeypatch.setattr(cli, "load_figure_extraction_settings", MagicMock)
+    monkeypatch.setattr(cli, "load_drive_connection_settings", MagicMock)
+    monkeypatch.setattr(cli, "load_gcp_settings", MagicMock)
+    monkeypatch.setattr(cli, "build_drive_service", lambda *args: "drive-client")
+    monkeypatch.setattr(cli, "build_bigquery_client", lambda *args: "bigquery-client")
+    monkeypatch.setattr(cli, "load_figure_reading_settings", lambda: reading_settings)
+    monkeypatch.setattr(cli, "load_prompt", lambda _name: "prompt")
+    monkeypatch.setattr(cli, "build_figure_reader_agent", lambda *_: "agent")
+    monkeypatch.setattr(cli, "build_runner", lambda _agent: "runner")
+    monkeypatch.setattr(cli, "BackgroundFigureReader", FakeReader)
+
+    def fake_run(*_args, **kwargs):
+        built["reader"] = kwargs["figure_reader"]
+        return Counter(parsed=1)
+
+    monkeypatch.setattr(cli, "run_pdf_parsing", fake_run)
+
+    cli.parse_pdfs()
+
+    assert isinstance(built["reader"], FakeReader)
+    assert built["budget"] == budget and built["closed"] is True
+    assert "Gemini cost of figure reading in this run: about $1.23" in capsys.readouterr().out
+
+
 @pytest.mark.parametrize("paper_ids", [None, ["W123", "W456"]])
 def test_parse_pdfs_builds_clients_and_runs_pipeline(monkeypatch, capsys, paper_ids) -> None:
     parsing_settings = MagicMock(output_folder_name="_parsed_approved")
@@ -21,7 +64,7 @@ def test_parse_pdfs_builds_clients_and_runs_pipeline(monkeypatch, capsys, paper_
     gcp_settings = MagicMock(project="billing-project", credentials_file=None)
     calls: dict[str, object] = {}
 
-    argv = ["parse-pdfs", "--max-papers", "1"]
+    argv = ["parse-pdfs", "--max-papers", "1", "--no-figure-reading"]
     if paper_ids is not None:
         argv += ["--paper-ids", *paper_ids]
     monkeypatch.setattr(sys, "argv", argv)
@@ -59,4 +102,5 @@ def test_parse_pdfs_builds_clients_and_runs_pipeline(monkeypatch, capsys, paper_
         "retry_skipped": False,
         "store_images": True,
         "workers": 1,
+        "figure_reader": None,
     }
