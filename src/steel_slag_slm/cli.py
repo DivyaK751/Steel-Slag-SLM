@@ -49,6 +49,7 @@ from steel_slag_slm.evaluation.figure_checks import total_checks
 from steel_slag_slm.evaluation.retrieval_metrics import mean_scores
 from steel_slag_slm.exceptions import PapersNotFoundError
 from steel_slag_slm.llm.prompts import PromptTemplate, load_prompt
+from steel_slag_slm.pipelines.background_figure_reader import BackgroundFigureReader
 from steel_slag_slm.pipelines.build_index import run_build_index
 from steel_slag_slm.pipelines.evaluate_retrieval import run_retrieval_eval
 from steel_slag_slm.pipelines.evaluate_screening import run_evaluation
@@ -274,6 +275,16 @@ def evaluate_screening() -> None:
         print(f"Updated {updated} rows in {evaluation.labels_table}")
 
 
+def _build_background_reader(max_gemini_usd: float | None) -> BackgroundFigureReader:
+    """Set up Gemini figure reading for parse-pdfs, capped at the given or configured budget."""
+    _quiet_gemini_logs()
+    settings = load_figure_reading_settings()
+    prompt = load_prompt(settings.prompt_name)
+    runner = build_runner(build_figure_reader_agent(settings, prompt))
+    budget = max_gemini_usd if max_gemini_usd is not None else settings.max_run_usd
+    return BackgroundFigureReader(runner, prompt, settings, budget)
+
+
 def parse_pdfs() -> None:
     """Parse unprocessed screened-paper PDFs and save results to Drive."""
     parser = argparse.ArgumentParser(description=parse_pdfs.__doc__)
@@ -315,11 +326,27 @@ def parse_pdfs() -> None:
         default=1,
         help="papers parsed at once, each in its own process (default: 1)",
     )
+    parser.add_argument(
+        "--no-figure-reading",
+        action="store_true",
+        help="parse only; don't send figures to Gemini",
+    )
+    parser.add_argument(
+        "--max-gemini-usd",
+        type=float,
+        default=None,
+        help=(
+            "stop calling Gemini once this run's estimated cost reaches this "
+            "(default: figure_reading.max_run_usd in configs/base.yaml)"
+        ),
+    )
     args = parser.parse_args()
     if args.max_papers is not None and args.max_papers <= 0:
         parser.error("--max-papers must be greater than zero")
     if args.workers <= 0:
         parser.error("--workers must be greater than zero")
+    if args.max_gemini_usd is not None and args.max_gemini_usd <= 0:
+        parser.error("--max-gemini-usd must be greater than zero")
 
     _setup_logging()
     parsing_settings = load_pdf_parsing_settings()
@@ -340,20 +367,30 @@ def parse_pdfs() -> None:
         gcp_settings.project,
         gcp_settings.credentials_file,
     )
-    outcomes = run_pdf_parsing(
-        parsing_settings,
-        bigquery_client,
-        drive_service,
-        drive_settings.folder_id,
-        args.max_papers,
-        args.paper_ids,
-        figure_settings=load_figure_extraction_settings(),
-        reparse=args.reparse,
-        retry_skipped=args.retry_skipped,
-        store_images=not args.json_only,
-        workers=args.workers,
-    )
+    reader = None if args.no_figure_reading else _build_background_reader(args.max_gemini_usd)
+    try:
+        outcomes = run_pdf_parsing(
+            parsing_settings,
+            bigquery_client,
+            drive_service,
+            drive_settings.folder_id,
+            args.max_papers,
+            args.paper_ids,
+            figure_settings=load_figure_extraction_settings(),
+            reparse=args.reparse,
+            retry_skipped=args.retry_skipped,
+            store_images=not args.json_only,
+            workers=args.workers,
+            figure_reader=reader,
+        )
+    finally:
+        if reader is not None:
+            reader.close()
     print(format_parse_summary(outcomes, parsing_settings.output_folder_name))
+    if reader is not None:
+        print(f"Gemini cost of figure reading in this run: about ${reader.spent_usd:.2f}")
+        if reader.stop_reason is not None:
+            print(f"Figure reading stopped early: {reader.stop_reason}; rerun to continue")
     if outcomes["failed"]:
         raise SystemExit(f"{outcomes['failed']} paper(s) failed; rerun the same command to retry")
 
