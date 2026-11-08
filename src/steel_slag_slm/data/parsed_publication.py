@@ -1,5 +1,6 @@
 """Publish figure assets and a single current paper manifest to Drive."""
 
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from hashlib import sha256
 from typing import Any
@@ -8,7 +9,7 @@ from uuid import uuid4
 from steel_slag_slm.data import drive_storage
 from steel_slag_slm.data.parsed_manifest import CONTENT_SCHEMA_VERSION, ParsedManifest
 from steel_slag_slm.data.pdf_parsing_source import PdfSource
-from steel_slag_slm.schemas import ParsedDocument
+from steel_slag_slm.schemas import FigureReading, ParsedDocument
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,9 +30,11 @@ def publish_parse(
     pdf_bytes: bytes,
     parsed: ParsedDocument,
     revision: str,
+    readings: Sequence[FigureReading | None] | None = None,
 ) -> PublishedParse:
     """Upload generation-specific images, then replace the paper's parsed.json.
 
+    readings, one per figure in parsed.figures, are stored with each figure (None = unread).
     With no image_folder_id, no PNG is uploaded and every figure keeps only its metadata
     (file_id None). Leave the root index update to the caller. Failed image uploads leave
     the previous manifest intact. An index failure after manifest replacement can leave
@@ -39,6 +42,8 @@ def publish_parse(
     """
     if parsed.images:
         raise ValueError("Unified publication must not receive legacy embedded images")
+    if readings is not None and len(readings) != len(parsed.figures):
+        raise ValueError("Give one reading per figure")
 
     generation = uuid4().hex
     references = []
@@ -80,6 +85,7 @@ def publish_parse(
                 ]
                 if figure.caption_block is not None
                 else [],
+                "reading": readings[position - 1] if readings is not None else None,
             }
         )
 
@@ -127,3 +133,30 @@ def publish_parse(
     )
 
     return PublishedParse(manifest, json_file_id, ids, content)
+
+
+def publish_readings(
+    service: Any,
+    paper_folder_id: str,
+    manifest: ParsedManifest,
+    readings: dict[int, FigureReading],
+) -> ParsedManifest:
+    """Store new figure readings, keyed by position in manifest.images, in the paper's parsed.json.
+
+    The file is replaced in place, so its Drive ID and the index entry stay the same.
+    """
+    images = [
+        image.model_copy(update={"reading": readings[position]}) if position in readings else image
+        for position, image in enumerate(manifest.images)
+    ]
+    updated = ParsedManifest.model_validate(
+        manifest.model_copy(update={"images": images}).model_dump()
+    )
+    drive_storage.write_file(
+        service,
+        paper_folder_id,
+        "parsed.json",
+        updated.model_dump_json(indent=2).encode("utf-8"),
+        "application/json",
+    )
+    return updated

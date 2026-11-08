@@ -184,6 +184,8 @@ class FigureReadingSettings(AgentSettings):
     max_concurrency: int
     call_timeout_s: float
     prices: ModelPrices
+    # parse-pdfs stops calling Gemini once a run's estimated cost reaches this; None = no cap
+    max_run_usd: float | None = None
 
 
 class TokenPrices(BaseModel):

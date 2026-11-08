@@ -17,7 +17,7 @@ from pydantic import ValidationError
 from steel_slag_slm.config import FigureExtractionSettings, PdfParsingSettings
 from steel_slag_slm.data import drive_storage, pdf_parsing, pdf_parsing_source
 from steel_slag_slm.data.parsed_manifest import ParsedManifest, parser_revision
-from steel_slag_slm.data.parsed_publication import publish_parse
+from steel_slag_slm.data.parsed_publication import publish_parse, publish_readings
 from steel_slag_slm.data.pdf_parsing_source import PdfSource
 from steel_slag_slm.pipelines import parse_pdfs
 from steel_slag_slm.pipelines.export_parsed import run_export_parsed
@@ -27,7 +27,14 @@ from steel_slag_slm.pipelines.parse_pdfs import (
     run_pdf_parsing,
 )
 from steel_slag_slm.pipelines.read_figures import list_paper_dirs, load_figures_to_read
-from steel_slag_slm.schemas import CaptionBlock, Figure, ParsedDocument, RenderedFigure
+from steel_slag_slm.schemas import (
+    CaptionBlock,
+    Figure,
+    FigureReading,
+    ParsedDocument,
+    RenderedFigure,
+    TableColumn,
+)
 
 SOURCE = PdfSource("W123", "https://drive.google.com/file/d/SOURCE123/view")
 PARSING = PdfParsingSettings(
@@ -560,3 +567,32 @@ def test_worker_crash_skips_only_the_paper_that_crashes_alone_and_keeps_going(
     # The first pool, a solo pool for the crashing paper, then a fresh pool for the rest
     assert pools[:3] == [2, 1, 2]
     assert _run(workers=2)["skipped"] == 1
+
+
+READING = FigureReading(
+    figure_type="data_plot",
+    summary="Strength rises with slag content",
+    columns=[TableColumn(label="Slag (%)", source="x_axis")],
+    rows=[["10"], ["20"]],
+)
+
+
+def test_publish_parse_stores_each_figure_reading(fake_drive: Any) -> None:
+    published = publish_parse(
+        None, "paper", None, SOURCE, b"%PDF", _parsed(), "a" * 64, readings=[READING]
+    )
+
+    stored = ParsedManifest.model_validate_json(fake_drive.contents[published.json_file_id])
+    assert stored.images[0].reading == READING
+
+
+def test_publish_readings_fills_unread_figures_in_the_same_file(fake_drive: Any) -> None:
+    published = publish_parse(None, "paper", None, SOURCE, b"%PDF", _parsed(), "a" * 64)
+    assert published.manifest.images[0].reading is None
+
+    publish_readings(None, "paper", published.manifest, {0: READING})
+
+    assert fake_drive.list_file_names(None, "paper") == {"parsed.json": published.json_file_id}
+    stored = ParsedManifest.model_validate_json(fake_drive.contents[published.json_file_id])
+    assert stored.images[0].reading == READING
+    assert stored.parse_generation == published.manifest.parse_generation

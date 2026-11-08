@@ -9,6 +9,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from steel_slag_slm.config import FigureExtractionSettings
+from steel_slag_slm.schemas import FigureReading
 
 CONTENT_SCHEMA_VERSION = 4
 PIPELINE_REVISION = "unified_pdf_v1"
@@ -69,6 +70,8 @@ class FigureReference(BaseModel):
     renderer: Literal["PyMuPDF"]
     placements: Annotated[list[Placement], Field(min_length=1, max_length=1)]
     caption_placements: Annotated[list[Placement], Field(max_length=1)]
+    # What Gemini read off the figure (e.g. a plot's values as a table); None until it is read
+    reading: FigureReading | None = None
 
     @model_validator(mode="after")
     def validate_reference(self) -> "FigureReference":
