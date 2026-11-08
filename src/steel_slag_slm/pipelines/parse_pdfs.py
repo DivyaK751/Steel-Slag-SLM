@@ -1,4 +1,4 @@
-"""Parse screened PDFs and publish unified text, tables and figures to Drive."""
+"""Parse screened PDFs, read their figures with Gemini and publish everything to Drive."""
 
 import json
 import logging
@@ -15,6 +15,8 @@ from concurrent.futures import (
 )
 from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass, field
+from hashlib import sha256
+from pathlib import Path
 from typing import Any
 
 import torch
@@ -26,17 +28,25 @@ from steel_slag_slm.config import FigureExtractionSettings, PdfParsingSettings
 from steel_slag_slm.data import drive_storage, parsed_index, pdf_parsing, pdf_parsing_source
 from steel_slag_slm.data.parsed_manifest import (
     CONTENT_SCHEMA_VERSION,
+    FigureReference,
     ParsedManifest,
     parser_revision,
 )
-from steel_slag_slm.data.parsed_publication import publish_parse
+from steel_slag_slm.data.parsed_publication import publish_parse, publish_readings
+from steel_slag_slm.data.pdf_pages import render_regions
 from steel_slag_slm.data.pdf_parsing_source import PdfSource
-from steel_slag_slm.schemas import ParsedDocument
+from steel_slag_slm.pipelines.background_figure_reader import (
+    BackgroundFigureReader,
+    PaperReadings,
+)
+from steel_slag_slm.schemas import FigureReading, FigureToRead, ParsedDocument
 
 logger = logging.getLogger(__name__)
 _PAPER_ID_PATTERN = re.compile(r"^W\d+$")
 # This many failures in a row means something shared is broken (network, Drive login)
 MAX_FAILURE_STREAK = 10
+# Papers waiting on Gemini at once; parsing pauses beyond this, so PDFs don't pile up in memory
+READ_BACKLOG = 6
 # Each worker loads Docling's models once, in _start_worker, and reuses them for every paper
 _worker_converter: DocumentConverter | None = None
 
@@ -154,6 +164,7 @@ def _save_parse(
     parsed: ParsedDocument,
     revision: str,
     store_images: bool,
+    readings: Sequence[FigureReading | None] | None = None,
 ) -> str:
     """Publish one paper's manifest (and images if stored), then record it in the index."""
     paper_folder = drive_storage.ensure_subfolder(
@@ -165,7 +176,7 @@ def _save_parse(
         else None
     )
     published = publish_parse(
-        output.service, paper_folder, image_folder, source, pdf_bytes, parsed, revision
+        output.service, paper_folder, image_folder, source, pdf_bytes, parsed, revision, readings
     )
     output.papers[source.openalex_id] = {
         "status": "parsed",
@@ -179,19 +190,17 @@ def _save_parse(
         "parse_generation": published.manifest.parse_generation,
     }
     _write_index(output.service, output.folder_id, output.index_file_name, output.papers)
-    logger.info("Published %s with %d figures", source.openalex_id, len(parsed.figures))
+    read = sum(reading is not None for reading in readings or ())
+    logger.info(
+        "Published %s with %d figures (%d read)", source.openalex_id, len(parsed.figures), read
+    )
     return "parsed"
 
 
-def _finish_paper(
-    future: Future[ParsedDocument | None],
-    output: _OutputFolder,
-    source: PdfSource,
-    pdf_bytes: bytes,
-    revision: str,
-    store_images: bool,
-) -> str:
-    """Save a finished parse, or index why the paper can't be parsed; return the outcome."""
+def _check_parse(
+    future: Future[ParsedDocument | None], output: _OutputFolder, source: PdfSource
+) -> ParsedDocument | str:
+    """Return a usable parse, or index why the paper can't be parsed and return that outcome."""
     try:
         parsed = future.result()
     # Only reached for a paper parsed alone: it crashed its own worker (e.g. ran out of memory)
@@ -207,12 +216,31 @@ def _finish_paper(
         return _save_skip(output, source, "empty_pdf_file")
     if not (parsed.markdown.strip() or parsed.tables or parsed.content_blocks or parsed.figures):
         return _save_skip(output, source, "no_extracted_content")
-    try:
-        return _save_parse(output, source, pdf_bytes, parsed, revision, store_images)
-    # The parse breaks a manifest rule; parsing again would give the same result
-    except ValidationError as error:
-        logger.error("Parse of %s is not a valid manifest: %s", source.openalex_id, error)
-        return _save_skip(output, source, "invalid_manifest")
+    return parsed
+
+
+def _figure_to_read(paper_id: str, image: FigureReference) -> FigureToRead:
+    return FigureToRead(
+        paper_id=paper_id,
+        image_path=Path(image.file_name),  # only names the figure in logs; nothing is written
+        figure_number=image.figure_number,
+        caption=image.caption,
+        pdf_text=image.pdf_text,
+        detected_type=image.figure_type,
+        figure_id=image.figure_id,
+    )
+
+
+def _render_saved_figures(pdf_bytes: bytes, images: Sequence[FigureReference]) -> list[bytes]:
+    """Render figures again from their saved page box, as parsing first rendered them."""
+    return [
+        render_regions(
+            pdf_bytes,
+            [(image.placements[0].page_number, image.placements[0].bbox)],
+            image.render_dpi,
+        )[0]
+        for image in images
+    ]
 
 
 @dataclass
@@ -226,7 +254,7 @@ class _Tally:
     def add(self, paper_id: str, outcome: str, why: str = "") -> None:
         """Count an outcome, stopping the run if too many papers fail in a row."""
         self.outcomes[outcome] += 1
-        if outcome != "parsed":
+        if outcome in ("skipped", "failed"):
             self.not_parsed.setdefault(paper_id, why or outcome)
         self.failure_streak = self.failure_streak + 1 if outcome == "failed" else 0
         if self.failure_streak >= MAX_FAILURE_STREAK:
@@ -236,29 +264,153 @@ class _Tally:
             )
 
 
+@dataclass(frozen=True, slots=True)
+class _ReadJob:
+    """A paper waiting on Gemini: a fresh parse to publish, or a saved manifest to fill in."""
+
+    source: PdfSource
+    pdf_bytes: bytes = b""
+    parsed: ParsedDocument | None = None
+    manifest: ParsedManifest | None = None
+    positions: tuple[int, ...] = ()  # which manifest images are being read
+
+
+@dataclass
+class _Run:
+    """What every step of one run shares: where it publishes, its tally and Gemini's queue."""
+
+    output: _OutputFolder
+    revision: str
+    store_images: bool
+    tally: _Tally
+    reader: BackgroundFigureReader | None
+    reading: dict[Future[PaperReadings], _ReadJob] = field(default_factory=dict)
+
+    @property
+    def can_read(self) -> bool:
+        return self.reader is not None and self.reader.stop_reason is None
+
+    def count(self, paper_id: str, outcome: str) -> None:
+        if outcome == "skipped":
+            why = f"skipped: {self.output.papers[paper_id]['skip_reason']}"
+        else:
+            why = "failed: reparse failed, previous parse kept"
+        self.tally.add(paper_id, outcome, why)
+
+    def publish(
+        self,
+        source: PdfSource,
+        pdf_bytes: bytes,
+        parsed: ParsedDocument,
+        readings: Sequence[FigureReading | None] | None = None,
+    ) -> str:
+        try:
+            return _save_parse(
+                self.output, source, pdf_bytes, parsed, self.revision, self.store_images, readings
+            )
+        # The parse breaks a manifest rule; parsing again would give the same result
+        except ValidationError as error:
+            logger.error("Parse of %s is not a valid manifest: %s", source.openalex_id, error)
+            return _save_skip(self.output, source, "invalid_manifest")
+
+
 def _settle(
-    tally: _Tally,
-    future: Future[ParsedDocument | None],
-    output: _OutputFolder,
-    source: PdfSource,
-    pdf_bytes: bytes,
-    revision: str,
-    store_images: bool,
+    run: _Run, future: Future[ParsedDocument | None], source: PdfSource, pdf_bytes: bytes
 ) -> None:
-    """Save one finished parse and count its outcome."""
+    """Handle one finished parse: skip it, publish it, or send its figures to Gemini first."""
     try:
-        outcome = _finish_paper(future, output, source, pdf_bytes, revision, store_images)
+        parsed = _check_parse(future, run.output, source)
+        if isinstance(parsed, str):
+            outcome = parsed
+        elif parsed.figures and run.can_read and run.reader is not None:
+            figures = [
+                FigureToRead(
+                    paper_id=source.openalex_id,
+                    image_path=Path(item.file_name),
+                    figure_number=item.figure.figure_number,
+                    caption=item.figure.caption,
+                    pdf_text=item.pdf_text,
+                    detected_type=item.figure.figure_type,
+                )
+                for item in parsed.figures
+            ]
+            images = [item.image_bytes for item in parsed.figures]
+            run.reading[run.reader.submit(figures, images)] = _ReadJob(source, pdf_bytes, parsed)
+            return
+        else:
+            outcome = run.publish(source, pdf_bytes, parsed)
     # A Drive upload failed; the paper stays unindexed, so the next run retries it
     except Exception as error:
         logger.error("Could not save %s: %s", source.openalex_id, error)
-        tally.add(source.openalex_id, "failed", "failed: could not save to Drive")
+        run.tally.add(source.openalex_id, "failed", "failed: could not save to Drive")
+        return
+    run.count(source.openalex_id, outcome)
+
+
+def _start_filling(run: _Run, drive_service: Any, source: PdfSource, json_file_id: str) -> None:
+    """Send the unread figures of an already-parsed paper to Gemini, without parsing it again."""
+    if run.reader is None:
+        return
+    try:
+        manifest = ParsedManifest.model_validate_json(
+            drive_storage.download_file(drive_service, json_file_id)
+        )
+        positions = tuple(i for i, image in enumerate(manifest.images) if image.reading is None)
+        unread = [manifest.images[position] for position in positions]
+        images = _render_saved_figures(_download_pdf(drive_service, source), unread)
+    # Unchanged on Drive, so the next run tries this paper again
+    except Exception as error:
+        logger.error("Could not prepare %s for figure reading: %s", source.openalex_id, error)
+        run.tally.add(source.openalex_id, "failed", "failed: could not prepare figure reading")
+        return
+    changed = sum(
+        sha256(png).hexdigest() != image.sha256 for png, image in zip(images, unread, strict=True)
+    )
+    if changed:
+        # Still the same page region; only the pixels differ (e.g. a newer PyMuPDF)
+        logger.warning(
+            "%d re-rendered figures of %s differ from the parse", changed, source.openalex_id
+        )
+    figures = [_figure_to_read(source.openalex_id, image) for image in unread]
+    job = _ReadJob(source, manifest=manifest, positions=positions)
+    run.reading[run.reader.submit(figures, images)] = job
+
+
+def _finish_reading(run: _Run, future: Future[PaperReadings], job: _ReadJob) -> None:
+    """Publish a paper whose figures Gemini has read, counting what was and wasn't read."""
+    try:
+        readings = future.result().readings
+    # The reader catches per-figure errors itself; anything else leaves the figures unread
+    except Exception as error:
+        logger.error("Figure reading for %s failed: %s", job.source.openalex_id, error)
+        count = len(job.parsed.figures) if job.parsed else len(job.positions)
+        readings = [None] * count
+
+    paper_id = job.source.openalex_id
+    try:
+        if job.parsed is not None:
+            outcome = run.publish(job.source, job.pdf_bytes, job.parsed, readings)
+        elif job.manifest is not None:
+            new = {
+                position: reading
+                for position, reading in zip(job.positions, readings, strict=True)
+                if reading is not None
+            }
+            if new:
+                paper_folder = run.output.papers[paper_id]["paper_folder_id"]
+                publish_readings(run.output.service, str(paper_folder), job.manifest, new)
+            logger.info("Read %d of %d figures of %s", len(new), len(job.positions), paper_id)
+            outcome = "figures_added"
+    except Exception as error:
+        logger.error("Could not save %s: %s", paper_id, error)
+        run.tally.add(paper_id, "failed", "failed: could not save to Drive")
         return
 
-    if outcome == "skipped":
-        why = f"skipped: {output.papers[source.openalex_id]['skip_reason']}"
-    else:
-        why = "failed: reparse failed, previous parse kept"
-    tally.add(source.openalex_id, outcome, why)
+    if outcome in ("parsed", "figures_added"):
+        read = sum(reading is not None for reading in readings)
+        run.tally.outcomes["figures_read"] += read
+        run.tally.outcomes["figures_unread"] += len(readings) - read
+    run.count(paper_id, outcome)
 
 
 def run_pdf_parsing(
@@ -274,6 +426,7 @@ def run_pdf_parsing(
     retry_skipped: bool = False,
     store_images: bool = True,
     workers: int = 1,
+    figure_reader: BackgroundFigureReader | None = None,
 ) -> Counter[str]:
     """Publish pending papers, parsing up to `workers` at once and continuing past failures.
 
@@ -284,6 +437,10 @@ def run_pdf_parsing(
     process talks to Drive. Run only one publisher against an output folder.
     paper_ids limits the run to selected papers in the source table. With store_images
     False only parsed.json is written; figures keep their page, box and caption but no PNG.
+
+    With a figure_reader, Gemini reads every figure before its paper is published, and
+    papers parsed earlier get their unread figures read without being parsed again. A figure
+    Gemini can't read is saved unread and retried by the next run.
     """
     if max_papers is not None and max_papers <= 0:
         raise ValueError("max_papers must be greater than zero")
@@ -314,6 +471,8 @@ def run_pdf_parsing(
     )
     revision = parser_revision(figure_settings)
     pending = []
+    # Parsed papers with figures Gemini hasn't read yet: (source, ID of their parsed.json)
+    unread: list[tuple[PdfSource, str]] = []
 
     for source in sources:
         entry = papers.get(source.openalex_id, {})
@@ -353,67 +512,90 @@ def run_pdf_parsing(
                     source.openalex_id,
                 )
                 pending.append(source)
+            elif figure_reader is not None and any(i.reading is None for i in manifest.images):
+                unread.append((source, str(entry["json_file_id"])))
             else:
                 outcomes["already_parsed"] += 1
         else:
             pending.append(source)
 
     if max_papers is not None:
-        outcomes["deferred"] = max(0, len(pending) - max_papers)
+        outcomes["deferred"] = max(0, len(pending) + len(unread) - max_papers)
         pending = pending[:max_papers]
+        unread = unread[: max_papers - len(pending)]
 
     output = _OutputFolder(drive_service, output_folder, settings.index_file_name, papers)
+    run = _Run(output, revision, store_images, _Tally(outcomes), figure_reader)
     threads = settings.torch_threads_per_worker
-    tally = _Tally(outcomes)
-    queue = iter(pending)
-    in_flight: dict[Future[ParsedDocument | None], tuple[PdfSource, bytes]] = {}
+    parse_queue = iter(pending)
+    unread_queue = iter(unread)
+    parsing: dict[Future[ParsedDocument | None], tuple[PdfSource, bytes]] = {}
     pool = _make_executor(workers, threads)
 
     try:
         while True:
             # Keep every worker busy plus one PDF waiting, without holding all PDFs in memory
-            while len(in_flight) <= workers and (queued := next(queue, None)) is not None:
+            while (
+                len(parsing) <= workers
+                and len(run.reading) < READ_BACKLOG
+                and (queued := next(parse_queue, None)) is not None
+            ):
                 try:
                     pdf_bytes = _download_pdf(drive_service, queued)
                 # Unindexed, so the next run retries it
                 except Exception as error:
                     logger.error("Could not download %s: %s", queued.openalex_id, error)
-                    tally.add(queued.openalex_id, "failed", "failed: could not download the PDF")
+                    run.tally.add(
+                        queued.openalex_id, "failed", "failed: could not download the PDF"
+                    )
                     continue
-                in_flight[_submit(pool, pdf_bytes, figure_settings)] = (queued, pdf_bytes)
+                parsing[_submit(pool, pdf_bytes, figure_settings)] = (queued, pdf_bytes)
 
-            if not in_flight:
+            while (
+                run.can_read
+                and len(run.reading) < READ_BACKLOG
+                and (filling := next(unread_queue, None)) is not None
+            ):
+                _start_filling(run, drive_service, *filling)
+
+            if not parsing and not run.reading:
                 break
 
+            in_flight: list[Future[Any]] = [*parsing, *run.reading]
             done, _ = wait(in_flight, return_when=FIRST_COMPLETED)
-            if not any(_crashed(future) for future in done):
-                for future in done:
-                    source, pdf_bytes = in_flight.pop(future)
-                    _settle(tally, future, output, source, pdf_bytes, revision, store_images)
+            for future in [future for future in done if future in run.reading]:
+                _finish_reading(run, future, run.reading.pop(future))
+            parsed = [future for future in parsing if future in done]
+            if not any(_crashed(future) for future in parsed):
+                for future in parsed:
+                    _settle(run, future, *parsing.pop(future))
                 continue
 
             # A dead worker breaks the whole pool, and every unfinished paper with it. Reparse
             # those alone so the one that crashes is found and skipped, then start a new pool.
-            wait(in_flight)
+            wait(parsing)
             pool.shutdown(cancel_futures=True)
-            suspects = [(future, *in_flight[future]) for future in in_flight]
-            in_flight.clear()
+            suspects = [(future, *parsing[future]) for future in parsing]
+            parsing.clear()
             logger.warning(
                 "A parsing worker crashed; reparsing %d papers one at a time", len(suspects)
             )
             for future, source, pdf_bytes in suspects:
                 if _crashed(future):
                     future = _parse_alone(pdf_bytes, figure_settings, threads)
-                _settle(tally, future, output, source, pdf_bytes, revision, store_images)
+                _settle(run, future, source, pdf_bytes)
             pool = _make_executor(workers, threads)
     finally:
         pool.shutdown(cancel_futures=True)
 
-    if tally.not_parsed:
+    outcomes["figures_waiting"] = sum(1 for _ in unread_queue)
+    if figure_reader is not None and figure_reader.stop_reason is not None:
+        logger.warning("Stopped reading figures: %s", figure_reader.stop_reason)
+    if run.tally.not_parsed:
         listing = "\n".join(
-            f"  {paper_id}  {why}" for paper_id, why in sorted(tally.not_parsed.items())
+            f"  {paper_id}  {why}" for paper_id, why in sorted(run.tally.not_parsed.items())
         )
-        logger.warning("Not parsed in this run (%d):\n%s", len(tally.not_parsed), listing)
+        logger.warning("Not parsed in this run (%d):\n%s", len(run.tally.not_parsed), listing)
     return outcomes
 
 
@@ -423,9 +605,13 @@ _SUMMARY_LINES = {
     "parsed": "Parsed in this run",
     "skipped": "Skipped, PDF unusable (rerun with --retry-skipped to try again)",
     "failed": "Failed, retried automatically on the next run",
+    "figures_added": "Parsed earlier, figures read by Gemini in this run",
     "already_parsed": "Already parsed by an earlier run",
     "deferred": "Not started yet (beyond --max-papers)",
     "not_in_source_table": "Requested IDs not in the approved list",
+    "figures_waiting": "Parsed, figures not sent to Gemini yet (rerun to continue)",
+    "figures_read": "Figures read by Gemini",
+    "figures_unread": "Figures Gemini couldn't read (rerun to retry)",
 }
 
 

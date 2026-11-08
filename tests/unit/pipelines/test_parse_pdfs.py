@@ -14,12 +14,18 @@ import pytest
 from docling.exceptions import ConversionError
 from pydantic import ValidationError
 
-from steel_slag_slm.config import FigureExtractionSettings, PdfParsingSettings
+from steel_slag_slm.config import (
+    FigureExtractionSettings,
+    FigureReadingSettings,
+    ModelPrices,
+    PdfParsingSettings,
+)
 from steel_slag_slm.data import drive_storage, pdf_parsing, pdf_parsing_source
 from steel_slag_slm.data.parsed_manifest import ParsedManifest, parser_revision
 from steel_slag_slm.data.parsed_publication import publish_parse, publish_readings
 from steel_slag_slm.data.pdf_parsing_source import PdfSource
-from steel_slag_slm.pipelines import parse_pdfs
+from steel_slag_slm.pipelines import background_figure_reader, parse_pdfs
+from steel_slag_slm.pipelines.background_figure_reader import BackgroundFigureReader
 from steel_slag_slm.pipelines.export_parsed import run_export_parsed
 from steel_slag_slm.pipelines.parse_pdfs import (
     MAX_FAILURE_STREAK,
@@ -34,6 +40,7 @@ from steel_slag_slm.schemas import (
     ParsedDocument,
     RenderedFigure,
     TableColumn,
+    TokenUsage,
 )
 
 SOURCE = PdfSource("W123", "https://drive.google.com/file/d/SOURCE123/view")
@@ -596,3 +603,112 @@ def test_publish_readings_fills_unread_figures_in_the_same_file(fake_drive: Any)
     stored = ParsedManifest.model_validate_json(fake_drive.contents[published.json_file_id])
     assert stored.images[0].reading == READING
     assert stored.parse_generation == published.manifest.parse_generation
+
+
+READER_SETTINGS = FigureReadingSettings(
+    model="gemini-test",
+    temperature=0.0,
+    prompt_name="read_figure",
+    max_concurrency=2,
+    call_timeout_s=5,
+    prices=ModelPrices(input_usd_per_million=1.0, output_usd_per_million=0.0),
+)
+
+
+@pytest.fixture
+def figure_reader(monkeypatch: pytest.MonkeyPatch) -> Any:
+    """A real background reader whose Gemini call is faked; calls[] records each figure sent."""
+    calls: list[bytes] = []
+
+    async def fake_read(_runner: Any, _prompt: Any, _figure: Any, png: bytes) -> Any:
+        calls.append(png)
+        if reader.failing:
+            raise TimeoutError
+        return READING, TokenUsage(input_tokens=1000)
+
+    monkeypatch.setattr(background_figure_reader, "read_figure", fake_read)
+    reader = BackgroundFigureReader(Any, Any, READER_SETTINGS, None)  # type: ignore[arg-type]
+    reader.failing = False  # type: ignore[attr-defined]
+    reader.calls = calls  # type: ignore[attr-defined]
+    yield reader
+    reader.close()
+
+
+def _real_pdf() -> bytes:
+    with pymupdf.open() as pdf:
+        pdf.new_page().insert_text((10, 8), "Strength")
+        return bytes(pdf.tobytes())
+
+
+def _manifest(drive: Any, folder: str) -> ParsedManifest:
+    return ParsedManifest.model_validate_json(drive.contents[_entry(drive, folder)["json_file_id"]])
+
+
+def test_parse_reads_figures_with_gemini_before_publishing(
+    monkeypatch: pytest.MonkeyPatch, fake_drive: Any, figure_reader: Any
+) -> None:
+    folder = _prepare(monkeypatch, fake_drive)
+
+    outcomes = _run(store_images=False, figure_reader=figure_reader)
+
+    assert outcomes["parsed"] == 1 and outcomes["figures_read"] == 1
+    manifest = _manifest(fake_drive, folder)
+    assert manifest.images[0].reading == READING
+    # Kane's provenance is kept alongside the reading
+    assert manifest.images[0].placements[0].bbox == (0, 0, 100, 10)
+    assert manifest.content_blocks == []
+
+
+def test_earlier_parse_gets_its_figures_read_without_parsing_again(
+    monkeypatch: pytest.MonkeyPatch, fake_drive: Any, figure_reader: Any
+) -> None:
+    folder = _prepare(monkeypatch, fake_drive)
+    fake_drive.contents["SOURCE123"] = _real_pdf()
+    assert _run(store_images=False)["parsed"] == 1  # an earlier run, without Gemini
+    json_id = _entry(fake_drive, folder)["json_file_id"]
+    assert _manifest(fake_drive, folder).images[0].reading is None
+
+    def no_parse(*_: Any) -> None:
+        raise AssertionError("an already-parsed paper must not be parsed again")
+
+    monkeypatch.setattr(pdf_parsing, "parse_pdf_with_figures", no_parse)
+    outcomes = _run(store_images=False, figure_reader=figure_reader)
+
+    assert outcomes["figures_added"] == 1 and outcomes["figures_read"] == 1
+    assert outcomes["parsed"] == 0
+    assert _entry(fake_drive, folder)["json_file_id"] == json_id
+    assert _manifest(fake_drive, folder).images[0].reading == READING
+    assert len(figure_reader.calls) == 1 and figure_reader.calls[0].startswith(b"\x89PNG")
+
+    assert _run(store_images=False, figure_reader=figure_reader)["already_parsed"] == 1
+
+
+def test_figure_gemini_cannot_read_is_published_unread_and_retried_next_run(
+    monkeypatch: pytest.MonkeyPatch, fake_drive: Any, figure_reader: Any
+) -> None:
+    folder = _prepare(monkeypatch, fake_drive)
+    fake_drive.contents["SOURCE123"] = _real_pdf()
+    figure_reader.failing = True
+
+    outcomes = _run(store_images=False, figure_reader=figure_reader)
+
+    assert outcomes["parsed"] == 1 and outcomes["figures_unread"] == 1
+    assert _manifest(fake_drive, folder).images[0].reading is None
+
+    figure_reader.failing = False
+    outcomes = _run(store_images=False, figure_reader=figure_reader)
+    assert outcomes["figures_added"] == 1
+    assert _manifest(fake_drive, folder).images[0].reading == READING
+
+
+def test_stopped_reader_still_parses_and_leaves_figures_for_the_next_run(
+    monkeypatch: pytest.MonkeyPatch, fake_drive: Any
+) -> None:
+    folder = _prepare(monkeypatch, fake_drive)
+    reader = BackgroundFigureReader(Any, Any, READER_SETTINGS, max_run_usd=0)  # type: ignore[arg-type]
+    try:
+        assert _run(store_images=False, figure_reader=reader)["parsed"] == 1
+        assert _manifest(fake_drive, folder).images[0].reading is None
+        assert _run(store_images=False, figure_reader=reader)["figures_waiting"] == 1
+    finally:
+        reader.close()
