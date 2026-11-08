@@ -47,6 +47,7 @@ _PAPER_ID_PATTERN = re.compile(r"^W\d+$")
 MAX_FAILURE_STREAK = 10
 # Papers waiting on Gemini at once; parsing pauses beyond this, so PDFs don't pile up in memory
 READ_BACKLOG = 6
+SCAN_PROGRESS_EVERY = 100
 # Each worker loads Docling's models once, in _start_worker, and reuses them for every paper
 _worker_converter: DocumentConverter | None = None
 
@@ -474,7 +475,11 @@ def run_pdf_parsing(
     # Parsed papers with figures Gemini hasn't read yet: (source, ID of their parsed.json)
     unread: list[tuple[PdfSource, str]] = []
 
-    for source in sources:
+    logger.info("Checking which of %d papers still need parsing or figure reading", len(sources))
+    for checked, source in enumerate(sources, start=1):
+        # Checking a parsed paper downloads its parsed.json, so this takes a few minutes
+        if checked % SCAN_PROGRESS_EVERY == 0:
+            logger.info("Checked %d of %d papers", checked, len(sources))
         entry = papers.get(source.openalex_id, {})
 
         if entry.get("status") == "skipped" and not retry_skipped:
