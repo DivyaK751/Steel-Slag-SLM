@@ -411,4 +411,10 @@ Model, concurrency and pricing settings are in the `figure_reading:` section of
 [configs/base.yaml](configs/base.yaml). The prompt is
 [prompts/read_figure.yaml](prompts/read_figure.yaml).
 
-Neither `parse-pdfs` nor `export-parsed` automatically runs figure reading.
+`parse-pdfs` reads figures with Gemini by default and stores each reading with its figure
+in `parsed.json`, next to the text, tables and page locations. Papers parsed before this
+only get their unread figures re-rendered and read; Docling doesn't run again. A figure
+Gemini can't read is saved unread and retried by the next run. Reading stops by itself
+once the run's estimated cost reaches `figure_reading.max_run_usd` (override with
+`--max-gemini-usd`) or after many failures in a row; parsing carries on, and rerunning
+the same command continues. Use `--no-figure-reading` to parse without Gemini.
