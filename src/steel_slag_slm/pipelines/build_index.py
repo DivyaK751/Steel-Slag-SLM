@@ -25,6 +25,7 @@ def run_build_index(
     max_papers: int | None = None,
     rebuild: bool = False,
     titles: Mapping[str, str] | None = None,
+    store_folder_id: str | None = None,
 ) -> Counter[str]:
     """Index each parsed paper that is not in the saved store yet, or was parsed again since.
 
@@ -33,8 +34,10 @@ def run_build_index(
     replaced. Chunking changes do not trigger this, so pass rebuild=True to re-chunk and
     re-embed every paper from scratch. A paper whose parsed.json is unreadable is left out and
     retried on the next run. Each chunk carries its paper's title from titles, when given.
+    The store is kept under store_folder_id, or under the parsed folder when it is None.
     """
     titles = titles or {}
+    store_folder = store_folder_id or parsed_folder_id
     if max_papers is not None and max_papers <= 0:
         raise ValueError("max_papers must be greater than zero")
 
@@ -43,7 +46,7 @@ def run_build_index(
         store = VectorStore.empty(encoder.dimension)
     else:
         store = embedding_store.load_store(
-            drive_service, parsed_folder_id, settings.model, encoder.dimension
+            drive_service, store_folder, settings.model, encoder.dimension
         )
     indexable_papers = {
         paper_id: entry for paper_id, entry in papers.items() if entry.get("status") != "skipped"
@@ -108,11 +111,11 @@ def run_build_index(
 
         unsaved += 1
         if unsaved >= settings.papers_per_save:
-            _save(drive_service, parsed_folder_id, settings.model, store)
+            _save(drive_service, store_folder, settings.model, store)
             unsaved = 0
 
     if unsaved:
-        _save(drive_service, parsed_folder_id, settings.model, store)
+        _save(drive_service, store_folder, settings.model, store)
     logger.info("Index build complete: %s", dict(outcomes))
     return outcomes
 

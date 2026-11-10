@@ -21,6 +21,7 @@ SETTINGS = EmbeddingSettings(
     table_max_chars=1500,
     papers_per_save=10,
     top_k=3,
+    index_folder_name="_search_index",
     reranker="reranker-a",
     top_papers=5,
     candidates=10,

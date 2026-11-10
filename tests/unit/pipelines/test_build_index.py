@@ -21,6 +21,7 @@ def _settings(papers_per_save: int = 10) -> EmbeddingSettings:
         table_max_chars=1500,
         papers_per_save=papers_per_save,
         top_k=3,
+        index_folder_name="_search_index",
         reranker="reranker-a",
         top_papers=5,
         candidates=10,
@@ -195,3 +196,15 @@ def test_build_index_saves_after_every_n_papers(fake_drive, keyword_encoder, mon
     run_build_index(_settings(papers_per_save=2), _parsing(), None, PARSED_FOLDER, keyword_encoder)
 
     assert len(saves) == 2  # after the second paper, and at the end for the third
+
+
+def test_build_index_saves_the_store_in_the_given_index_folder(fake_drive, keyword_encoder):
+    _write_index(fake_drive, {"W1": _add_paper(fake_drive, "W1", "Free lime drives expansion.")})
+
+    run_build_index(
+        _settings(), _parsing(), None, PARSED_FOLDER, keyword_encoder, store_folder_id="shared"
+    )
+
+    store = embedding_store.load_store(None, "shared", "model-a", keyword_encoder.dimension)
+    assert store.paper_ids == {"W1"}
+    assert embedding_store.load_store(None, PARSED_FOLDER, "model-a", 4).size == 0

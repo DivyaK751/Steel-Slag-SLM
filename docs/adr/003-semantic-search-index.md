@@ -13,7 +13,9 @@ machine's local files.
 
 - Read `parsed.json` only from Drive, using the `_parsed/index.json` registry. Nothing is read
   from or written to a local data folder.
-- Store the index in Drive too, in `_parsed/_embeddings/`:
+- Store the index in Drive too, in `<shared folder>/_search_index/<parsed folder>/_embeddings/`
+  (the project folder everyone can write to, so anyone can build or update it; until
+  2026-11-10 it sat in the parsed folder itself):
   - `chunks.json` holds the model name, dimension, every chunk's paper ID, kind, section, text,
     position, pages and linked figure captions, and the name of the current index file.
   - `index-<unique id>.faiss` holds the FAISS vectors, row for row with `chunks.json`.

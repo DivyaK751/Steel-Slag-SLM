@@ -334,9 +334,12 @@ embedding:
   chunk_max_chars: 800
   # A table longer than this is split into row groups, each repeating the header
   table_max_chars: 1500
-  # The index is saved to Drive after this many papers, so a failed run loses little work
-  papers_per_save: 25
+  # The index is saved to Drive after this many papers, so a failed run loses little work;
+  # every save uploads the whole index, so a full rebuild should not save too often
+  papers_per_save: 200
   top_k: 5
+  # Indexes live in <shared Drive folder>/<this>/<parsed folder name>/_embeddings/
+  index_folder_name: _search_index
   # Search finds papers with embeddings + BM25, then this cross-encoder orders every chunk of
   # the top papers (see docs/retrieval_experiments.md for how these were chosen)
   reranker: BAAI/bge-reranker-v2-m3

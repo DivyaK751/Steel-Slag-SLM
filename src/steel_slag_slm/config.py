@@ -92,6 +92,9 @@ class EmbeddingSettings(BaseModel):
     table_max_chars: int
     papers_per_save: int
     top_k: int
+    # Folder in the shared Drive folder that holds one search index per parsed folder, so
+    # anyone with access to the project folder can build and update an index
+    index_folder_name: str
     reranker: str  # cross-encoder that orders the passages of the papers search found
     top_papers: int  # papers whose chunks are all reranked
     candidates: int  # chunks each first-stage ranking (embedding, keywords) contributes
