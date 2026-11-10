@@ -602,6 +602,8 @@ def _index_parsed_folder(
 ) -> int:
     """Update the folder's search index, print its summary and return the papers left out."""
     settings = load_embedding_settings()
+    # Titles come from the PDFs' Drive descriptions; tables and the reranker need them
+    titles = list_paper_titles(drive_service, load_drive_connection_settings().folder_id)
     outcomes = run_build_index(
         settings,
         load_pdf_parsing_settings(),
@@ -610,6 +612,7 @@ def _index_parsed_folder(
         Embedder(settings.model),
         max_papers,
         rebuild,
+        titles,
     )
     print("Index summary:", dict(outcomes))
     # Papers the parser skipped on purpose are expected; anything else missing counts
@@ -639,6 +642,7 @@ def search_index() -> None:
         drive_service,
         parsed_folder_id,
         Embedder(settings.model),
+        CrossEncoderScorer(settings.reranker),
         args.query,
         args.top_k,
         kinds,
