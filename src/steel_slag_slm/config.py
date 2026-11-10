@@ -131,6 +131,9 @@ class RetrievalEvalSet(BaseModel):
     depth: int  # how many results to retrieve per question; the largest K that is reported
     questions: list[EvalQuestion]
     paper_id: str | None = None  # when set, search only this paper's chunks
+    # A file next to the test set listing the papers to search, one ID per line; the test then
+    # searches only those, so scores stay comparable however large the full index grows
+    corpus: str | None = None
 
 
 class GcpSettings(BaseModel):

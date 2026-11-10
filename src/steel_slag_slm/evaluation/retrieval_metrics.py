@@ -26,6 +26,7 @@ class QuestionScores:
     ndcg_at_10: float
     paper_hit_at_5: float = 0.0  # a top-5 chunk comes from an evidence paper
     answer_hit_at_5: float = 0.0  # a top-5 chunk from that paper contains the answer
+    answer_hit_at_10: float = 0.0
     answer_hit_at_20: float = 0.0
 
 
@@ -147,6 +148,7 @@ def score_question(ranked: Sequence[Chunk], question: EvalQuestion) -> QuestionS
         ndcg_at_10=ndcg_at_k(ranked, question, 10),
         paper_hit_at_5=1.0 if any(chunk.paper_id in papers for chunk in ranked[:5]) else 0.0,
         answer_hit_at_5=1.0 if any(contains_answer(c, question) for c in ranked[:5]) else 0.0,
+        answer_hit_at_10=1.0 if any(contains_answer(c, question) for c in ranked[:10]) else 0.0,
         answer_hit_at_20=1.0 if any(contains_answer(c, question) for c in ranked[:20]) else 0.0,
     )
 
@@ -162,6 +164,7 @@ def mean_scores(scores: Sequence[QuestionScores]) -> dict[str, float]:
         "ndcg_at_10",
         "paper_hit_at_5",
         "answer_hit_at_5",
+        "answer_hit_at_10",
         "answer_hit_at_20",
     ]
     if not scores:
