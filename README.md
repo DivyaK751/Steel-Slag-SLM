@@ -144,7 +144,8 @@ To run it, open Actions → Parse trial PDFs → Run workflow, select the integr
 and set `max_papers` to `1`. Inspect the resulting `_parsed_v2` folder in Drive before
 increasing the batch size.
 
-The pilot workflow does not build embeddings or call Gemini. Local unit tests, linting and
+After parsing, `parse-pdfs` updates the search index in the same folder
+(`_parsed_v2/_embeddings/`); the workflow does not call Gemini. Local unit tests, linting and
 type-checking do not require the cloud credentials.
 
 
@@ -227,14 +228,20 @@ as a search index in Drive (`_parsed/_embeddings/`). A search finds the passages
 to the question.
 
 ```bash
-uv run build-index                      # add newly parsed papers to the index
+uv run build-index                      # add new and re-parsed papers to the index
 uv run build-index --rebuild            # rebuild everything, e.g. after changing how papers are split
 uv run search-index "free lime volume stability"
 uv run evaluate-retrieval               # score search quality on a fixed test
+uv run build-index --parsed-folder _parsed_approved   # use another parsed folder (any command)
 ```
 
-- The `_parsed_v2` pilot workflow only parses; it does not build embeddings. Run `build-index`
-  separately for the configured production folder after an approved migration.
+- Each parsed folder has its own index in its `_embeddings/` subfolder.
+- A paper parsed again since it was indexed (a new parse generation) has its old passages
+  replaced on the next `build-index`.
+
+- `parse-pdfs` updates the search index of the folder it parsed into once parsing is done, so
+  newly parsed and re-parsed papers become searchable without a separate step. Pass
+  `--skip-index` to leave the index alone.
 - `evaluate-retrieval` asks 22 fixed questions about one paper, whose answers were found by
   reading the paper, and reports how high the right passage ranks.
 - Settings are in the `embedding:` section of `configs/base.yaml`. Design notes are in

@@ -2,6 +2,8 @@
 
 import logging
 from collections import Counter
+from collections.abc import Mapping
+from dataclasses import replace
 from typing import Any
 
 from steel_slag_slm.config import EmbeddingSettings, PdfParsingSettings
@@ -23,12 +25,13 @@ def run_build_index(
     max_papers: int | None = None,
     rebuild: bool = False,
 ) -> Counter[str]:
-    """Index each parsed paper that is not in the saved store yet.
+    """Index each parsed paper that is not in the saved store yet, or was parsed again since.
 
     Papers already in the store are skipped, so new papers can be added to the index later
-    without re-embedding the others. Chunking changes do not trigger this, so pass rebuild=True
-    to re-chunk and re-embed every paper from scratch. A paper whose parsed.json is unreadable
-    is left out and retried on the next run.
+    without re-embedding the others. A paper whose parse generation changed has its old chunks
+    replaced. Chunking changes do not trigger this, so pass rebuild=True to re-chunk and
+    re-embed every paper from scratch. A paper whose parsed.json is unreadable is left out and
+    retried on the next run.
     """
     if max_papers is not None and max_papers <= 0:
         raise ValueError("max_papers must be greater than zero")
@@ -43,7 +46,12 @@ def run_build_index(
     indexable_papers = {
         paper_id: entry for paper_id, entry in papers.items() if entry.get("status") != "skipped"
     }
-    pending = [paper_id for paper_id in indexable_papers if paper_id not in store.paper_ids]
+    indexed_generations = store.paper_generations
+    pending = [
+        paper_id
+        for paper_id, entry in indexable_papers.items()
+        if paper_id not in indexed_generations or _is_reparsed(entry, indexed_generations[paper_id])
+    ]
     outcomes: Counter[str] = Counter()
     skipped_count = len(papers) - len(indexable_papers)
     if skipped_count:
@@ -60,6 +68,11 @@ def run_build_index(
     if max_papers is not None:
         outcomes["deferred"] = max(0, len(pending) - max_papers)
         pending = pending[:max_papers]
+    # Old chunks of re-parsed papers go first; a paper that then fails is retried next run
+    reparsed = {paper_id for paper_id in pending if paper_id in indexed_generations}
+    if reparsed:
+        store.remove_papers(reparsed)
+        outcomes["reindexed"] = len(reparsed)
 
     unsaved = 0
     for paper_id in pending:
@@ -71,7 +84,11 @@ def run_build_index(
             outcomes["failed"] += 1
             continue
 
-        chunks = build_chunks(paper, settings.chunk_max_chars, settings.table_max_chars)
+        generation = str(indexable_papers[paper_id].get("parse_generation", ""))
+        chunks = [
+            replace(chunk, parse_generation=generation)
+            for chunk in build_chunks(paper, settings.chunk_max_chars, settings.table_max_chars)
+        ]
         if not chunks:
             logger.warning("Not indexed, %s produced no chunks", paper_id)
             outcomes["empty"] += 1
@@ -91,6 +108,12 @@ def run_build_index(
         _save(drive_service, parsed_folder_id, settings.model, store)
     logger.info("Index build complete: %s", dict(outcomes))
     return outcomes
+
+
+def _is_reparsed(entry: Mapping[str, object], indexed_generation: str) -> bool:
+    # Papers parsed before generations existed have none, so they are never seen as re-parsed
+    generation = entry.get("parse_generation")
+    return isinstance(generation, str) and generation != indexed_generation
 
 
 def _save(service: Any, parsed_folder_id: str, model_name: str, store: VectorStore) -> None:

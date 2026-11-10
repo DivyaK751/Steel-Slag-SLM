@@ -43,6 +43,23 @@ class VectorStore:
     def paper_ids(self) -> set[str]:
         return {chunk.paper_id for chunk in self._chunks}
 
+    @property
+    def paper_generations(self) -> dict[str, str]:
+        """Map each indexed paper to the parse generation its chunks came from."""
+        return {chunk.paper_id: chunk.parse_generation for chunk in self._chunks}
+
+    def remove_papers(self, paper_ids: set[str]) -> None:
+        """Drop every chunk, and its vector, that belongs to one of the given papers."""
+        keep = [row for row, chunk in enumerate(self._chunks) if chunk.paper_id not in paper_ids]
+        if len(keep) == len(self._chunks):
+            return
+        # A flat index can't delete rows in place, so rebuild it from the rows that stay
+        vectors = self._index.reconstruct_n(0, self._index.ntotal)
+        index = faiss.IndexFlatIP(self.dimension)
+        index.add(np.ascontiguousarray(vectors[keep], dtype=np.float32))
+        self._index = index
+        self._chunks = [self._chunks[row] for row in keep]
+
     def add(self, chunks: list[Chunk], vectors: np.ndarray) -> None:
         """Append chunks with their vectors, one row per chunk."""
         if vectors.shape != (len(chunks), self.dimension):

@@ -86,6 +86,17 @@ def test_save_then_load_keeps_the_pages_of_each_chunk(fake_drive, keyword_encode
     assert loaded.chunks[0].pages == (3, 4)
 
 
+def test_save_then_load_keeps_the_parse_generation_of_each_chunk(fake_drive, keyword_encoder):
+    chunks = [Chunk("W1", "text", "Results", "Free lime.", 0, parse_generation="g1")]
+    store = VectorStore.empty(keyword_encoder.dimension)
+    store.add(chunks, keyword_encoder.encode([chunk.text for chunk in chunks]))
+    embedding_store.save_store(None, "parsed", "model-a", store)
+
+    loaded = embedding_store.load_store(None, "parsed", "model-a", keyword_encoder.dimension)
+
+    assert loaded.chunks[0].parse_generation == "g1"
+
+
 def test_chunks_saved_before_pages_existed_load_with_no_pages(fake_drive, keyword_encoder):
     embedding_store.save_store(None, "parsed", "model-a", _filled_store(keyword_encoder))
     store_folder = fake_drive.find_subfolder_id(None, "parsed", embedding_store.STORE_FOLDER_NAME)

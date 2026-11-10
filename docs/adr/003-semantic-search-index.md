@@ -52,8 +52,10 @@ machine's local files.
 - The whole index is loaded into memory for each search. A flat index is exact and simple, and
   it is fine at the size of this project.
 - Papers are added incrementally: a run indexes only papers that are not yet in `chunks.json`.
-  `build-index --rebuild` re-chunks and re-embeds every paper. The parse workflow runs
-  `build-index` after parsing, so new papers are indexed automatically.
+  A paper whose parse generation changed since it was indexed is re-chunked and re-embedded.
+  `build-index --rebuild` re-chunks and re-embeds every paper. `parse-pdfs` updates the index
+  of the folder it parsed into once parsing is done, on a laptop or in the workflow, so new
+  and re-parsed papers are indexed automatically.
 - Retrieval quality is measured with a fixed test set (`configs/retrieval_eval.yaml`), and
   `evaluate-retrieval` reports Hit@K, Recall@5/20, MRR and nDCG@10. The set is written
   answer-first: 22 questions whose answers were taken from one paper's text (W2068066265) before
