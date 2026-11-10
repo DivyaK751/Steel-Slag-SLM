@@ -1,0 +1,170 @@
+# Held-out retrieval test set: score a chosen setup on it once, and never tune on it.
+#
+# Built like retrieval_eval_human50.yaml, from rows of sheet "9 Citations & Provenance" in
+# human_extracted_data/human_extracted_data.xlsx, but only from facts that set does not use:
+# other tables, figures and values of the same papers. If a setup scores far lower here than on
+# the tuning set, its gains came from fitting those questions.
+depth: 20
+# The papers searched: these test papers plus 100 random parsed papers as distractors
+corpus: retrieval_corpus_heldout.txt
+questions:
+  - id: x01
+    query: "What calcium content did the BOF I slag have in the elemental analysis of the hot-stage carbonation study?"
+    answer: ["35.3"]
+    evidence:
+      - {paper_id: W2014482815, kind: table, location: "Table 3"}
+  - id: x02
+    query: "What was the median particle size of the BOF slag fractions used for hot-stage carbonation?"
+    answer: ["10.7"]
+    evidence:
+      - {paper_id: W2014482815, kind: table, location: "Table 2"}
+  - id: x03
+    query: "How much CaO did test slag A contain in the study of free lime crystallization from molten LD converter slag?"
+    answer: ["45.2"]
+    evidence:
+      - {paper_id: W2518789431, kind: table, text: "45.2"}
+  - id: x04
+    query: "By how much does the solid volume increase when free CaO hydrates, in the study of f-CaO hydration activity in BOF slag?"
+    answer: ["97.88"]
+    evidence:
+      - {paper_id: W2566640190, kind: table, location: "Table 3"}
+  - id: x05
+    query: "What were the free CaO and free MgO contents of the steel slag in the heat-cured steel slag–GGBS binder study?"
+    answer: ["1.21"]
+    evidence:
+      - {paper_id: W2789941819, kind: text, text: "1.21"}
+  - id: x06
+    query: "What is the CaO content of the steel slag in the heat-cured steel slag–ground blast furnace slag cementitious material?"
+    answer: ["43.73"]
+    evidence:
+      - {paper_id: W2789941819, kind: table, location: "Table 1"}
+  - id: x07
+    query: "What strength did gold mine tailings geopolymers with 50% BOF slag and 10 M KOH reach?"
+    answer: ["10.5"]
+    evidence:
+      - {paper_id: W2995159460, kind: figure, location: "Fig. 5"}
+  - id: x08
+    query: "Which curing regime was best for the BOF slag-modified gold mine tailings geopolymers, and what strength did it give?"
+    answer: ["14.73"]
+    evidence:
+      - {paper_id: W2995159460, kind: text, text: "14.73"}
+  - id: x09
+    query: "What is the CaO content of the raw materials in the tungsten mining waste alkali-activated binder?"
+    answer: ["33.29"]
+    evidence:
+      - {paper_id: W3016528323, kind: table, location: "Table 1"}
+  - id: x10
+    query: "What total porosity did the binary alkali-activated binders based on tungsten mining waste have?"
+    answer: ["37.63"]
+    evidence:
+      - {paper_id: W3016528323, kind: table, location: "Table 4"}
+  - id: x11
+    query: "What average CaO content does the review of iron and steel slags in concrete give for EAF carbon steel slag?"
+    answer: ["27.71", "27,71"]
+    evidence:
+      - {paper_id: W3119080532, kind: figure, location: "Figure 6"}
+  - id: x12
+    query: "What average CaO content does the review of iron and steel slags in concrete give for ladle furnace slag?"
+    answer: ["53.29", "53,29"]
+    evidence:
+      - {paper_id: W3119080532, kind: figure, location: "Figure 8"}
+  - id: x13
+    query: "How much amorphous phase do the metallurgical slags studied for alkali activation contain?"
+    answer: ["55.6"]
+    evidence:
+      - {paper_id: W3126866315, kind: table, location: "Table 2"}
+  - id: x14
+    query: "What 28-day strength did ordinary concrete with high-phosphorus steel slag reach in the mix proportion tests?"
+    answer: ["43.52"]
+    evidence:
+      - {paper_id: W3130633964, kind: table, location: "Table 10"}
+  - id: x15
+    query: "What 28-day strength did the optimized concrete mixes with high-phosphorus steel slag reach?"
+    answer: ["45.14"]
+    evidence:
+      - {paper_id: W3130633964, kind: table, location: "Table 11"}
+  - id: x16
+    query: "What 28-day strength did cement composites with treated artificial aggregate R5 reach?"
+    answer: ["54.8"]
+    evidence:
+      - {paper_id: W4200481327, kind: figure, location: "Fig. 5"}
+  - id: x17
+    query: "What 28-day compressive strength did mortars with the iron tailings-based multicomponent supplementary cementitious material reach?"
+    answer: ["43.6"]
+    evidence:
+      - {paper_id: W4224466340, kind: figure, location: "Fig. 3"}
+  - id: x18
+    query: "What is the CaO content of the steel slag in the metallurgical slag-based cementitious material for MSWI fly ash?"
+    answer: ["38.96"]
+    evidence:
+      - {paper_id: W4280519327, kind: table, location: "Table 1"}
+  - id: x19
+    query: "What 28-day strength did concrete with the iron tailings, steel slag and desulfurization ash mineral admixture reach?"
+    answer: ["48.7"]
+    evidence:
+      - {paper_id: W4287832583, kind: figure, location: "Fig. 6"}
+  - id: x21
+    query: "What 28-day compressive strengths are listed in the review of agro-industrial wastes as cementitious or alkali-activated binders?"
+    answer: ["77.5"]
+    evidence:
+      - {paper_id: W4328054887, kind: table, location: "Table 1"}
+  - id: x22
+    query: "What is the chemical composition of the BOF slag added to sodium carbonate-activated slag cements?"
+    answer: ["43.4"]
+    evidence:
+      - {paper_id: W4400857371, kind: table, location: "Table 2"}
+  - id: x23
+    query: "What is the SiO2 content of the steel slag in the mechanochemically activated multi-source solid waste micro-powder?"
+    answer: ["42.371"]
+    evidence:
+      - {paper_id: W4411096160, kind: table, text: "42.371"}  # the parse kept no caption
+  - id: x24
+    query: "How much CaCO3 formed per 100 g of steel slag under simulated flue gas in the steam-enhanced direct mineralization study?"
+    answer: ["7.20", "7.2"]
+    evidence:
+      - {paper_id: W4415357877, kind: text, text: "7.20"}
+  - id: x25
+    query: "What 28-day compressive strengths did the ecological building materials containing steel slag reach?"
+    answer: ["45.0"]
+    evidence:
+      - {paper_id: W4415427193, kind: table, location: "Table 4"}
+  - id: x26
+    query: "What 28-day strength did the one-part geopolymer mortar GPS1 reach?"
+    answer: ["12.2"]
+    evidence:
+      - {paper_id: W7116849947, kind: figure, location: "Fig. 5"}
+  - id: x27
+    query: "What is the chemical composition of the steel slag used to replace cement and aggregate in concrete?"
+    answer: ["31.24"]
+    evidence:
+      - {paper_id: W7128959358, kind: table, location: "Table 3"}
+  - id: x28
+    query: "What is the chemical composition of the ferrochrome slag evaluated as a supplementary cementitious material?"
+    answer: ["6.567"]
+    evidence:
+      - {paper_id: W7133210594, kind: table, location: "Table 1"}
+  - id: x29
+    query: "How much calcium did sample 2 contain in the XRF and SEM–EDS phase mapping of industrial steel slags?"
+    answer: ["88.2"]
+    evidence:
+      - {paper_id: W7151555136, kind: text, text: "88.2"}
+  - id: x30
+    query: "What is the CaO content of the stainless-steel slag studied for carbon capture?"
+    answer: ["49.010", "49.01"]
+    evidence:
+      - {paper_id: W7168360315, kind: table, location: "Table 1"}
+  - id: x31
+    query: "What CaO conversion did stainless-steel slag reach in carbon capture under 100% CO2?"
+    answer: ["11.78"]
+    evidence:
+      - {paper_id: W7168360315, kind: table, location: "Table 5"}
+  - id: x32
+    query: "What compressive strength did the control mix with only Portland cement reach in the steel slag and rice husk ash hybrid concrete study?"
+    answer: ["44.8"]
+    evidence:
+      - {paper_id: W7216825142, kind: text, text: "44.8"}
+  - id: x33
+    query: "How much CO2 did steel slag artificial reef blocks take up before extra carbonation curing time?"
+    answer: ["16.7"]
+    evidence:
+      - {paper_id: W4221096775, kind: text, text: "16.7"}

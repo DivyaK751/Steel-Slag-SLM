@@ -14,6 +14,8 @@
 # Searched across the whole index, not one paper. After each run, review the misses: if the top
 # result is a correct answer from another paper, add it here as more evidence.
 depth: 20
+# The papers searched: these test papers plus 100 random parsed papers as distractors
+corpus: retrieval_corpus_tuning.txt
 questions:
   # --- W2014482815: hot-stage carbonation of BOF slag
   - id: h01
