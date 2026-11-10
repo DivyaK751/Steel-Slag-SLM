@@ -340,6 +340,11 @@ def parse_pdfs() -> None:
             "(default: figure_reading.max_run_usd in configs/base.yaml)"
         ),
     )
+    parser.add_argument(
+        "--skip-index",
+        action="store_true",
+        help="don't update the folder's search index after parsing",
+    )
     args = parser.parse_args()
     if args.max_papers is not None and args.max_papers <= 0:
         parser.error("--max-papers must be greater than zero")
@@ -391,8 +396,20 @@ def parse_pdfs() -> None:
         print(f"Gemini cost of figure reading in this run: about ${reader.spent_usd:.2f}")
         if reader.stop_reason is not None:
             print(f"Figure reading stopped early: {reader.stop_reason}; rerun to continue")
+
+    # Indexing right after parsing keeps search in step with the folder just parsed
+    unindexed = 0
+    parsed_folder_id = find_subfolder_id(
+        drive_service, drive_settings.folder_id, parsing_settings.output_folder_name
+    )
+    if not args.skip_index and parsed_folder_id is not None:
+        unindexed = _index_parsed_folder(drive_service, parsed_folder_id)
     if outcomes["failed"]:
         raise SystemExit(f"{outcomes['failed']} paper(s) failed; rerun the same command to retry")
+    if unindexed:
+        raise SystemExit(
+            f"{unindexed} parsed paper(s) could not be indexed; see the warnings above"
+        )
 
 
 def export_parsed() -> None:
@@ -488,6 +505,14 @@ def _connect_to_parsed_folder(folder_name: str | None = None) -> tuple[Any, str]
     return drive_service, parsed_folder_id
 
 
+def _add_parsed_folder_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--parsed-folder",
+        default=None,
+        help="parsed Drive folder whose search index to use (default: the configured one)",
+    )
+
+
 def extract_data() -> None:
     """Extract workbook data values from parsed papers into the BigQuery sheet tables."""
     parser = argparse.ArgumentParser(description=extract_data.__doc__)
@@ -534,7 +559,7 @@ def extract_data() -> None:
 
 
 def build_index() -> None:
-    """Embed every parsed paper and save the search index to the _parsed Drive folder."""
+    """Embed every parsed paper and save the search index to its parsed Drive folder."""
     parser = argparse.ArgumentParser(description=build_index.__doc__)
     parser.add_argument(
         "--max-papers",
@@ -547,27 +572,41 @@ def build_index() -> None:
         action="store_true",
         help="re-chunk and re-embed every paper, for example after a chunking change",
     )
+    _add_parsed_folder_argument(parser)
     args = parser.parse_args()
     if args.max_papers is not None and args.max_papers <= 0:
         parser.error("--max-papers must be greater than zero")
 
     _setup_logging()
-    settings = load_embedding_settings()
-    outcomes = run_build_index(
-        settings,
-        load_pdf_parsing_settings(),
-        *_connect_to_parsed_folder(),
-        Embedder(settings.model),
-        args.max_papers,
-        args.rebuild,
+    unindexed = _index_parsed_folder(
+        *_connect_to_parsed_folder(args.parsed_folder), args.max_papers, args.rebuild
     )
-    print("Summary:", dict(outcomes))
-    # Papers the parser skipped on purpose are expected; anything else missing fails the run
-    unindexed = outcomes["failed"] + outcomes["empty"]
     if unindexed:
         raise SystemExit(
             f"{unindexed} parsed paper(s) could not be indexed; see the warnings above"
         )
+
+
+def _index_parsed_folder(
+    drive_service: Any,
+    parsed_folder_id: str,
+    max_papers: int | None = None,
+    rebuild: bool = False,
+) -> int:
+    """Update the folder's search index, print its summary and return the papers left out."""
+    settings = load_embedding_settings()
+    outcomes = run_build_index(
+        settings,
+        load_pdf_parsing_settings(),
+        drive_service,
+        parsed_folder_id,
+        Embedder(settings.model),
+        max_papers,
+        rebuild,
+    )
+    print("Index summary:", dict(outcomes))
+    # Papers the parser skipped on purpose are expected; anything else missing counts
+    return outcomes["failed"] + outcomes["empty"]
 
 
 def search_index() -> None:
@@ -581,12 +620,13 @@ def search_index() -> None:
         choices=["text", "table", "figure_caption"],
         help="only show this kind of chunk; repeat to allow several",
     )
+    _add_parsed_folder_argument(parser)
     args = parser.parse_args()
 
     _setup_logging()
     settings = load_embedding_settings()
     kinds = cast(set[ChunkKind], set(args.kind)) if args.kind else None
-    drive_service, parsed_folder_id = _connect_to_parsed_folder()
+    drive_service, parsed_folder_id = _connect_to_parsed_folder(args.parsed_folder)
     hits = run_search(
         settings,
         drive_service,
@@ -609,13 +649,15 @@ def search_index() -> None:
 
 def evaluate_retrieval() -> None:
     """Score the saved index against the fixed test set in configs/retrieval_eval.yaml."""
-    argparse.ArgumentParser(description=evaluate_retrieval.__doc__).parse_args()
+    parser = argparse.ArgumentParser(description=evaluate_retrieval.__doc__)
+    _add_parsed_folder_argument(parser)
+    args = parser.parse_args()
     _setup_logging()
     settings = load_embedding_settings()
     report = run_retrieval_eval(
         settings,
         load_retrieval_eval_set(),
-        *_connect_to_parsed_folder(),
+        *_connect_to_parsed_folder(args.parsed_folder),
         Embedder(settings.model),
     )
     print(f"{'question':<10} hit@5 hit@20 rec@5 rec@20    RR ndcg@10")
