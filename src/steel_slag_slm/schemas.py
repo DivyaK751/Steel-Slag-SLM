@@ -172,6 +172,7 @@ class Chunk:
     position: int  # order within the paper, so neighbours can be found
     pages: tuple[int, ...] = ()  # PDF pages the text sits on; () when unknown
     figure_captions: tuple[str, ...] = ()  # captions of the figures this text mentions
+    parse_generation: str = ""  # the parse this chunk came from; "" when it was not recorded
 
 
 @dataclass(frozen=True, slots=True)

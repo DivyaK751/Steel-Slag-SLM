@@ -100,6 +100,32 @@ def test_build_index_adds_only_new_papers_to_an_existing_store(fake_drive, keywo
     assert store.paper_ids == {"W1", "W2"}
 
 
+def test_build_index_replaces_the_chunks_of_a_reparsed_paper(fake_drive, keyword_encoder):
+    entry = _add_paper(fake_drive, "W1", "## A\n\nFree lime.")
+    _write_index(fake_drive, {"W1": {**entry, "parse_generation": "g1"}})
+    run_build_index(_settings(), _parsing(), None, PARSED_FOLDER, keyword_encoder)
+
+    entry = _add_paper(fake_drive, "W1", "## A\n\nSinter fluxing agent.")
+    _write_index(fake_drive, {"W1": {**entry, "parse_generation": "g2"}})
+    outcomes = run_build_index(_settings(), _parsing(), None, PARSED_FOLDER, keyword_encoder)
+
+    assert outcomes["reindexed"] == 1
+    store = embedding_store.load_store(None, PARSED_FOLDER, "model-a", keyword_encoder.dimension)
+    assert [chunk.text for chunk in store.chunks] == ["Sinter fluxing agent."]
+    assert store.paper_generations == {"W1": "g2"}
+
+
+def test_build_index_skips_a_paper_whose_parse_is_unchanged(fake_drive, keyword_encoder):
+    entry = _add_paper(fake_drive, "W1", "## A\n\nFree lime.")
+    _write_index(fake_drive, {"W1": {**entry, "parse_generation": "g1"}})
+    run_build_index(_settings(), _parsing(), None, PARSED_FOLDER, keyword_encoder)
+
+    outcomes = run_build_index(_settings(), _parsing(), None, PARSED_FOLDER, keyword_encoder)
+
+    assert outcomes["already_indexed"] == 1
+    assert "reindexed" not in outcomes
+
+
 def test_build_index_counts_unreadable_and_empty_papers(fake_drive, keyword_encoder):
     _write_index(
         fake_drive,

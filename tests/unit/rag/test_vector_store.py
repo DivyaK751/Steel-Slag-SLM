@@ -46,6 +46,26 @@ def test_index_bytes_round_trip_keeps_results_and_chunks() -> None:
     assert restored.size == 3
 
 
+def test_remove_papers_drops_their_chunks_and_vectors() -> None:
+    store = VectorStore.empty(dimension=2)
+    vectors = np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32)
+    store.add([_chunk("east"), Chunk("W2", "text", "", "north", 0)], vectors)
+
+    store.remove_papers({"W1"})
+
+    assert store.paper_ids == {"W2"}
+    results = store.search(np.array([1.0, 0.0], dtype=np.float32), top_k=2)
+    assert [chunk.text for _, chunk in results] == ["north"]
+
+
+def test_paper_generations_maps_each_paper_to_its_parse() -> None:
+    store = VectorStore.empty(dimension=2)
+    chunk = Chunk("W1", "text", "", "east", 0, parse_generation="g1")
+    store.add([chunk], np.array([[1.0, 0.0]], dtype=np.float32))
+
+    assert store.paper_generations == {"W1": "g1"}
+
+
 def test_search_rejects_a_non_positive_top_k() -> None:
     with pytest.raises(ValueError, match="top_k"):
         _store().search(np.array([1.0, 0.0]), top_k=0)

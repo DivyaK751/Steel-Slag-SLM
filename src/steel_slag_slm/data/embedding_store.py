@@ -82,6 +82,7 @@ def _serialize_chunks_file(model_name: str, store: VectorStore, index_file: str)
                 "position": chunk.position,
                 "pages": list(chunk.pages),
                 "figure_captions": list(chunk.figure_captions),
+                "parse_generation": chunk.parse_generation,
             }
             for chunk in store.chunks
         ],
@@ -98,7 +99,7 @@ def _parse_chunks_file(content: bytes) -> dict[str, Any]:
         raise ValueError("chunks.json is missing its model or index file name")
     if not isinstance(record.get("dimension"), int) or not isinstance(record.get("chunks"), list):
         raise ValueError("chunks.json is missing its dimension or chunks")
-    # Chunks saved before pages were recorded have no "pages" key; they load with no pages
+    # Chunks saved before pages or parse generations were recorded load without them
     record["chunks"] = [
         Chunk(
             paper_id=entry["paper_id"],
@@ -108,6 +109,7 @@ def _parse_chunks_file(content: bytes) -> dict[str, Any]:
             position=entry["position"],
             pages=tuple(entry.get("pages", [])),
             figure_captions=tuple(entry.get("figure_captions", [])),
+            parse_generation=entry.get("parse_generation", ""),
         )
         for entry in record["chunks"]
     ]
