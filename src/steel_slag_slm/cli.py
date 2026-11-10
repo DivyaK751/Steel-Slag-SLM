@@ -651,9 +651,9 @@ def search_index() -> None:
     for rank, hit in enumerate(hits, start=1):
         chunk = hit.chunk
         title = titles.get(chunk.paper_id) or "(title unknown)"
-        pages = f" Â· pages {', '.join(str(page) for page in chunk.pages)}" if chunk.pages else ""
-        print(f"{rank}. [{hit.score:.3f}] {chunk.paper_id} Â· {title}")
-        print(f"   {chunk.kind} Â· {chunk.section}{pages}")
+        pages = f" · pages {', '.join(str(page) for page in chunk.pages)}" if chunk.pages else ""
+        print(f"{rank}. [{hit.score:.3f}] {chunk.paper_id} · {title}")
+        print(f"   {chunk.kind} · {chunk.section}{pages}")
         print(textwrap.fill(chunk.text, width=100, initial_indent="   ", subsequent_indent="   "))
         print()
 
