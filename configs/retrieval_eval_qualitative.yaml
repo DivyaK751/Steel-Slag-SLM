@@ -1,0 +1,166 @@
+# Retrieval test set of questions only the papers can answer.
+#
+# The extraction tables hold values (oxides, strengths, uptakes), so questions about mechanisms,
+# mineral phases, hydration products, observations and the authors' recommendations always reach
+# search. Written answer-first from the parsed text of the 50-paper sample: each answer is a
+# phrase copied from the sentence that states it, and the question is worded differently. A
+# chunk of the paper containing the phrase counts as reaching the answer.
+depth: 20
+# The papers searched: these test papers plus 100 random parsed papers as distractors
+corpus: retrieval_corpus_tuning.txt
+questions:
+  - id: q01
+    query: "What KOH concentration worked best for the BOF slag and fly ash geopolymers made from gold mine tailings?"
+    answer: ["10 and 15 M"]
+    evidence:
+      - {paper_id: W2995159460, kind: text, text: "10 and 15 M"}
+  - id: q02
+    query: "Why was steel slag limited to 20% in the thinner concrete pavement mixture?"
+    answer: ["formation of fiber balls"]
+    evidence:
+      - {paper_id: W3034880657, kind: text, text: "formation of fiber balls"}
+  - id: q03
+    query: "What caused cracking in concrete containing steelmaking slag under repeated loading?"
+    answer: ["contacting of free CaO and moisture"]
+    evidence:
+      - {paper_id: W3035579107, kind: text, text: "contacting of free CaO and moisture"}
+  - id: q04
+    query: "What blend range of high-phosphorus steel slag do the authors recommend for good mechanical performance?"
+    answer: ["recommended as 30e40%"]
+    evidence:
+      - {paper_id: W3130633964, kind: text, text: "recommended as 30e40%"}
+  - id: q05
+    query: "What stages does a carbonated steel slag powder compact go through while curing in seawater?"
+    answer: ["C-S-H gel formation, C-S-H gel decomposition and equilibrium"]
+    evidence:
+      - {paper_id: W4221096775, kind: text, text: "C-S-H gel formation, C-S-H gel decomposition and equilibrium"}
+  - id: q06
+    query: "How do NaOH and sodium silicate affect secondary hydration in the iron tailings-based multicomponent SCM?"
+    answer: ["inhibitory effect on the secondary hydration reaction"]
+    evidence:
+      - {paper_id: W4224466340, kind: text, text: "inhibitory effect on the secondary hydration reaction"}
+  - id: q07
+    query: "Which hydrates formed in the hardened metallurgical slag cementitious material used to stabilize MSWI fly ash?"
+    answer: ["Friedel's salt"]
+    evidence:
+      - {paper_id: W4280519327, kind: text, text: "Friedel's salt"}
+  - id: q08
+    query: "What are the main crystalline phases of the desulfurization ash in the MSWI fly ash stabilization study?"
+    answer: ["calcite, anhydrite, and calcium sulfite"]
+    evidence:
+      - {paper_id: W4280519327, kind: text, text: "calcite, anhydrite, and calcium sulfite"}
+  - id: q09
+    query: "What are the main hydration products of thermally activated red mud cementitious materials?"
+    answer: ["C-S-H, tobermorite"]
+    evidence:
+      - {paper_id: W4323920880, kind: text, text: "C-S-H, tobermorite"}
+  - id: q10
+    query: "How does steel slag improve the mechanical properties of the fly ash–red mud geopolymer?"
+    answer: ["C(N)-A-S-H and C-S-H gels"]
+    evidence:
+      - {paper_id: W4392590272, kind: text, text: "C(N)-A-S-H and C-S-H gels"}
+  - id: q11
+    query: "What crystal phase forms in glass-ceramics made from steel slag?"
+    answer: ["diopside"]
+    evidence:
+      - {paper_id: W4399569225, kind: text, text: "diopside"}
+  - id: q12
+    query: "Why is steel slag harder than blast furnace slag to convert into glass-ceramics?"
+    answer: ["high alkalinity of SS"]
+    evidence:
+      - {paper_id: W4399569225, kind: text, text: "high alkalinity of SS"}
+  - id: q13
+    query: "Why is BOF slag hard to use in conventional cement systems?"
+    answer: ["high free lime content"]
+    evidence:
+      - {paper_id: W4400857371, kind: text, text: "high free lime content"}
+  - id: q14
+    query: "Which carbonate salts form in sodium carbonate-activated slag cements when the pH is below 12?"
+    answer: ["calcite and gaylussite"]
+    evidence:
+      - {paper_id: W4400857371, kind: text, text: "calcite and gaylussite"}
+  - id: q15
+    query: "Why does adding steam make direct CO2 mineralization of steel slag more complete?"
+    answer: ["causing steel slag particle breakage"]
+    evidence:
+      - {paper_id: W4415357877, kind: text, text: "causing steel slag particle breakage"}
+  - id: q16
+    query: "Why did the one-part geopolymer control mix with only GGBS flow the best?"
+    answer: ["smoother particle morphology"]
+    evidence:
+      - {paper_id: W7116849947, kind: text, text: "smoother particle morphology"}
+  - id: q17
+    query: "Which gels make up the hardened metakaolin geopolymer grout that uses steel slag as a calcium source?"
+    answer: ["N-A-S-H"]
+    evidence:
+      - {paper_id: W7125247953, kind: text, text: "N-A-S-H"}
+  - id: q18
+    query: "Why did concrete lose strength when diutan gum and ground iron and steel slag replaced cement?"
+    answer: ["reduction of active clinker"]
+    evidence:
+      - {paper_id: W7140580295, kind: text, text: "reduction of active clinker"}
+  - id: q19
+    query: "What replacement range of diutan gum and ground iron and steel slag do the authors recommend?"
+    answer: ["between 10 - 20%"]
+    evidence:
+      - {paper_id: W7140580295, kind: text, text: "between 10 - 20%"}
+  - id: q20
+    query: "How do SiC and potassium silicate under microwave heating strengthen carbonated steel slag?"
+    answer: ["denser distribution of carbonation products"]
+    evidence:
+      - {paper_id: W7165632997, kind: text, text: "denser distribution of carbonation products"}
+  - id: q21
+    query: "What makes the reuse potential of stainless-steel slag different from that of BOF slag?"
+    answer: ["Cr- and Ni-containing species"]
+    evidence:
+      - {paper_id: W7168360315, kind: text, text: "Cr- and Ni-containing species"}
+  - id: q22
+    query: "Which crystalline phases were found in the steel slags carbonated for 3D printed cement composites?"
+    answer: ["larnite, alite, and the RO phase"]
+    evidence:
+      - {paper_id: W7170093904, kind: text, text: "larnite, alite, and the RO phase"}
+  - id: q23
+    query: "How does fracture growth during steam aging differ between low and high free lime BOF slag?"
+    answer: ["formation of new fracture surfaces occurs during steam aging"]
+    evidence:
+      - {paper_id: W7203753341, kind: text, text: "formation of new fracture surfaces occurs during steam aging"}
+  - id: q24
+    query: "Which steel slag and rice husk ash mix was best, and how much did it cut CO2 emissions?"
+    answer: ["42.5% reduction in CO₂ emissions"]
+    evidence:
+      - {paper_id: W7216825142, kind: text, text: "42.5% reduction in CO₂ emissions"}
+  - id: q25
+    query: "Which mineral phases does steel slag contain, according to the heat-cured steel slag–GGBS study?"
+    answer: ["RO phase (CaO-MgO-MnO-FeO solid solution)"]
+    evidence:
+      - {paper_id: W2789941819, kind: text, text: "RO phase (CaO-MgO-MnO-FeO solid solution)"}
+  - id: q26
+    query: "Which fiber gave the best ettringite-based composite made from ladle slag?"
+    answer: ["polypropylene micro fiber"]
+    evidence:
+      - {paper_id: W2902877286, kind: text, text: "polypropylene micro fiber"}
+  - id: q27
+    query: "Why does only a small part of tungsten mining waste react with the alkaline activator?"
+    answer: ["crystalline mineralogical composition of the TMWM"]
+    evidence:
+      - {paper_id: W3016528323, kind: text, text: "crystalline mineralogical composition of the TMWM"}
+  - id: q28
+    query: "How can slowly cooled EAF slag be made reactive enough to use as a supplementary cementitious material?"
+    answer: ["water granulation"]
+    evidence:
+      - {paper_id: W4390225930, kind: text, text: "water granulation"}
+  - id: q29
+    query: "What do the hydrated phases show about NaOH concentration in alkali-activated binders of EAF slag and fly ash?"
+    answer: ["significant impact on the hydration process"]
+    evidence:
+      - {paper_id: W4388050592, kind: text, text: "significant impact on the hydration process"}
+  - id: q30
+    query: "How did the hydration products of the neutral-activated steel slag powder composite compare with cement after 28 days?"
+    answer: ["no incompletely hydrated particles"]
+    evidence:
+      - {paper_id: W4297936954, kind: text, text: "no incompletely hydrated particles"}
+  - id: q31
+    query: "Why is the loss on ignition higher for Slag R than for Slag A?"
+    answer: ["higher amount of carbonates"]
+    evidence:
+      - {paper_id: W3126866315, kind: text, text: "higher amount of carbonates"}
