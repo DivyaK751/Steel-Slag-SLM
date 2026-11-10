@@ -40,6 +40,25 @@ def test_match_needs_the_paper_kind_and_text_ignoring_case_and_spacing():
     assert not matches(_chunk("51.9 MPa after 28 days", kind="table"), STRENGTH)
 
 
+def test_a_location_matches_the_chunk_whose_caption_carries_that_label():
+    table_4 = EvidenceSpan(paper_id="W1", kind="table", location="Table 4")
+    assert matches(_chunk("Table 4. Free lime content\n| CaO | 10.6 |", kind="table"), table_4)
+    assert matches(_chunk("| Tab. 4 Free lime | CaO |", kind="table"), table_4)
+    assert not matches(_chunk("Table 14. Mix design\n| w/b | 0.4 |", kind="table"), table_4)
+    assert not matches(_chunk("Table 3. Oxides\n| Table 4 below |", kind="table"), table_4)
+
+
+def test_a_figure_location_matches_its_number_even_with_a_sub_panel():
+    fig_3 = EvidenceSpan(paper_id="W1", kind="figure", location="Fig. 3")
+    assert matches(_chunk("Figure 3a. Strength over time\nValues read...", kind="figure"), fig_3)
+    assert not matches(_chunk("Fig. 30. Porosity", kind="figure"), fig_3)
+
+
+def test_evidence_needs_text_or_a_location():
+    with pytest.raises(ValueError, match="text or a location"):
+        EvidenceSpan(paper_id="W1", kind="table")
+
+
 def test_answer_at_rank_7_misses_top_5_but_is_found_in_top_20():
     question = _question(STRENGTH)
     ranked = _ranked_with_answer_at(7)

@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 import yaml
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import BaseModel, Field, SecretStr, model_validator
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CONFIGS_DIR = PROJECT_ROOT / "configs"
@@ -95,12 +95,20 @@ class EmbeddingSettings(BaseModel):
 
 
 class EvidenceSpan(BaseModel):
-    """A passage that answers a test question, identified by text copied from the paper."""
+    """A passage that answers a test question, identified by copied text or by its label."""
 
     paper_id: str
     kind: Literal["text", "table", "figure"]
-    text: str  # matched inside chunk text, ignoring case and spacing
+    text: str = ""  # matched inside chunk text, ignoring case and spacing
+    # A table or figure label such as "Table 4" or "Fig. 3"; matched against the chunk's caption
+    location: str = ""
     grade: Literal[1, 2] = 2  # 2 answers the question directly, 1 answers it in part
+
+    @model_validator(mode="after")
+    def _needs_text_or_location(self) -> "EvidenceSpan":
+        if not self.text.strip() and not self.location.strip():
+            raise ValueError("evidence needs text or a location")
+        return self
 
 
 class EvalQuestion(BaseModel):

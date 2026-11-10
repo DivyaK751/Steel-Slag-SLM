@@ -1,10 +1,11 @@
 """Score a ranked list of chunks against the evidence a test question is known to have.
 
-Evidence is matched by text rather than by chunk ID, so the labels still work after the index
-is rebuilt with different chunk boundaries.
+Evidence is matched by text or by table/figure label rather than by chunk ID, so the labels
+still work after the index is rebuilt with different chunk boundaries.
 """
 
 import math
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -29,13 +30,29 @@ def _normalize(text: str) -> str:
     return " ".join(text.split()).lower()
 
 
+_LABEL = re.compile(r"^\s*(table|tab|figure|fig)\.?\s*(\d+)", re.IGNORECASE)
+
+
+def _has_label(chunk_text: str, location: str) -> bool:
+    """True when the chunk's caption starts with the location's label, e.g. "Table 4"."""
+    wanted = _LABEL.match(location)
+    if wanted is None:
+        return False
+    is_table = wanted.group(1).lower().startswith("tab")
+    word = r"(?:table|tab\.?)" if is_table else r"(?:figure|fig\.?)"
+    # Some tables start with their caption inside the first row, so a leading "|" is allowed
+    label = re.compile(rf"^[\s|]*{word}\s*{wanted.group(2)}(?!\d)", re.IGNORECASE)
+    return label.match(chunk_text) is not None
+
+
 def matches(chunk: Chunk, evidence: EvidenceSpan) -> bool:
-    """True when the chunk is from the evidence's paper and kind and contains its text."""
-    return (
-        chunk.paper_id == evidence.paper_id
-        and chunk.kind == evidence.kind
-        and _normalize(evidence.text) in _normalize(chunk.text)
-    )
+    """True when the chunk is from the evidence's paper and kind, and carries its label (when
+    given) and contains its text (when given)."""
+    if chunk.paper_id != evidence.paper_id or chunk.kind != evidence.kind:
+        return False
+    if evidence.location and not _has_label(chunk.text, evidence.location):
+        return False
+    return _normalize(evidence.text) in _normalize(chunk.text)
 
 
 def chunk_grade(chunk: Chunk, question: EvalQuestion) -> int:

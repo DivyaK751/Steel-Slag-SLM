@@ -648,15 +648,24 @@ def search_index() -> None:
 
 
 def evaluate_retrieval() -> None:
-    """Score the saved index against the fixed test set in configs/retrieval_eval.yaml."""
+    """Score the saved index against a fixed test set (default configs/retrieval_eval.yaml)."""
     parser = argparse.ArgumentParser(description=evaluate_retrieval.__doc__)
+    parser.add_argument(
+        "--eval-set",
+        type=Path,
+        default=None,
+        help="test set YAML, e.g. configs/retrieval_eval_human50.yaml",
+    )
     _add_parsed_folder_argument(parser)
     args = parser.parse_args()
     _setup_logging()
     settings = load_embedding_settings()
+    eval_set = (
+        load_retrieval_eval_set(args.eval_set) if args.eval_set else load_retrieval_eval_set()
+    )
     report = run_retrieval_eval(
         settings,
-        load_retrieval_eval_set(),
+        eval_set,
         *_connect_to_parsed_folder(args.parsed_folder),
         Embedder(settings.model),
     )
@@ -674,9 +683,8 @@ def evaluate_retrieval() -> None:
     )
     for question_id, stale in report.missing.items():
         for evidence in stale:
-            print(
-                f"STALE LABEL {question_id}: {evidence.paper_id} {evidence.kind} {evidence.text!r}"
-            )
+            label = evidence.location or evidence.text
+            print(f"STALE LABEL {question_id}: {evidence.paper_id} {evidence.kind} {label!r}")
 
 
 def extract_figures() -> None:
