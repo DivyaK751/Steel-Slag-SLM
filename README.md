@@ -226,15 +226,22 @@ Each parsed paper is split into short passages: paragraphs, tables and figures. 
 holds its caption and Gemini's reading of it (summary, plus the plotted values, XRD phases or
 process steps), or just the caption until the figure has been read. An
 embedding model turns each passage into numbers that capture its meaning, and the result is saved
-as a search index in Drive (`_parsed/_embeddings/`). A search finds the passages closest in meaning
-to the question.
+as a search index in Drive (`_parsed/_embeddings/`).
+
+A search runs in two stages. First, meaning match and keyword (BM25) match find the 5 papers
+most likely to hold the answer. Then a reranker model reads the question with every passage of
+those papers, each with its paper's title, and orders them. Tables also carry their paper's title
+in the index, since a table on its own is mostly numbers.
 
 ```bash
 uv run build-index                      # add new and re-parsed papers to the index
 uv run build-index --rebuild            # rebuild everything, e.g. after changing how papers are split
 uv run search-index "free lime volume stability"
-uv run evaluate-retrieval               # score search quality on a fixed test
 uv run build-index --parsed-folder _parsed_approved   # use another parsed folder (any command)
+
+# Score search on a fixed test set, over that set's own papers (run on a GPU, e.g. Colab)
+uv run evaluate-retrieval --eval-set configs/retrieval_eval_heldout.yaml \
+    --papers-dir papers/ --titles titles.json
 ```
 
 - Each parsed folder has its own index in its `_embeddings/` subfolder.
@@ -244,8 +251,13 @@ uv run build-index --parsed-folder _parsed_approved   # use another parsed folde
 - `parse-pdfs` updates the search index of the folder it parsed into once parsing is done, so
   newly parsed and re-parsed papers become searchable without a separate step. Pass
   `--skip-index` to leave the index alone.
-- `evaluate-retrieval` asks 22 fixed questions about one paper, whose answers were found by
-  reading the paper, and reports how high the right passage ranks.
+- The reranker is slow on a CPU (it scores about 400 passages per question); on a T4 GPU a
+  search takes about 7 seconds.
+- `evaluate-retrieval` asks a fixed set of questions with known answers and reports how often
+  the answer is in the top 5, 10 and 20 results. With `--papers-dir` it searches only the papers
+  the set lists (`corpus:` in its YAML), from local `<paper id>.json` files; without it, it
+  searches the saved index. The test sets and their latest scores are in
+  [docs/retrieval_experiments.md](docs/retrieval_experiments.md).
 - Settings are in the `embedding:` section of `configs/base.yaml`. Design notes are in
   [docs/adr/003-semantic-search-index.md](docs/adr/003-semantic-search-index.md).
 
