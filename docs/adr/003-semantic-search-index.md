@@ -19,8 +19,13 @@ machine's local files.
   - `index-<unique id>.faiss` holds the FAISS vectors, row for row with `chunks.json`.
   - Each save writes a new index file, then `chunks.json`, then deletes the older index files.
     A run that stops midway leaves the store pointing at a complete earlier index.
-- Index the text and tables the parser produced. Figures enter the index through their captions
-  (`Fig. N ...`), and each caption is attached to the text chunks that mention that figure.
+- Index the text, tables and figures the parser produced. Each figure is one chunk: its caption,
+  then Gemini's reading (summary, plus the plotted values marked approximate, the XRD phases or
+  the process steps). A figure not read yet is its caption alone. A long reading is split by
+  rows, each piece repeating the caption, summary and column header. The figure chunk sits where
+  its caption block is in the text; figures whose caption is not in the text flow come after the
+  paper's other chunks. Each caption is also attached to the text chunks that mention that
+  figure.
 - Chunk from the paper's content blocks when present, using the labels: `caption` marks figure
   captions, and page furniture (`page_header`, `page_footer`) is skipped. Papers without blocks
   fall back to their Markdown.
@@ -38,10 +43,21 @@ machine's local files.
   `table_max_chars`; every piece repeats the table caption and header.
 - Drop image placeholders and lines that repeat three or more times (running headers and footers).
 - Embed the section heading, the chunk's text and its linked figure captions. Queries get the
-  model's query prefix.
+  model's query prefix. Each chunk carries its paper's title (from the PDFs' Drive
+  descriptions); table chunks are embedded and keyword-indexed with it in front, because a table
+  is numbers and abbreviations that otherwise share almost no words with a question.
 - Use `BAAI/bge-small-en-v1.5` through sentence-transformers. It runs on a CPU and needs no paid
   API. Vectors are unit length, so the FAISS inner-product index gives cosine similarity.
 - Refuse to search an index built with a different model, because its vectors are not comparable.
+- Search in two stages (2026-11-10):
+  1. Rank chunks by embedding similarity and by BM25 keyword score (top 100 each), fuse the two
+     rankings by reciprocal rank fusion, and keep the papers of the best chunks (`top_papers`, 5).
+  2. Have the `BAAI/bge-reranker-v2-m3` cross-encoder read the question with every chunk of those
+     papers, each preceded by its paper's title, and return the chunks in its order.
+
+  Stage 1 only has to find the right papers, which it does well; the reranker, which reads
+  question and passage together, picks the passage inside them. The alternatives tried and the
+  scores behind this choice are in [retrieval_experiments.md](../retrieval_experiments.md).
 
 ## Consequences
 
@@ -56,7 +72,17 @@ machine's local files.
   `build-index --rebuild` re-chunks and re-embeds every paper. `parse-pdfs` updates the index
   of the folder it parsed into once parsing is done, on a laptop or in the workflow, so new
   and re-parsed papers are indexed automatically.
-- Retrieval quality is measured with a fixed test set (`configs/retrieval_eval.yaml`), and
-  `evaluate-retrieval` reports Hit@K, Recall@5/20, MRR and nDCG@10. The set is written
-  answer-first: 22 questions whose answers were taken from one paper's text (W2068066265) before
-  any search, each stated in exactly one place and searched only within that paper. On 2026-10-24 the answer ranked first for 18 of 22 (Hit@5 0.95, MRR 0.88). The pages on all 22 answer chunks were checked against the PDF and matched.
+- The reranker scores every chunk of 5 papers (about 400 per question): about 7 seconds per
+  question on a T4 GPU, and much slower on a CPU. Where the assistant runs it is still open.
+- An index built before titles were added gives the reranker no titles; run
+  `build-index --rebuild` once.
+- Retrieval quality is measured with fixed test sets, each searched over a fixed list of papers
+  (its test papers plus 100 random parsed papers) so scores stay comparable as the corpus grows:
+  `configs/retrieval_eval_human50.yaml` (68 questions from the human-extracted workbook, used to
+  choose the setup), `retrieval_eval_heldout.yaml` (32 questions from other workbook facts) and
+  `retrieval_eval_qualitative.yaml` (31 mechanism and phase questions the extraction tables cannot
+  answer). `evaluate-retrieval --eval-set … --papers-dir … --titles …` indexes the listed papers in
+  memory and reports paper@5 and answer@5/10/20. On 2026-11-10 the answer was in the top 5 for
+  0.78, 0.62 and 1.00 of them; the held-out number is the one to expect for new value questions.
+- The first test set (`configs/retrieval_eval.yaml`, 22 questions about one paper, searched
+  within that paper) is kept: on 2026-10-24 it scored Hit@5 0.95 and MRR 0.88.

@@ -24,6 +24,7 @@ def run_build_index(
     encoder: TextEncoder,
     max_papers: int | None = None,
     rebuild: bool = False,
+    titles: Mapping[str, str] | None = None,
 ) -> Counter[str]:
     """Index each parsed paper that is not in the saved store yet, or was parsed again since.
 
@@ -31,8 +32,9 @@ def run_build_index(
     without re-embedding the others. A paper whose parse generation changed has its old chunks
     replaced. Chunking changes do not trigger this, so pass rebuild=True to re-chunk and
     re-embed every paper from scratch. A paper whose parsed.json is unreadable is left out and
-    retried on the next run.
+    retried on the next run. Each chunk carries its paper's title from titles, when given.
     """
+    titles = titles or {}
     if max_papers is not None and max_papers <= 0:
         raise ValueError("max_papers must be greater than zero")
 
@@ -87,7 +89,12 @@ def run_build_index(
         generation = str(indexable_papers[paper_id].get("parse_generation", ""))
         chunks = [
             replace(chunk, parse_generation=generation)
-            for chunk in build_chunks(paper, settings.chunk_max_chars, settings.table_max_chars)
+            for chunk in build_chunks(
+                paper,
+                settings.chunk_max_chars,
+                settings.table_max_chars,
+                titles.get(paper_id, ""),
+            )
         ]
         if not chunks:
             logger.warning("Not indexed, %s produced no chunks", paper_id)

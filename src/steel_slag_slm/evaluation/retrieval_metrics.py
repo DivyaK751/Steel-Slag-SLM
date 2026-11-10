@@ -1,10 +1,11 @@
 """Score a ranked list of chunks against the evidence a test question is known to have.
 
-Evidence is matched by text rather than by chunk ID, so the labels still work after the index
-is rebuilt with different chunk boundaries.
+Evidence is matched by text or by table/figure label rather than by chunk ID, so the labels
+still work after the index is rebuilt with different chunk boundaries.
 """
 
 import math
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -23,18 +24,55 @@ class QuestionScores:
     recall_at_20: float
     reciprocal_rank: float
     ndcg_at_10: float
+    paper_hit_at_5: float = 0.0  # a top-5 chunk comes from an evidence paper
+    answer_hit_at_5: float = 0.0  # a top-5 chunk from that paper contains the answer
+    answer_hit_at_10: float = 0.0
+    answer_hit_at_20: float = 0.0
 
 
 def _normalize(text: str) -> str:
     return " ".join(text.split()).lower()
 
 
+_LABEL = re.compile(r"^\s*(table|tab|figure|fig)\.?\s*(\d+)", re.IGNORECASE)
+
+
+def _has_label(chunk_text: str, location: str) -> bool:
+    """True when the chunk's caption starts with the location's label, e.g. "Table 4"."""
+    wanted = _LABEL.match(location)
+    if wanted is None:
+        return False
+    is_table = wanted.group(1).lower().startswith("tab")
+    word = r"(?:table|tab\.?)" if is_table else r"(?:figure|fig\.?)"
+    # Some tables start with their caption inside the first row, so a leading "|" is allowed
+    label = re.compile(rf"^[\s|]*{word}\s*{wanted.group(2)}(?!\d)", re.IGNORECASE)
+    return label.match(chunk_text) is not None
+
+
 def matches(chunk: Chunk, evidence: EvidenceSpan) -> bool:
-    """True when the chunk is from the evidence's paper and kind and contains its text."""
-    return (
-        chunk.paper_id == evidence.paper_id
-        and chunk.kind == evidence.kind
-        and _normalize(evidence.text) in _normalize(chunk.text)
+    """True when the chunk is from the evidence's paper and kind, and carries its label (when
+    given) and contains its text (when given)."""
+    if chunk.paper_id != evidence.paper_id or chunk.kind != evidence.kind:
+        return False
+    if evidence.location and not _has_label(chunk.text, evidence.location):
+        return False
+    return _normalize(evidence.text) in _normalize(chunk.text)
+
+
+def contains_answer(chunk: Chunk, question: EvalQuestion) -> bool:
+    """True when the chunk is from an evidence paper and contains the answer.
+
+    A number counts only as a whole number, so "10.6" does not match "110.6" or "10.65".
+    Questions without an answer fall back to their evidence.
+    """
+    if not question.answer:
+        return any(matches(chunk, evidence) for evidence in question.evidence)
+    if chunk.paper_id not in {evidence.paper_id for evidence in question.evidence}:
+        return False
+    text = " ".join(chunk.text.split())
+    return any(
+        re.search(rf"(?<![\d.,]){re.escape(value)}(?!\d)", text, re.IGNORECASE)
+        for value in question.answer
     )
 
 
@@ -99,6 +137,7 @@ def ndcg_at_k(ranked: Sequence[Chunk], question: EvalQuestion, k: int) -> float:
 
 def score_question(ranked: Sequence[Chunk], question: EvalQuestion) -> QuestionScores:
     """All metrics for one question, from its ranked results (best first)."""
+    papers = {evidence.paper_id for evidence in question.evidence}
     return QuestionScores(
         question_id=question.id,
         hit_at_5=hit_at_k(ranked, question, 5),
@@ -107,6 +146,10 @@ def score_question(ranked: Sequence[Chunk], question: EvalQuestion) -> QuestionS
         recall_at_20=recall_at_k(ranked, question, 20),
         reciprocal_rank=reciprocal_rank(ranked, question),
         ndcg_at_10=ndcg_at_k(ranked, question, 10),
+        paper_hit_at_5=1.0 if any(chunk.paper_id in papers for chunk in ranked[:5]) else 0.0,
+        answer_hit_at_5=1.0 if any(contains_answer(c, question) for c in ranked[:5]) else 0.0,
+        answer_hit_at_10=1.0 if any(contains_answer(c, question) for c in ranked[:10]) else 0.0,
+        answer_hit_at_20=1.0 if any(contains_answer(c, question) for c in ranked[:20]) else 0.0,
     )
 
 
@@ -119,6 +162,10 @@ def mean_scores(scores: Sequence[QuestionScores]) -> dict[str, float]:
         "recall_at_20",
         "reciprocal_rank",
         "ndcg_at_10",
+        "paper_hit_at_5",
+        "answer_hit_at_5",
+        "answer_hit_at_10",
+        "answer_hit_at_20",
     ]
     if not scores:
         return dict.fromkeys(names, 0.0)

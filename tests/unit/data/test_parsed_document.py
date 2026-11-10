@@ -62,6 +62,36 @@ def test_parse_parsed_json_gives_no_content_blocks_for_older_papers() -> None:
     assert parse_parsed_json(_record()).content_blocks == ()
 
 
+READING = {"figure_type": "data_plot", "summary": "Strength over time.", "rows": [["7", "30"]]}
+
+
+def _image(**overrides: object) -> dict[str, object]:
+    image: dict[str, object] = {
+        "figure_number": "3",
+        "caption": "Fig. 3. Strength",
+        "placements": [{"page_number": 4, "bbox": [1, 2, 3, 4]}],
+        "reading": READING,
+    }
+    image.update(overrides)
+    return image
+
+
+def test_parse_parsed_json_reads_figures_with_their_pages_and_readings() -> None:
+    (figure,) = parse_parsed_json(_record(images=[_image()])).figures
+    assert (figure.figure_number, figure.caption, figure.pages) == ("3", "Fig. 3. Strength", (4,))
+    assert figure.reading is not None and figure.reading.rows == [["7", "30"]]
+
+
+def test_parse_parsed_json_keeps_a_figure_whose_reading_is_unreadable_without_it() -> None:
+    (figure,) = parse_parsed_json(_record(images=[_image(reading={"rows": "bad"})])).figures
+    assert (figure.caption, figure.reading) == ("Fig. 3. Strength", None)
+
+
+def test_parse_parsed_json_skips_old_embedded_images_with_nothing_to_search() -> None:
+    legacy = {"xref": 7, "file_name": "img.png", "placements": [{"page_number": 1}]}
+    assert parse_parsed_json(_record(images=[legacy])).figures == ()
+
+
 def test_parse_parsed_json_rejects_a_placement_without_a_page_number() -> None:
     bad = dict(BLOCK, placements=[{"bbox": [1, 2, 3, 4]}])
     with pytest.raises(ValueError, match="page number"):

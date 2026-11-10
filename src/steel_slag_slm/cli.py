@@ -2,6 +2,7 @@
 
 import argparse
 import asyncio
+import json
 import logging
 import os
 import subprocess
@@ -19,6 +20,7 @@ from steel_slag_slm.agents.figure_reader import build_figure_reader_agent
 from steel_slag_slm.agents.relevance_screener import build_screener_agent
 from steel_slag_slm.agents.runner import build_runner
 from steel_slag_slm.config import (
+    RETRIEVAL_EVAL_PATH,
     ScreeningSettings,
     Settings,
     load_abstract_extraction_settings,
@@ -40,18 +42,22 @@ from steel_slag_slm.data.drive_storage import (
     find_subfolder_id,
     list_paper_titles,
 )
+from steel_slag_slm.data.embedding_store import load_store
 from steel_slag_slm.data.extraction_export import export_workbook
 from steel_slag_slm.data.extraction_tables import ensure_extraction_tables
 from steel_slag_slm.data.figure_detection import build_figure_converter
 from steel_slag_slm.data.openalex import OpenAlexClient
 from steel_slag_slm.data.paper_registry import build_bigquery_client
 from steel_slag_slm.evaluation.figure_checks import total_checks
-from steel_slag_slm.evaluation.retrieval_metrics import mean_scores
 from steel_slag_slm.exceptions import PapersNotFoundError
 from steel_slag_slm.llm.prompts import PromptTemplate, load_prompt
 from steel_slag_slm.pipelines.background_figure_reader import BackgroundFigureReader
 from steel_slag_slm.pipelines.build_index import run_build_index
-from steel_slag_slm.pipelines.evaluate_retrieval import run_retrieval_eval
+from steel_slag_slm.pipelines.evaluate_retrieval import (
+    format_retrieval_report,
+    run_corpus_eval,
+    run_retrieval_eval,
+)
 from steel_slag_slm.pipelines.evaluate_screening import run_evaluation
 from steel_slag_slm.pipelines.export_parsed import run_export_parsed
 from steel_slag_slm.pipelines.extract_data import run_data_extraction
@@ -69,6 +75,7 @@ from steel_slag_slm.pipelines.screen_papers import run_screening
 from steel_slag_slm.pipelines.search_index import run_search
 from steel_slag_slm.pipelines.sync_registry import run_registry_sync
 from steel_slag_slm.rag.embeddings import Embedder
+from steel_slag_slm.rag.retrieval import CrossEncoderScorer, TwoStageRetriever
 from steel_slag_slm.schemas import ChunkKind
 
 logger = logging.getLogger(__name__)
@@ -595,6 +602,8 @@ def _index_parsed_folder(
 ) -> int:
     """Update the folder's search index, print its summary and return the papers left out."""
     settings = load_embedding_settings()
+    # Titles come from the PDFs' Drive descriptions; tables and the reranker need them
+    titles = list_paper_titles(drive_service, load_drive_connection_settings().folder_id)
     outcomes = run_build_index(
         settings,
         load_pdf_parsing_settings(),
@@ -603,6 +612,7 @@ def _index_parsed_folder(
         Embedder(settings.model),
         max_papers,
         rebuild,
+        titles,
     )
     print("Index summary:", dict(outcomes))
     # Papers the parser skipped on purpose are expected; anything else missing counts
@@ -617,7 +627,7 @@ def search_index() -> None:
     parser.add_argument(
         "--kind",
         action="append",
-        choices=["text", "table", "figure_caption"],
+        choices=["text", "table", "figure"],
         help="only show this kind of chunk; repeat to allow several",
     )
     _add_parsed_folder_argument(parser)
@@ -632,6 +642,7 @@ def search_index() -> None:
         drive_service,
         parsed_folder_id,
         Embedder(settings.model),
+        CrossEncoderScorer(settings.reranker),
         args.query,
         args.top_k,
         kinds,
@@ -640,43 +651,58 @@ def search_index() -> None:
     for rank, hit in enumerate(hits, start=1):
         chunk = hit.chunk
         title = titles.get(chunk.paper_id) or "(title unknown)"
-        pages = f" · pages {', '.join(str(page) for page in chunk.pages)}" if chunk.pages else ""
-        print(f"{rank}. [{hit.score:.3f}] {chunk.paper_id} · {title}")
-        print(f"   {chunk.kind} · {chunk.section}{pages}")
+        pages = f" Â· pages {', '.join(str(page) for page in chunk.pages)}" if chunk.pages else ""
+        print(f"{rank}. [{hit.score:.3f}] {chunk.paper_id} Â· {title}")
+        print(f"   {chunk.kind} Â· {chunk.section}{pages}")
         print(textwrap.fill(chunk.text, width=100, initial_indent="   ", subsequent_indent="   "))
         print()
 
 
 def evaluate_retrieval() -> None:
-    """Score the saved index against the fixed test set in configs/retrieval_eval.yaml."""
+    """Score retrieval against a fixed test set (default configs/retrieval_eval.yaml).
+
+    With --papers-dir the test set's own papers are indexed in memory from local parsed.json
+    files; otherwise the parsed folder's saved index in Drive is searched.
+    """
     parser = argparse.ArgumentParser(description=evaluate_retrieval.__doc__)
+    parser.add_argument(
+        "--eval-set",
+        type=Path,
+        default=RETRIEVAL_EVAL_PATH,
+        help="test set YAML, e.g. configs/retrieval_eval_heldout.yaml",
+    )
+    parser.add_argument(
+        "--papers-dir",
+        type=Path,
+        default=None,
+        help="folder of <paper id>.json files; search only the papers the test set lists",
+    )
+    parser.add_argument(
+        "--titles",
+        type=Path,
+        default=None,
+        help="JSON file mapping paper IDs to titles, used with --papers-dir",
+    )
     _add_parsed_folder_argument(parser)
     args = parser.parse_args()
     _setup_logging()
     settings = load_embedding_settings()
-    report = run_retrieval_eval(
-        settings,
-        load_retrieval_eval_set(),
-        *_connect_to_parsed_folder(args.parsed_folder),
-        Embedder(settings.model),
-    )
-    print(f"{'question':<10} hit@5 hit@20 rec@5 rec@20    RR ndcg@10")
-    for s in report.scores:
-        print(
-            f"{s.question_id:<10} {s.hit_at_5:5.0f} {s.hit_at_20:6.0f} {s.recall_at_5:5.2f} "
-            f"{s.recall_at_20:6.2f} {s.reciprocal_rank:5.2f} {s.ndcg_at_10:7.2f}"
+    encoder = Embedder(settings.model)
+    scorer = CrossEncoderScorer(settings.reranker)
+    if args.papers_dir is not None:
+        titles = json.loads(args.titles.read_text(encoding="utf-8")) if args.titles else {}
+        eval_set, report = run_corpus_eval(
+            args.eval_set, args.papers_dir, titles, settings, encoder, scorer
         )
-    means = mean_scores(report.scores)
-    print(
-        f"{'MEAN':<10} {means['hit_at_5']:5.2f} {means['hit_at_20']:6.2f} "
-        f"{means['recall_at_5']:5.2f} {means['recall_at_20']:6.2f} "
-        f"{means['reciprocal_rank']:5.2f} {means['ndcg_at_10']:7.2f}"
-    )
-    for question_id, stale in report.missing.items():
-        for evidence in stale:
-            print(
-                f"STALE LABEL {question_id}: {evidence.paper_id} {evidence.kind} {evidence.text!r}"
-            )
+    else:
+        eval_set = load_retrieval_eval_set(args.eval_set)
+        drive_service, parsed_folder_id = _connect_to_parsed_folder(args.parsed_folder)
+        store = load_store(drive_service, parsed_folder_id, settings.model, encoder.dimension)
+        retriever = TwoStageRetriever(
+            store, encoder, scorer, settings.query_prefix, settings.top_papers, settings.candidates
+        )
+        report = run_retrieval_eval(eval_set, retriever, store)
+    print(format_retrieval_report(eval_set, report))
 
 
 def extract_figures() -> None:

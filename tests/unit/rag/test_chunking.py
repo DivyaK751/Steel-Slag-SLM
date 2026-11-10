@@ -3,11 +3,23 @@ import pytest
 from steel_slag_slm.rag.chunking import (
     build_chunks,
     clean_lines,
+    figure_texts,
     pack_paragraphs,
     passage_for_embedding,
+    passage_for_reranking,
     split_table,
 )
-from steel_slag_slm.schemas import Chunk, ContentPlacement, ParsedContentBlock, ParsedPaper
+from steel_slag_slm.schemas import (
+    Chunk,
+    ContentPlacement,
+    FigureReading,
+    PaperFigure,
+    ParsedContentBlock,
+    ParsedPaper,
+    ProcessFlow,
+    ProcessStep,
+    TableColumn,
+)
 
 MARKDOWN = """Journal header line
 ## Introduction
@@ -67,9 +79,9 @@ def test_build_chunks_keeps_tables_whole_and_in_their_section() -> None:
     assert table.section == "Results"
 
 
-def test_build_chunks_marks_figure_captions() -> None:
+def test_markdown_captions_become_caption_only_figure_chunks() -> None:
     chunks = build_chunks(_paper(), max_chars=800, table_max_chars=1500)
-    (caption,) = [chunk for chunk in chunks if chunk.kind == "figure_caption"]
+    (caption,) = [chunk for chunk in chunks if chunk.kind == "figure"]
     assert caption.text == "Fig. 1. Process outline"
     assert caption.section == "Results"
 
@@ -77,7 +89,7 @@ def test_build_chunks_marks_figure_captions() -> None:
 def test_build_chunks_numbers_positions_in_reading_order() -> None:
     chunks = build_chunks(_paper(), max_chars=800, table_max_chars=1500)
     assert [chunk.position for chunk in chunks] == list(range(len(chunks)))
-    assert [chunk.kind for chunk in chunks][-2:] == ["table", "figure_caption"]
+    assert [chunk.kind for chunk in chunks][-2:] == ["table", "figure"]
 
 
 def test_build_chunks_keeps_text_within_the_size_limit() -> None:
@@ -116,6 +128,14 @@ def test_split_table_repeats_caption_and_header_in_every_piece() -> None:
 
 def test_split_table_returns_short_tables_unchanged() -> None:
     assert split_table(TABLE, max_chars=1000) == [TABLE]
+
+
+def test_tables_carry_the_paper_title_for_search_and_every_chunk_does_for_reranking() -> None:
+    table = Chunk("W1", "table", "2. Materials", "| CaO | 10.6 |", 0, paper_title="BOF study")
+    text = Chunk("W1", "text", "2. Materials", "The slag was ground.", 1, paper_title="BOF study")
+    assert passage_for_embedding(table) == "BOF study\n2. Materials\n| CaO | 10.6 |"
+    assert passage_for_embedding(text) == "2. Materials\nThe slag was ground."
+    assert passage_for_reranking(text) == "BOF study\n2. Materials\nThe slag was ground."
 
 
 def test_passage_for_embedding_puts_the_section_first() -> None:
@@ -178,12 +198,10 @@ def test_block_tables_keep_their_section_and_pages() -> None:
     assert (table.text, table.section, table.pages) == (TABLE, "Results", (5,))
 
 
-def test_block_captions_that_name_a_figure_become_figure_captions() -> None:
+def test_a_caption_block_without_a_parsed_figure_is_a_caption_only_figure_chunk() -> None:
     blocks = [_block("caption", "Fig. 2. Setup", pages=(6,))]
     chunks = build_chunks(_block_paper(blocks), max_chars=800, table_max_chars=1500)
-    assert [(c.kind, c.text, c.pages) for c in chunks] == [
-        ("figure_caption", "Fig. 2. Setup", (6,))
-    ]
+    assert [(c.kind, c.text, c.pages) for c in chunks] == [("figure", "Fig. 2. Setup", (6,))]
 
 
 def test_papers_without_blocks_fall_back_to_markdown_with_no_pages() -> None:
@@ -380,3 +398,98 @@ def test_short_affiliation_lines_on_the_first_pages_are_dropped() -> None:
     ]
     chunks = build_chunks(_block_paper(blocks), max_chars=800, table_max_chars=1500)
     assert [c.text for c in chunks] == ["Body text about the slag."]
+
+
+FTIR = FigureReading(
+    figure_type="data_plot",
+    summary="FTIR spectrum of EAF steel slags.",
+    columns=[
+        TableColumn(label="Wave numbers", unit="cm⁻¹", source="x_axis"),
+        TableColumn(label="Transmittance", unit="%", source="y_axis"),
+    ],
+    rows=[["476.82", "27.6"], ["873.43", "7.7"]],
+)
+
+
+def _figure(number: str | None = "2", reading: FigureReading | None = FTIR) -> PaperFigure:
+    return PaperFigure(number, f"Fig. {number}. FTIR spectra of EAF slags.", (5,), reading)
+
+
+def test_a_read_plot_lists_caption_summary_columns_and_values() -> None:
+    (text,) = figure_texts(_figure(), max_chars=1500)
+    assert text.splitlines() == [
+        "Fig. 2. FTIR spectra of EAF slags.",
+        "FTIR spectrum of EAF steel slags.",
+        "Values read from the figure (approximate):",
+        "Wave numbers (cm⁻¹) | Transmittance (%)",
+        "476.82 | 27.6",
+        "873.43 | 7.7",
+    ]
+
+
+def test_a_long_plot_is_split_and_every_piece_repeats_caption_and_columns() -> None:
+    rows = [[str(x), "1.0"] for x in range(60)]
+    texts = figure_texts(_figure(reading=FTIR.model_copy(update={"rows": rows})), max_chars=300)
+    assert len(texts) > 1
+    assert all(t.startswith("Fig. 2.") and "Wave numbers (cm⁻¹)" in t for t in texts)
+    assert all(len(t) <= 300 for t in texts)
+    assert sum(t.count("| 1.0") for t in texts) == 60
+
+
+def test_a_process_diagram_lists_its_steps_and_arrows_by_label() -> None:
+    reading = FigureReading(
+        figure_type="process_diagram",
+        summary="Slag treatment.",
+        steps=[
+            ProcessStep(id="s1", label="Crushing"),
+            ProcessStep(id="s2", label="Carbonation", conditions=["20% CO2", "2 h"]),
+        ],
+        flows=[ProcessFlow(source="s1", target="s2", label="fines")],
+    )
+    (text,) = figure_texts(_figure(reading=reading), max_chars=1500)
+    assert "Step: Carbonation (20% CO2; 2 h)" in text
+    assert "Crushing -> Carbonation (fines)" in text
+
+
+def test_a_figure_not_read_yet_is_its_caption_alone() -> None:
+    assert figure_texts(_figure(reading=None), max_chars=1500) == [
+        "Fig. 2. FTIR spectra of EAF slags."
+    ]
+
+
+def test_a_caption_block_becomes_its_figures_chunk_with_the_reading() -> None:
+    blocks = [
+        _block("section_header", "3. Results"),
+        _block("caption", "Fig. 2. FTIR spectra of EAF slags.", pages=(5,)),
+    ]
+    paper = ParsedPaper("W1", "", (), content_blocks=tuple(blocks), figures=(_figure(),))
+    chunks = build_chunks(paper, max_chars=800, table_max_chars=1500)
+    (figure,) = chunks
+    assert (figure.kind, figure.section, figure.pages) == ("figure", "3. Results", (5,))
+    assert "476.82 | 27.6" in figure.text
+
+
+def test_a_figure_whose_caption_is_not_in_the_text_flow_comes_after_the_paper() -> None:
+    blocks = [_block("text", "Body text about the slag.")]
+    paper = ParsedPaper("W1", "", (), content_blocks=tuple(blocks), figures=(_figure(),))
+    chunks = build_chunks(paper, max_chars=800, table_max_chars=1500)
+    assert [c.kind for c in chunks] == ["text", "figure"]
+
+
+def test_a_repeated_caption_of_a_placed_figure_adds_no_chunk() -> None:
+    caption = "Fig. 2. FTIR spectra of EAF slags."
+    blocks = [_block("caption", caption), _block("caption", caption)]
+    paper = ParsedPaper("W1", "", (), content_blocks=tuple(blocks), figures=(_figure(),))
+    chunks = build_chunks(paper, max_chars=800, table_max_chars=1500)
+    assert [c.kind for c in chunks] == ["figure"]
+
+
+def test_text_that_mentions_a_read_figure_is_linked_to_its_caption_only() -> None:
+    blocks = [
+        _block("text", "The spectra in Fig. 2 show carbonate bands."),
+        _block("caption", "Fig. 2. FTIR spectra of EAF slags."),
+    ]
+    paper = ParsedPaper("W1", "", (), content_blocks=tuple(blocks), figures=(_figure(),))
+    chunks = build_chunks(paper, max_chars=800, table_max_chars=1500)
+    text_chunk = next(c for c in chunks if c.kind == "text")
+    assert text_chunk.figure_captions == ("Fig. 2. FTIR spectra of EAF slags.",)

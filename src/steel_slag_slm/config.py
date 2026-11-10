@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 import yaml
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import BaseModel, Field, SecretStr, model_validator
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CONFIGS_DIR = PROJECT_ROOT / "configs"
@@ -92,15 +92,26 @@ class EmbeddingSettings(BaseModel):
     table_max_chars: int
     papers_per_save: int
     top_k: int
+    reranker: str  # cross-encoder that orders the passages of the papers search found
+    top_papers: int  # papers whose chunks are all reranked
+    candidates: int  # chunks each first-stage ranking (embedding, keywords) contributes
 
 
 class EvidenceSpan(BaseModel):
-    """A passage that answers a test question, identified by text copied from the paper."""
+    """A passage that answers a test question, identified by copied text or by its label."""
 
     paper_id: str
-    kind: Literal["text", "table", "figure_caption"]
-    text: str  # matched inside chunk text, ignoring case and spacing
+    kind: Literal["text", "table", "figure"]
+    text: str = ""  # matched inside chunk text, ignoring case and spacing
+    # A table or figure label such as "Table 4" or "Fig. 3"; matched against the chunk's caption
+    location: str = ""
     grade: Literal[1, 2] = 2  # 2 answers the question directly, 1 answers it in part
+
+    @model_validator(mode="after")
+    def _needs_text_or_location(self) -> "EvidenceSpan":
+        if not self.text.strip() and not self.location.strip():
+            raise ValueError("evidence needs text or a location")
+        return self
 
 
 class EvalQuestion(BaseModel):
@@ -109,6 +120,9 @@ class EvalQuestion(BaseModel):
     id: str
     query: str
     evidence: list[EvidenceSpan] = Field(min_length=1)
+    # The answer as printed, e.g. "10.6"; any chunk of the evidence paper containing one of
+    # these counts as reaching the answer. Empty means the evidence itself is the answer.
+    answer: list[str] = Field(default_factory=list)
 
 
 class RetrievalEvalSet(BaseModel):
@@ -117,6 +131,9 @@ class RetrievalEvalSet(BaseModel):
     depth: int  # how many results to retrieve per question; the largest K that is reported
     questions: list[EvalQuestion]
     paper_id: str | None = None  # when set, search only this paper's chunks
+    # A file next to the test set listing the papers to search, one ID per line; the test then
+    # searches only those, so scores stay comparable however large the full index grows
+    corpus: str | None = None
 
 
 class GcpSettings(BaseModel):

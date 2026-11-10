@@ -21,6 +21,9 @@ def _settings(papers_per_save: int = 10) -> EmbeddingSettings:
         table_max_chars=1500,
         papers_per_save=papers_per_save,
         top_k=3,
+        reranker="reranker-a",
+        top_papers=5,
+        candidates=10,
     )
 
 
@@ -64,6 +67,17 @@ def test_build_index_embeds_each_parsed_paper_and_saves_to_drive(fake_drive, key
     assert store.paper_ids == {"W1", "W2"}
     hits = search_store(store, keyword_encoder, "lime", 1, query_prefix="")
     assert hits[0].chunk.paper_id == "W1"
+
+
+def test_build_index_gives_each_chunk_its_paper_title(fake_drive, keyword_encoder):
+    _write_index(fake_drive, {"W1": _add_paper(fake_drive, "W1", "Free lime drives expansion.")})
+
+    run_build_index(
+        _settings(), _parsing(), None, PARSED_FOLDER, keyword_encoder, titles={"W1": "BOF study"}
+    )
+
+    store = embedding_store.load_store(None, PARSED_FOLDER, "model-a", keyword_encoder.dimension)
+    assert {chunk.paper_title for chunk in store.chunks} == {"BOF study"}
 
 
 def test_build_index_skips_papers_already_in_the_store(fake_drive, keyword_encoder):
