@@ -19,8 +19,13 @@ machine's local files.
   - `index-<unique id>.faiss` holds the FAISS vectors, row for row with `chunks.json`.
   - Each save writes a new index file, then `chunks.json`, then deletes the older index files.
     A run that stops midway leaves the store pointing at a complete earlier index.
-- Index the text and tables the parser produced. Figures enter the index through their captions
-  (`Fig. N ...`), and each caption is attached to the text chunks that mention that figure.
+- Index the text, tables and figures the parser produced. Each figure is one chunk: its caption,
+  then Gemini's reading (summary, plus the plotted values marked approximate, the XRD phases or
+  the process steps). A figure not read yet is its caption alone. A long reading is split by
+  rows, each piece repeating the caption, summary and column header. The figure chunk sits where
+  its caption block is in the text; figures whose caption is not in the text flow come after the
+  paper's other chunks. Each caption is also attached to the text chunks that mention that
+  figure.
 - Chunk from the paper's content blocks when present, using the labels: `caption` marks figure
   captions, and page furniture (`page_header`, `page_footer`) is skipped. Papers without blocks
   fall back to their Markdown.

@@ -1,15 +1,27 @@
-"""Read a paper's text, tables and content blocks from its parsed.json."""
+"""Read a paper's text, tables, content blocks and figures from its parsed.json."""
 
 import json
+import logging
 from typing import Any
 
-from steel_slag_slm.schemas import ContentPlacement, ParsedContentBlock, ParsedPaper
+from pydantic import ValidationError
+
+from steel_slag_slm.schemas import (
+    ContentPlacement,
+    FigureReading,
+    PaperFigure,
+    ParsedContentBlock,
+    ParsedPaper,
+)
+
+logger = logging.getLogger(__name__)
 
 
 def parse_parsed_json(content: bytes) -> ParsedPaper:
-    """Validate parsed.json bytes and return the paper's text, tables and content blocks.
+    """Validate parsed.json bytes and return the paper's text, tables, blocks and figures.
 
-    Papers parsed before content blocks existed have none; their Markdown is still returned.
+    Papers parsed before content blocks or figures existed have none; their Markdown is still
+    returned.
 
     Raises:
         ValueError: If the content is not JSON or lacks the fields the indexer needs.
@@ -34,6 +46,35 @@ def parse_parsed_json(content: bytes) -> ParsedPaper:
         markdown=markdown,
         tables=tuple(tables),
         content_blocks=_parse_content_blocks(record.get("content_blocks", [])),
+        figures=_parse_figures(paper_id, record.get("images", [])),
+    )
+
+
+def _parse_figures(paper_id: str, raw_figures: Any) -> tuple[PaperFigure, ...]:
+    if not isinstance(raw_figures, list):
+        raise ValueError("parsed.json needs images to be a list")
+    figures = (_parse_figure(paper_id, raw) for raw in raw_figures)
+    # Older parses list embedded image objects with no caption or reading; nothing to search
+    return tuple(f for f in figures if f.caption.strip() or f.figure_number or f.reading)
+
+
+def _parse_figure(paper_id: str, raw: Any) -> PaperFigure:
+    if not isinstance(raw, dict) or not isinstance(raw.get("placements"), list):
+        raise ValueError("parsed.json has a figure without placements")
+    number = raw.get("figure_number")
+    pages = {p.get("page_number") for p in raw["placements"] if isinstance(p, dict)}
+    reading = None
+    if raw.get("reading") is not None:
+        try:
+            reading = FigureReading.model_validate(raw["reading"])
+        except ValidationError:
+            # A bad reading should not cost the paper its text; the caption is still indexed
+            logger.warning("%s: ignoring an unreadable figure reading", paper_id)
+    return PaperFigure(
+        figure_number=number if isinstance(number, str) else None,
+        caption=str(raw.get("caption") or ""),
+        pages=tuple(sorted(page for page in pages if isinstance(page, int))),
+        reading=reading,
     )
 
 

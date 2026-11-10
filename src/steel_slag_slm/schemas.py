@@ -85,13 +85,14 @@ class ParsedDocument:
 
 @dataclass(frozen=True, slots=True)
 class ParsedPaper:
-    """The text and tables of one paper, read back from its parsed.json in Drive."""
+    """The text, tables and figures of one paper, read back from its parsed.json in Drive."""
 
     openalex_id: str
     markdown: str
     tables: tuple[str, ...]
     # Empty for papers parsed before content blocks existed; the Markdown is used then
     content_blocks: tuple[ParsedContentBlock, ...] = ()
+    figures: tuple["PaperFigure", ...] = ()  # in the order parsed.json lists them
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,7 +159,7 @@ class RenderedFigure:
     image_bytes: bytes
 
 
-ChunkKind = Literal["text", "table", "figure_caption"]
+ChunkKind = Literal["text", "table", "figure"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -292,6 +293,16 @@ class FigureReading(BaseModel):
     phases: list[str] = Field(default_factory=list)  # phases labelled on an XRD pattern
     steps: list[ProcessStep] = Field(default_factory=list)
     flows: list[ProcessFlow] = Field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
+class PaperFigure:
+    """One figure of a parsed paper, as the search index reads it from parsed.json."""
+
+    figure_number: str | None  # as printed, e.g. "3" or "3a"; None when no caption matched
+    caption: str
+    pages: tuple[int, ...]
+    reading: FigureReading | None  # None until Gemini has read the figure
 
 
 # Controlled vocabulary of the CNS input workbook ("10 Controlled Vocab" sheet)

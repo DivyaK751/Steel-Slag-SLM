@@ -99,11 +99,12 @@ def _parse_chunks_file(content: bytes) -> dict[str, Any]:
         raise ValueError("chunks.json is missing its model or index file name")
     if not isinstance(record.get("dimension"), int) or not isinstance(record.get("chunks"), list):
         raise ValueError("chunks.json is missing its dimension or chunks")
-    # Chunks saved before pages or parse generations were recorded load without them
+    # Chunks saved before pages or parse generations were recorded load without them, and
+    # caption-only figure chunks saved as "figure_caption" load as figures
     record["chunks"] = [
         Chunk(
             paper_id=entry["paper_id"],
-            kind=entry["kind"],
+            kind="figure" if entry["kind"] == "figure_caption" else entry["kind"],
             section=entry["section"],
             text=entry["text"],
             position=entry["position"],

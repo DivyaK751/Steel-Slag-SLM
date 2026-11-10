@@ -108,3 +108,15 @@ def test_chunks_saved_before_pages_existed_load_with_no_pages(fake_drive, keywor
     loaded = embedding_store.load_store(None, "parsed", "model-a", keyword_encoder.dimension)
 
     assert [chunk.pages for chunk in loaded.chunks] == [(), ()]
+
+
+def test_caption_chunks_saved_as_figure_caption_load_as_figures(fake_drive, keyword_encoder):
+    embedding_store.save_store(None, "parsed", "model-a", _filled_store(keyword_encoder))
+    store_folder = fake_drive.find_subfolder_id(None, "parsed", embedding_store.STORE_FOLDER_NAME)
+    record = json.loads(fake_drive.read_file_bytes(None, store_folder, "chunks.json"))
+    record["chunks"][0]["kind"] = "figure_caption"
+    fake_drive.write_file(None, store_folder, "chunks.json", json.dumps(record).encode(), "")
+
+    loaded = embedding_store.load_store(None, "parsed", "model-a", keyword_encoder.dimension)
+
+    assert loaded.chunks[0].kind == "figure"

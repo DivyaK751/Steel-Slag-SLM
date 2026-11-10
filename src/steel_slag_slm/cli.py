@@ -617,7 +617,7 @@ def search_index() -> None:
     parser.add_argument(
         "--kind",
         action="append",
-        choices=["text", "table", "figure_caption"],
+        choices=["text", "table", "figure"],
         help="only show this kind of chunk; repeat to allow several",
     )
     _add_parsed_folder_argument(parser)

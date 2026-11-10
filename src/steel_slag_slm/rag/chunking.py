@@ -1,7 +1,8 @@
-"""Split a parsed paper into section-aware chunks of text, tables and figure captions.
+"""Split a parsed paper into section-aware chunks of text, tables and figures.
 
-Papers with content blocks are chunked from the blocks, which carry page numbers. Older papers
-fall back to their Markdown, which has no page numbers.
+Papers with content blocks are chunked from the blocks, which carry page numbers, and each
+figure chunk holds the caption plus Gemini's reading of the figure. Older papers fall back to
+their Markdown, which has no page numbers, and their figures are indexed by caption only.
 """
 
 import logging
@@ -11,7 +12,14 @@ from collections import Counter
 from collections.abc import Iterable
 from dataclasses import replace
 
-from steel_slag_slm.schemas import Chunk, ChunkKind, ParsedContentBlock, ParsedPaper
+from steel_slag_slm.schemas import (
+    Chunk,
+    ChunkKind,
+    FigureReading,
+    PaperFigure,
+    ParsedContentBlock,
+    ParsedPaper,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -208,6 +216,84 @@ def split_table(table: str, max_chars: int) -> list[str]:
     return pieces or [table]
 
 
+# Values are read off the plot image, so the chunk says they are approximate
+_VALUES_NOTE = "Values read from the figure (approximate):"
+
+
+def _figure_label(figure: PaperFigure) -> str:
+    """Return the figure's caption, or "Fig. N" when the parser matched no caption."""
+    if figure.caption.strip():
+        return _clean_text(figure.caption)
+    return f"Fig. {figure.figure_number}" if figure.figure_number else "Figure"
+
+
+def _reading_lines(reading: FigureReading) -> tuple[list[str], list[str]]:
+    """Return a reading as header lines and item lines; only the items are split across chunks."""
+    header: list[str] = []
+    items: list[str] = []
+    if reading.columns and reading.rows:
+        names = [f"{col.label} ({col.unit})" if col.unit else col.label for col in reading.columns]
+        header = [_VALUES_NOTE, " | ".join(names)]
+        items += [" | ".join(row) for row in reading.rows]
+    if reading.phases:
+        items.append(f"Phases: {', '.join(reading.phases)}")
+    labels = {step.id: step.label for step in reading.steps}
+    for step in reading.steps:
+        conditions = f" ({'; '.join(step.conditions)})" if step.conditions else ""
+        items.append(f"Step: {step.label}{conditions}")
+    for flow in reading.flows:
+        arrow = f"{labels.get(flow.source, flow.source)} -> {labels.get(flow.target, flow.target)}"
+        items.append(f"{arrow} ({flow.label})" if flow.label else arrow)
+    return header, items
+
+
+def figure_texts(figure: PaperFigure, max_chars: int) -> list[str]:
+    """Return a figure as chunk texts: its caption and summary, then values, phases or steps.
+
+    A long reading is split into pieces that each repeat the caption, summary and column
+    header, as long tables are. A figure Gemini has not read yet is its caption alone.
+    """
+    head = [_figure_label(figure)]
+    items: list[str] = []
+    if figure.reading is not None:
+        header, items = _reading_lines(figure.reading)
+        head += [figure.reading.summary.strip(), *header]
+    head = [line for line in head if line]
+    pieces: list[str] = []
+    group: list[str] = []
+    for item in items:
+        if group and len("\n".join([*head, *group, item])) > max_chars:
+            pieces.append("\n".join([*head, *group]))
+            group = []
+        group.append(item)
+    if group or not pieces:
+        pieces.append("\n".join([*head, *group]))
+    return pieces
+
+
+def _caption_number(caption: str) -> str:
+    """Return the figure number a caption starts with ("3" for "Fig. 3a. ..."), or ""."""
+    match = _FIGURE_REFERENCE.match(caption.strip())
+    return match.group(1) if match else ""
+
+
+def _take_figure(figures: list[PaperFigure], caption: str) -> PaperFigure | None:
+    """Remove and return the first remaining figure with the caption's number, if any."""
+    wanted = _caption_number(caption)
+    if not wanted:
+        return None
+    for figure in figures:
+        number = re.match(r"\d+", figure.figure_number or "")
+        if number is not None and number.group() == wanted:
+            figures.remove(figure)
+            return figure
+    return None
+
+
+def _figure_pieces(section: str, figure: PaperFigure, max_chars: int) -> list[_Piece]:
+    return [("figure", section, text, figure.pages) for text in figure_texts(figure, max_chars)]
+
+
 def _is_caption(paragraph: str) -> bool:
     return _CAPTION.match(paragraph) is not None
 
@@ -227,8 +313,7 @@ def _text_passages(
             passages += [("text", text, pages) for text, pages in pack_paragraphs(body, max_chars)]
             body = []
             passages += [
-                ("figure_caption", text, pages)
-                for text, pages in pack_paragraphs([paragraph], max_chars)
+                ("figure", text, pages) for text, pages in pack_paragraphs([paragraph], max_chars)
             ]
         else:
             body.append(paragraph)
@@ -278,13 +363,22 @@ def _pages_of(block: ParsedContentBlock) -> tuple[int, ...]:
 
 
 def _pieces_from_blocks(
-    blocks: tuple[ParsedContentBlock, ...], max_chars: int, table_max_chars: int
+    blocks: tuple[ParsedContentBlock, ...],
+    figures: tuple[PaperFigure, ...],
+    max_chars: int,
+    table_max_chars: int,
 ) -> list[_Piece]:
-    """Chunk a paper from its content blocks, which know their own pages and labels."""
+    """Chunk a paper from its content blocks, which know their own pages and labels.
+
+    Each caption block becomes the chunk of the figure with its number, in reading order.
+    Figures whose caption is not in the text flow are added after the rest of the paper.
+    """
     pieces: list[_Piece] = []
     section = ""
     paragraphs: list[Paragraph] = []
     seen_texts: set[str] = set()
+    unplaced = list(figures)
+    placed_numbers: set[str] = set()
     for block in blocks:
         if block.label in _SKIPPED_LABELS or not block.text.strip():
             continue
@@ -307,11 +401,20 @@ def _pieces_from_blocks(
                 section, _text_passages(paragraphs, max_chars, detect_captions=False)
             )
             paragraphs = []
-            caption = (_clean_text(block.text), _pages_of(block))
-            pieces += [
-                ("figure_caption", section, text, pages)
-                for text, pages in pack_paragraphs([caption], max_chars)
-            ]
+            number = _caption_number(block.text)
+            figure = _take_figure(unplaced, block.text)
+            if figure is None and number in placed_numbers:
+                continue  # the parser repeated a caption whose figure is already placed
+            placed_numbers.add(number)
+            if figure is None:
+                figure = PaperFigure(None, block.text, _pages_of(block), None)
+            elif not figure.caption.strip() or not figure.pages:
+                figure = replace(
+                    figure,
+                    caption=figure.caption or block.text,
+                    pages=figure.pages or _pages_of(block),
+                )
+            pieces += _figure_pieces(section, figure, table_max_chars)
         elif block.kind == "table":
             # A sentence cut by the page layout can resume after the table, so keep its
             # unfinished last paragraph open for the next text block to continue
@@ -351,6 +454,8 @@ def _pieces_from_blocks(
             else:
                 paragraphs.append((text, pages))
     pieces += _with_section(section, _text_passages(paragraphs, max_chars, detect_captions=False))
+    for figure in unplaced:
+        pieces += _figure_pieces("", figure, table_max_chars)
     return pieces
 
 
@@ -424,7 +529,9 @@ def build_chunks(paper: ParsedPaper, max_chars: int, table_max_chars: int) -> li
         raise ValueError("chunk sizes must be greater than zero")
 
     if paper.content_blocks:
-        pieces = _pieces_from_blocks(paper.content_blocks, max_chars, table_max_chars)
+        pieces = _pieces_from_blocks(
+            paper.content_blocks, paper.figures, max_chars, table_max_chars
+        )
     else:
         pieces = _pieces_from_markdown(paper, max_chars, table_max_chars)
     pieces = _drop_repeated(_carry_unfinished_sentences(pieces))
@@ -484,10 +591,12 @@ def _link_figure_captions(chunks: list[Chunk]) -> list[Chunk]:
     """Attach each figure's caption to the text chunks that mention that figure number."""
     captions: dict[str, str] = {}
     for chunk in chunks:
-        if chunk.kind == "figure_caption":
-            match = _FIGURE_REFERENCE.match(chunk.text.strip())
+        if chunk.kind == "figure":
+            # Only the caption line is linked; the reading stays in the figure's own chunk
+            caption = chunk.text.strip().split("\n", 1)[0]
+            match = _FIGURE_REFERENCE.match(caption)
             if match:
-                captions.setdefault(match.group(1), chunk.text)
+                captions.setdefault(match.group(1), caption)
     linked: list[Chunk] = []
     for chunk in chunks:
         if chunk.kind != "text":

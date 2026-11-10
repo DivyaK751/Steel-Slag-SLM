@@ -98,7 +98,7 @@ class EvidenceSpan(BaseModel):
     """A passage that answers a test question, identified by text copied from the paper."""
 
     paper_id: str
-    kind: Literal["text", "table", "figure_caption"]
+    kind: Literal["text", "table", "figure"]
     text: str  # matched inside chunk text, ignoring case and spacing
     grade: Literal[1, 2] = 2  # 2 answers the question directly, 1 answers it in part
 

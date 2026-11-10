@@ -222,7 +222,9 @@ On GitHub, the "Extract paper data" workflow takes a comma-separated list of pap
 Semantic search lets you ask a question in plain language and get back the passages from the
 papers that answer it, each with its paper, section and page.
 
-Each parsed paper is split into short passages (paragraphs, tables and figure captions). An
+Each parsed paper is split into short passages: paragraphs, tables and figures. A figure passage
+holds its caption and Gemini's reading of it (summary, plus the plotted values, XRD phases or
+process steps), or just the caption until the figure has been read. An
 embedding model turns each passage into numbers that capture its meaning, and the result is saved
 as a search index in Drive (`_parsed/_embeddings/`). A search finds the passages closest in meaning
 to the question.
