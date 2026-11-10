@@ -174,6 +174,7 @@ class Chunk:
     pages: tuple[int, ...] = ()  # PDF pages the text sits on; () when unknown
     figure_captions: tuple[str, ...] = ()  # captions of the figures this text mentions
     parse_generation: str = ""  # the parse this chunk came from; "" when it was not recorded
+    paper_title: str = ""  # the paper's title from the registry; "" when it was not looked up
 
 
 @dataclass(frozen=True, slots=True)

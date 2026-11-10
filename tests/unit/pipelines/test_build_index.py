@@ -21,6 +21,9 @@ def _settings(papers_per_save: int = 10) -> EmbeddingSettings:
         table_max_chars=1500,
         papers_per_save=papers_per_save,
         top_k=3,
+        reranker="reranker-a",
+        top_papers=5,
+        candidates=10,
     )
 
 

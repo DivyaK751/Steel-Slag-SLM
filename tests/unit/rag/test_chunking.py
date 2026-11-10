@@ -6,6 +6,7 @@ from steel_slag_slm.rag.chunking import (
     figure_texts,
     pack_paragraphs,
     passage_for_embedding,
+    passage_for_reranking,
     split_table,
 )
 from steel_slag_slm.schemas import (
@@ -127,6 +128,14 @@ def test_split_table_repeats_caption_and_header_in_every_piece() -> None:
 
 def test_split_table_returns_short_tables_unchanged() -> None:
     assert split_table(TABLE, max_chars=1000) == [TABLE]
+
+
+def test_tables_carry_the_paper_title_for_search_and_every_chunk_does_for_reranking() -> None:
+    table = Chunk("W1", "table", "2. Materials", "| CaO | 10.6 |", 0, paper_title="BOF study")
+    text = Chunk("W1", "text", "2. Materials", "The slag was ground.", 1, paper_title="BOF study")
+    assert passage_for_embedding(table) == "BOF study\n2. Materials\n| CaO | 10.6 |"
+    assert passage_for_embedding(text) == "2. Materials\nThe slag was ground."
+    assert passage_for_reranking(text) == "BOF study\n2. Materials\nThe slag was ground."
 
 
 def test_passage_for_embedding_puts_the_section_first() -> None:

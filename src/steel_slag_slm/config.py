@@ -92,6 +92,9 @@ class EmbeddingSettings(BaseModel):
     table_max_chars: int
     papers_per_save: int
     top_k: int
+    reranker: str  # cross-encoder that orders the passages of the papers search found
+    top_papers: int  # papers whose chunks are all reranked
+    candidates: int  # chunks each first-stage ranking (embedding, keywords) contributes
 
 
 class EvidenceSpan(BaseModel):

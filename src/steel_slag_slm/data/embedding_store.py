@@ -83,6 +83,7 @@ def _serialize_chunks_file(model_name: str, store: VectorStore, index_file: str)
                 "pages": list(chunk.pages),
                 "figure_captions": list(chunk.figure_captions),
                 "parse_generation": chunk.parse_generation,
+                "paper_title": chunk.paper_title,
             }
             for chunk in store.chunks
         ],
@@ -111,6 +112,7 @@ def _parse_chunks_file(content: bytes) -> dict[str, Any]:
             pages=tuple(entry.get("pages", [])),
             figure_captions=tuple(entry.get("figure_captions", [])),
             parse_generation=entry.get("parse_generation", ""),
+            paper_title=entry.get("paper_title", ""),
         )
         for entry in record["chunks"]
     ]

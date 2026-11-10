@@ -337,6 +337,11 @@ embedding:
   # The index is saved to Drive after this many papers, so a failed run loses little work
   papers_per_save: 25
   top_k: 5
+  # Search finds papers with embeddings + BM25, then this cross-encoder orders every chunk of
+  # the top papers (see docs/retrieval_experiments.md for how these were chosen)
+  reranker: BAAI/bge-reranker-v2-m3
+  top_papers: 5
+  candidates: 100
 
 figure_extraction:
   # Local output for now (git-ignored): one folder per paper with PNGs and figures.json

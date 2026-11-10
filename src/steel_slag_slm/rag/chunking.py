@@ -519,7 +519,9 @@ def _carry_unfinished_sentences(pieces: list[_Piece]) -> list[_Piece]:
     return carried
 
 
-def build_chunks(paper: ParsedPaper, max_chars: int, table_max_chars: int) -> list[Chunk]:
+def build_chunks(
+    paper: ParsedPaper, max_chars: int, table_max_chars: int, paper_title: str = ""
+) -> list[Chunk]:
     """Turn one paper into chunks in reading order, each tagged with its section and pages.
 
     Raises:
@@ -543,17 +545,33 @@ def build_chunks(paper: ParsedPaper, max_chars: int, table_max_chars: int) -> li
             text=text,
             position=position,
             pages=pages,
+            paper_title=paper_title,
         )
         for position, (kind, section, text, pages) in enumerate(pieces)
     ]
     return _link_figure_captions(chunks)
 
 
-def passage_for_embedding(chunk: Chunk) -> str:
-    """Return the text to embed: the section heading, the chunk text, then the captions of
-    the figures it mentions."""
-    parts = [chunk.section, chunk.text, *chunk.figure_captions]
+def _passage(chunk: Chunk, with_title: bool) -> str:
+    title = chunk.paper_title if with_title else ""
+    parts = [title, chunk.section, chunk.text, *chunk.figure_captions]
     return "\n".join(part for part in parts if part)
+
+
+def passage_for_embedding(chunk: Chunk) -> str:
+    """Return the text to embed and keyword-index: the section heading, the chunk text, then
+    the captions of the figures it mentions.
+
+    A table also starts with its paper's title: its cells are numbers and abbreviations, so
+    without the title it shares almost no words with a question about its study.
+    """
+    return _passage(chunk, with_title=chunk.kind == "table")
+
+
+def passage_for_reranking(chunk: Chunk) -> str:
+    """Return the text a reranker reads: the paper's title, then the passage, so the reranker
+    can tell which study each chunk comes from."""
+    return _passage(chunk, with_title=True)
 
 
 _AFFILIATION = re.compile(

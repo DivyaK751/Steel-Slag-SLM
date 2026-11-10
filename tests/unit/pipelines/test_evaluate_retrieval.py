@@ -11,6 +11,9 @@ SETTINGS = EmbeddingSettings(
     table_max_chars=1500,
     papers_per_save=10,
     top_k=3,
+    reranker="reranker-a",
+    top_papers=5,
+    candidates=10,
 )
 CHUNKS = [
     Chunk("W1", "text", "Results", "Free lime causes volume expansion.", 0),

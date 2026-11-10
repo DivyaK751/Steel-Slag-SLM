@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.15' and sys_platform == 'win32'",
@@ -3462,6 +3462,19 @@ wheels = [
 ]
 
 [[package]]
+name = "rank-bm25"
+version = "0.2.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/fc/0a/f9579384aa017d8b4c15613f86954b92a95a93d641cc849182467cf0bb3b/rank_bm25-0.2.2.tar.gz", hash = "sha256:096ccef76f8188563419aaf384a02f0ea459503fdf77901378d4fd9d87e5e51d", size = 8347, upload-time = "2022-02-16T12:10:52.196Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2a/21/f691fb2613100a62b3fa91e9988c991e9ca5b89ea31c0d3152a3210344f9/rank_bm25-0.2.2-py3-none-any.whl", hash = "sha256:7bd4a95571adadfc271746fa146a4bcfd89c0cf731e49c3d1ad863290adbe8ae", size = 8584, upload-time = "2022-02-16T12:10:50.626Z" },
+]
+
+[[package]]
 name = "rapidocr"
 version = "3.10.0"
 source = { registry = "https://pypi.org/simple" }
@@ -4313,6 +4326,7 @@ dependencies = [
     { name = "pymupdf" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
+    { name = "rank-bm25" },
     { name = "requests" },
     { name = "sentence-transformers" },
 ]
@@ -4345,6 +4359,7 @@ requires-dist = [
     { name = "pymupdf", specifier = ">=1.28.2" },
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "rank-bm25", specifier = ">=0.2.2" },
     { name = "requests", specifier = ">=2.31" },
     { name = "sentence-transformers", specifier = ">=6.2.0" },
 ]
