@@ -24,6 +24,9 @@ class QuestionScores:
     recall_at_20: float
     reciprocal_rank: float
     ndcg_at_10: float
+    paper_hit_at_5: float = 0.0  # a top-5 chunk comes from an evidence paper
+    answer_hit_at_5: float = 0.0  # a top-5 chunk from that paper contains the answer
+    answer_hit_at_20: float = 0.0
 
 
 def _normalize(text: str) -> str:
@@ -53,6 +56,23 @@ def matches(chunk: Chunk, evidence: EvidenceSpan) -> bool:
     if evidence.location and not _has_label(chunk.text, evidence.location):
         return False
     return _normalize(evidence.text) in _normalize(chunk.text)
+
+
+def contains_answer(chunk: Chunk, question: EvalQuestion) -> bool:
+    """True when the chunk is from an evidence paper and contains the answer.
+
+    A number counts only as a whole number, so "10.6" does not match "110.6" or "10.65".
+    Questions without an answer fall back to their evidence.
+    """
+    if not question.answer:
+        return any(matches(chunk, evidence) for evidence in question.evidence)
+    if chunk.paper_id not in {evidence.paper_id for evidence in question.evidence}:
+        return False
+    text = " ".join(chunk.text.split())
+    return any(
+        re.search(rf"(?<![\d.,]){re.escape(value)}(?!\d)", text, re.IGNORECASE)
+        for value in question.answer
+    )
 
 
 def chunk_grade(chunk: Chunk, question: EvalQuestion) -> int:
@@ -116,6 +136,7 @@ def ndcg_at_k(ranked: Sequence[Chunk], question: EvalQuestion, k: int) -> float:
 
 def score_question(ranked: Sequence[Chunk], question: EvalQuestion) -> QuestionScores:
     """All metrics for one question, from its ranked results (best first)."""
+    papers = {evidence.paper_id for evidence in question.evidence}
     return QuestionScores(
         question_id=question.id,
         hit_at_5=hit_at_k(ranked, question, 5),
@@ -124,6 +145,9 @@ def score_question(ranked: Sequence[Chunk], question: EvalQuestion) -> QuestionS
         recall_at_20=recall_at_k(ranked, question, 20),
         reciprocal_rank=reciprocal_rank(ranked, question),
         ndcg_at_10=ndcg_at_k(ranked, question, 10),
+        paper_hit_at_5=1.0 if any(chunk.paper_id in papers for chunk in ranked[:5]) else 0.0,
+        answer_hit_at_5=1.0 if any(contains_answer(c, question) for c in ranked[:5]) else 0.0,
+        answer_hit_at_20=1.0 if any(contains_answer(c, question) for c in ranked[:20]) else 0.0,
     )
 
 
@@ -136,6 +160,9 @@ def mean_scores(scores: Sequence[QuestionScores]) -> dict[str, float]:
         "recall_at_20",
         "reciprocal_rank",
         "ndcg_at_10",
+        "paper_hit_at_5",
+        "answer_hit_at_5",
+        "answer_hit_at_20",
     ]
     if not scores:
         return dict.fromkeys(names, 0.0)

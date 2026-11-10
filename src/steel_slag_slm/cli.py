@@ -669,15 +669,19 @@ def evaluate_retrieval() -> None:
         *_connect_to_parsed_folder(args.parsed_folder),
         Embedder(settings.model),
     )
-    print(f"{'question':<10} hit@5 hit@20 rec@5 rec@20    RR ndcg@10")
+    # paper@5: right study in the top 5; ans@k: a chunk of it with the answer; hit@k: the label
+    print(f"{'question':<10} paper@5 ans@5 ans@20 hit@5 hit@20 rec@5 rec@20    RR ndcg@10")
     for s in report.scores:
         print(
-            f"{s.question_id:<10} {s.hit_at_5:5.0f} {s.hit_at_20:6.0f} {s.recall_at_5:5.2f} "
-            f"{s.recall_at_20:6.2f} {s.reciprocal_rank:5.2f} {s.ndcg_at_10:7.2f}"
+            f"{s.question_id:<10} {s.paper_hit_at_5:7.0f} {s.answer_hit_at_5:5.0f} "
+            f"{s.answer_hit_at_20:6.0f} {s.hit_at_5:5.0f} {s.hit_at_20:6.0f} "
+            f"{s.recall_at_5:5.2f} {s.recall_at_20:6.2f} {s.reciprocal_rank:5.2f} "
+            f"{s.ndcg_at_10:7.2f}"
         )
     means = mean_scores(report.scores)
     print(
-        f"{'MEAN':<10} {means['hit_at_5']:5.2f} {means['hit_at_20']:6.2f} "
+        f"{'MEAN':<10} {means['paper_hit_at_5']:7.2f} {means['answer_hit_at_5']:5.2f} "
+        f"{means['answer_hit_at_20']:6.2f} {means['hit_at_5']:5.2f} {means['hit_at_20']:6.2f} "
         f"{means['recall_at_5']:5.2f} {means['recall_at_20']:6.2f} "
         f"{means['reciprocal_rank']:5.2f} {means['ndcg_at_10']:7.2f}"
     )

@@ -117,6 +117,9 @@ class EvalQuestion(BaseModel):
     id: str
     query: str
     evidence: list[EvidenceSpan] = Field(min_length=1)
+    # The answer as printed, e.g. "10.6"; any chunk of the evidence paper containing one of
+    # these counts as reaching the answer. Empty means the evidence itself is the answer.
+    answer: list[str] = Field(default_factory=list)
 
 
 class RetrievalEvalSet(BaseModel):
