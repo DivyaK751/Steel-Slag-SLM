@@ -16,16 +16,17 @@ FILTER_DEPTH = 100
 def run_search(
     settings: EmbeddingSettings,
     drive_service: Any,
-    parsed_folder_id: str,
+    store_folder_id: str,
     encoder: TextEncoder,
     scorer: PassageScorer,
     query: str,
     top_k: int | None = None,
     kinds: set[ChunkKind] | None = None,
 ) -> list[SearchHit]:
-    """Load the saved index from Drive and return the chunks that best answer the query."""
+    """Load the index saved under store_folder_id and return the chunks that best answer the
+    query."""
     store = embedding_store.load_store(
-        drive_service, parsed_folder_id, settings.model, encoder.dimension
+        drive_service, store_folder_id, settings.model, encoder.dimension
     )
     retriever = TwoStageRetriever(
         store, encoder, scorer, settings.query_prefix, settings.top_papers, settings.candidates

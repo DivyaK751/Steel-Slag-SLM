@@ -144,8 +144,8 @@ To run it, open Actions → Parse trial PDFs → Run workflow, select the integr
 and set `max_papers` to `1`. Inspect the resulting `_parsed_v2` folder in Drive before
 increasing the batch size.
 
-After parsing, `parse-pdfs` updates the search index in the same folder
-(`_parsed_v2/_embeddings/`); the workflow does not call Gemini. Local unit tests, linting and
+After parsing, `parse-pdfs` updates that folder's search index
+(`_search_index/_parsed_v2/_embeddings/` in the shared folder); the workflow does not call Gemini. Local unit tests, linting and
 type-checking do not require the cloud credentials.
 
 
@@ -226,7 +226,8 @@ Each parsed paper is split into short passages: paragraphs, tables and figures. 
 holds its caption and Gemini's reading of it (summary, plus the plotted values, XRD phases or
 process steps), or just the caption until the figure has been read. An
 embedding model turns each passage into numbers that capture its meaning, and the result is saved
-as a search index in Drive (`_parsed/_embeddings/`).
+as a search index in the shared Drive folder (`_search_index/<parsed folder>/_embeddings/`),
+which anyone on the project can build or update.
 
 A search runs in two stages. First, meaning match and keyword (BM25) match find the 5 papers
 most likely to hold the answer. Then a reranker model reads the question with every passage of
@@ -244,7 +245,8 @@ uv run evaluate-retrieval --eval-set configs/retrieval_eval_heldout.yaml \
     --papers-dir papers/ --titles titles.json
 ```
 
-- Each parsed folder has its own index in its `_embeddings/` subfolder.
+- Each parsed folder has its own index, under `_search_index/<parsed folder name>/`. The parsed
+  folder itself is only read, so its owner does not need to share edit access.
 - A paper parsed again since it was indexed (a new parse generation) has its old passages
   replaced on the next `build-index`.
 

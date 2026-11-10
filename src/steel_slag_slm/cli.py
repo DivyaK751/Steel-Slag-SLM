@@ -39,6 +39,7 @@ from steel_slag_slm.config import (
 )
 from steel_slag_slm.data.drive_storage import (
     build_drive_service,
+    ensure_subfolder,
     find_subfolder_id,
     list_paper_titles,
 )
@@ -410,7 +411,9 @@ def parse_pdfs() -> None:
         drive_service, drive_settings.folder_id, parsing_settings.output_folder_name
     )
     if not args.skip_index and parsed_folder_id is not None:
-        unindexed = _index_parsed_folder(drive_service, parsed_folder_id)
+        unindexed = _index_parsed_folder(
+            drive_service, parsed_folder_id, parsing_settings.output_folder_name
+        )
     if outcomes["failed"]:
         raise SystemExit(f"{outcomes['failed']} paper(s) failed; rerun the same command to retry")
     if unindexed:
@@ -585,8 +588,9 @@ def build_index() -> None:
         parser.error("--max-papers must be greater than zero")
 
     _setup_logging()
+    drive_service, parsed_folder_id = _connect_to_parsed_folder(args.parsed_folder)
     unindexed = _index_parsed_folder(
-        *_connect_to_parsed_folder(args.parsed_folder), args.max_papers, args.rebuild
+        drive_service, parsed_folder_id, args.parsed_folder, args.max_papers, args.rebuild
     )
     if unindexed:
         raise SystemExit(
@@ -594,9 +598,24 @@ def build_index() -> None:
         )
 
 
+def _index_folder_id(drive_service: Any, parsed_folder_name: str | None) -> str:
+    """Return the folder holding this parsed folder's search index, creating it if needed.
+
+    It sits in the shared Drive folder (<index_folder_name>/<parsed folder name>/), which
+    everyone on the project can write to, unlike a parsed folder owned by one person.
+    """
+    name = parsed_folder_name or load_pdf_parsing_settings().output_folder_name
+    root_id = load_drive_connection_settings().folder_id
+    index_root = ensure_subfolder(
+        drive_service, root_id, load_embedding_settings().index_folder_name
+    )
+    return ensure_subfolder(drive_service, index_root, name)
+
+
 def _index_parsed_folder(
     drive_service: Any,
     parsed_folder_id: str,
+    parsed_folder_name: str | None = None,
     max_papers: int | None = None,
     rebuild: bool = False,
 ) -> int:
@@ -613,6 +632,7 @@ def _index_parsed_folder(
         max_papers,
         rebuild,
         titles,
+        _index_folder_id(drive_service, parsed_folder_name),
     )
     print("Index summary:", dict(outcomes))
     # Papers the parser skipped on purpose are expected; anything else missing counts
@@ -636,11 +656,11 @@ def search_index() -> None:
     _setup_logging()
     settings = load_embedding_settings()
     kinds = cast(set[ChunkKind], set(args.kind)) if args.kind else None
-    drive_service, parsed_folder_id = _connect_to_parsed_folder(args.parsed_folder)
+    drive_service, _ = _connect_to_parsed_folder(args.parsed_folder)
     hits = run_search(
         settings,
         drive_service,
-        parsed_folder_id,
+        _index_folder_id(drive_service, args.parsed_folder),
         Embedder(settings.model),
         CrossEncoderScorer(settings.reranker),
         args.query,
@@ -651,9 +671,9 @@ def search_index() -> None:
     for rank, hit in enumerate(hits, start=1):
         chunk = hit.chunk
         title = titles.get(chunk.paper_id) or "(title unknown)"
-        pages = f" Â· pages {', '.join(str(page) for page in chunk.pages)}" if chunk.pages else ""
-        print(f"{rank}. [{hit.score:.3f}] {chunk.paper_id} Â· {title}")
-        print(f"   {chunk.kind} Â· {chunk.section}{pages}")
+        pages = f" · pages {', '.join(str(page) for page in chunk.pages)}" if chunk.pages else ""
+        print(f"{rank}. [{hit.score:.3f}] {chunk.paper_id} · {title}")
+        print(f"   {chunk.kind} · {chunk.section}{pages}")
         print(textwrap.fill(chunk.text, width=100, initial_indent="   ", subsequent_indent="   "))
         print()
 
@@ -696,8 +716,9 @@ def evaluate_retrieval() -> None:
         )
     else:
         eval_set = load_retrieval_eval_set(args.eval_set)
-        drive_service, parsed_folder_id = _connect_to_parsed_folder(args.parsed_folder)
-        store = load_store(drive_service, parsed_folder_id, settings.model, encoder.dimension)
+        drive_service, _ = _connect_to_parsed_folder(args.parsed_folder)
+        index_folder_id = _index_folder_id(drive_service, args.parsed_folder)
+        store = load_store(drive_service, index_folder_id, settings.model, encoder.dimension)
         retriever = TwoStageRetriever(
             store, encoder, scorer, settings.query_prefix, settings.top_papers, settings.candidates
         )
