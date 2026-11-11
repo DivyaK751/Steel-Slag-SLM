@@ -376,3 +376,52 @@ class PaperExtraction(BaseModel):
     literature: ExtractedLiterature
     materials: list[ExtractedMaterial]
     facts: list[ExtractedFact]
+
+
+class ExtractedValue(BaseModel):
+    """One value of a row: the workbook column it goes in, in that column's unit."""
+
+    field: str  # workbook column header, e.g. "CaO_pct"
+    value: str
+
+
+class ExtractedRow(BaseModel):
+    """One row of a data sheet: what it describes and where it is from, stated once."""
+
+    sheet: DataSheet
+    material_id: str
+    experiment_id: str | None
+    mix_id: str | None
+    location: str  # table, figure or section
+    excerpt: str  # verbatim quote; places the row's values on a page
+    confidence: ExtractionConfidence  # the lowest of its values'
+    values: list[ExtractedValue]
+
+
+class RowExtraction(BaseModel):
+    """Gemini's answer in rows (prompts with output_format: rows): about a quarter the length
+    of PaperExtraction, which repeats a row's IDs and quote for every value."""
+
+    literature: ExtractedLiterature
+    materials: list[ExtractedMaterial]
+    rows: list[ExtractedRow]
+
+    def to_extraction(self) -> PaperExtraction:
+        """The same values as one fact each, sharing their row's IDs, quote and confidence."""
+        facts = [
+            ExtractedFact(
+                sheet=row.sheet,
+                field=value.field,
+                value=value.value,
+                reported_value=value.value,  # rows don't repeat the printed form
+                material_id=row.material_id,
+                experiment_id=row.experiment_id,
+                mix_id=row.mix_id,
+                location=row.location,
+                excerpt=row.excerpt,
+                confidence=row.confidence,
+            )
+            for row in self.rows
+            for value in row.values
+        ]
+        return PaperExtraction(literature=self.literature, materials=self.materials, facts=facts)

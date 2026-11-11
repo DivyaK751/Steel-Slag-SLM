@@ -220,8 +220,9 @@ class DataExtractionSettings(AgentSettings):
     """How the data-extraction agent reads parsed papers and fills the sheet tables."""
 
     prompt_name: str
+    part_prompt_name: str  # appended per part when a paper is extracted in parts
     max_concurrency: int
-    call_timeout_s: float
+    call_timeout_s: float  # per Gemini call; a paper takes one call per part
     dataset: str  # holds one table per workbook sheet, in GOOGLE_CLOUD_PROJECT
     prices: TokenPrices  # of `model`; used only to report what each paper cost
     bigquery_usd_per_tib: float

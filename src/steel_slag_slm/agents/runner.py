@@ -95,6 +95,7 @@ async def run_structured_with_usage(
     session = await runner.session_service.create_session(app_name=APP_NAME, user_id=USER_ID)
     content = types.Content(role="user", parts=[types.Part(text=message), *attachments])
     final_text = ""
+    finish_reason = None
     usages: list[Any] = []
     try:
         async for event in runner.run_async(
@@ -105,16 +106,33 @@ async def run_structured_with_usage(
                 usages.append(usage)
             if event.is_final_response() and event.content and event.content.parts:
                 final_text = "".join(part.text or "" for part in event.content.parts)
+                finish_reason = getattr(event, "finish_reason", None)
     finally:
         await runner.session_service.delete_session(
             app_name=APP_NAME, user_id=USER_ID, session_id=session.id
         )
+    # Why the model stopped and where its output tokens went, e.g. MAX_TOKENS with most of
+    # them spent thinking, so a failure says whether the answer was cut off
+    stopped = (
+        f"finish {getattr(finish_reason, 'name', finish_reason)},"
+        f" thinking {sum(u.thoughts_token_count or 0 for u in usages)}"
+        f" + answer {sum(u.candidates_token_count or 0 for u in usages)} tokens"
+    )
+    cut_off = getattr(finish_reason, "name", finish_reason) == "MAX_TOKENS"
     if not final_text.strip():
-        raise AgentOutputError("Agent returned no final answer")
+        raise AgentOutputError(
+            f"Agent returned no final answer ({stopped})", "", cut_off, _total_usage(usages)
+        )
     try:
         result = schema.model_validate_json(final_text)
     except ValidationError as error:
-        raise AgentOutputError(f"Answer doesn't match {schema.__name__}: {error}") from error
+        first_error = error.errors()[0]["msg"] if error.errors() else str(error)
+        raise AgentOutputError(
+            f"Answer doesn't match {schema.__name__} ({stopped}): {first_error}",
+            final_text,
+            cut_off,
+            _total_usage(usages),
+        ) from error
     return StructuredAnswer(result, _total_usage(usages))
 
 
