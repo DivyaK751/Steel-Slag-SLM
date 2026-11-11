@@ -226,6 +226,68 @@ On GitHub, the "Extract paper data" workflow takes a comma-separated list of pap
 - Code: `agents/data_extractor.py`, `data/extraction_rows.py` (rules and rows),
   `data/extraction_tables.py` (table definitions) and `pipelines/extract_data.py`.
 
+### Improving the extraction prompt
+
+Prompt versions are scored against 50 hand-extracted papers
+([human_extracted_data/](human_extracted_data/)), split in
+[configs/extraction_benchmark.yaml](configs/extraction_benchmark.yaml) into **dev** papers
+to tune on and **test** papers to grade on. Benchmark runs never touch the production tables.
+
+```bash
+# 1. Write prompts/extract_data_v<N>.yaml and set data_extraction.prompt_name to it
+uv run extract-data --benchmark dev             # new run in steel_slag_extraction_runs
+uv run judge-extraction --run-id <run id>       # scores -> terminal, BigQuery, xlsx
+uv run judge-extraction --run-id <run id> --adjudicate  # also check disputes vs the paper
+# 2. Repeat on dev until it's better; then grade it once on test
+uv run extract-data --benchmark test
+uv run judge-extraction --run-id <run id>
+uv run promote-extraction --run-id <run id>     # copies to production only if F1 is higher
+uv run compare-extraction [--split dev]         # every run's scores side by side
+```
+
+`compare-extraction` prints one line per run and saves
+`reports/extraction_eval/runs_comparison.xlsx` (sheet *Runs*: overall scores and cost;
+*Sheets*: scores per run and sheet), rebuilt from BigQuery each time. Compare runs of the
+same split only; they score different papers otherwise.
+
+`judge-extraction` and `compare-extraction` report **value scores** first. For each paper, sheet and value column (numbers,
+fixed-vocabulary labels and conditions such as times and pressures; not free text), the
+reference's values and the extracted values are matched one to one, whatever rows they are
+in, numbers within 5% ([value_metrics.py](src/steel_slag_slm/evaluation/value_metrics.py)).
+Value precision is the share of extracted values in the reference, value recall the share of
+reference values extracted. No model is involved, so they cost nothing, give the same result
+every time and compare any two runs, whoever judged them.
+
+Numbers in a unit column within 2% of each other count as the same value in the row and cell
+scores too, so two readings of one plot (42.5 vs 43.0) agree.
+
+`judge-extraction` (Gemini, `extraction_judge:` in `configs/base.yaml`) also pairs each sheet's
+extracted rows with the reference rows; code decides empty and identical cells, and the judge
+rules on the rest as match, partial (half credit) or mismatch. Per run, per sheet and per
+column it reports:
+
+| Metric | Meaning |
+|---|---|
+| fill rate | filled data cells / (rows × all data columns), extracted and reference |
+| row recall | reference rows paired with an extracted row |
+| precision | extracted values that agree with the reference |
+| recall | reference values extracted correctly |
+| F1 | of precision and recall; the score promotion compares |
+| data accuracy | agreement where both sides filled the cell, notes columns left out (two right answers can note different details) |
+| adjudicated precision | precision once values the paper supports count as right |
+
+Provenance (sheet 9) gets fill rates only. `--adjudicate` sends each paper's extra and
+mismatched values with its parsed text to the judge model, which also catches values the
+reference missed. Scores are stored per cell, so `promote-extraction` compares the candidate
+and the last promoted run on today's test papers, judged by the same judge model and prompt
+version; re-judge the older run after changing either. Judging costs about $0.30 a paper
+with `gemini-3.1-pro-preview`; repeated judging moves small sheets' scores by a few points.
+
+The references follow the same rules as the prompt (numbers only in unit columns, one row
+per condition), or Gemini is scored wrong where it is right.
+`uv run python scripts/human_extraction/check_reference.py --uncleaned` lists cells to fix;
+`reference_cleaned` in `human_extracted_data/status_tracker.csv` records which papers are done.
+
 ## Semantic search
 
 Semantic search lets you ask a question in plain language and get back the passages from the
