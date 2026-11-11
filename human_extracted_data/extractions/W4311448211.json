@@ -1,0 +1,135 @@
+{
+  "openalex_id": "W4311448211",
+  "status": "Extracted",
+  "notes": "Modelling study of CO2 mineralization rate of prototypical slags vs grinding; no experiments on specific slag samples.",
+  "sheets": {
+    "1 Scientific Literature": [
+      {
+        "Source_ID": "SRC-W4311448211",
+        "Title": "Enhancing CO2 Mineralization Rate and Extent of Iron and Steel Slag via Grinding",
+        "Authors": "Corey Myers, Jun Sasagawa, Takao Nakagaki",
+        "Publication_Year": "2022",
+        "Publication_Type": "Journal Article",
+        "Journal_or_Source": "ISIJ International, Vol. 62 (2022), No. 12, pp. 2446-2453",
+        "DOI_or_URL": "10.2355/isijinternational.ISIJINT-2022-091",
+        "Country_or_Region": "USA; Japan",
+        "Steel_Slag_Type": "BOF; EAF",
+        "Study_Objective": "Use an experimentally verified diffusion/reaction model to assess how crystallinity, grain size, RH, CO2 concentration and temperature accelerate CO2 mineralization of iron and steel slags, and the energy penalty.",
+        "Abstract_or_Key_Finding": "Crystallinity, high RH and grinding (to ~1-10 um, avoiding amorphization) give largest rate gains at lowest energy; ~1000x acceleration at ~100 MJ/t-CO2 theoretically, ~500 MJ/t-CO2 practically. Raising CO2 concentration or temperature gives only modest gains at high energy cost. BOF/EAF slag with standard PSD mineralize nearly fully within a few days. For BF slag, CO2 mineralization beats ggbs sale above 67.40 USD/t-CO2.",
+        "Full_Text_Access": "Open",
+        "Data_Extraction_Status": "Extracted",
+        "Relevant_To_SCM": "Unclear",
+        "Notes": "Modelling; uses industry-average slag compositions."
+      }
+    ],
+    "2 Feedstock Chemistry": [
+      {
+        "Source_ID": "SRC-W4311448211",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Steel_Slag_Type": "BOF",
+        "Source/Origin": "Prototypical crystalline BOF slag (industry-average elemental composition; FactSage equilibrium mineralogy)",
+        "Basis_As_Reported": "mass% mineral phases (calculated)",
+        "Notes": "Table 1 phases: Ca2SiO4 27.1, CaO 24.0, Ca2Fe2O5 20.2, Fe2SiO4 16.1, MgO 6.4, Fe 3.1, Al2O3 3.0%. Density 3825 kg/m3. No oxide analysis given."
+      },
+      {
+        "Source_ID": "SRC-W4311448211",
+        "Material_ID": "MAT-0002",
+        "Experiment_ID": "EXP-0002",
+        "Steel_Slag_Type": "EAF",
+        "Source/Origin": "Prototypical crystalline EAF slag (industry-average; FactSage)",
+        "Basis_As_Reported": "mass% mineral phases (calculated)",
+        "Notes": "Table 1 phases: Ca2SiO4 46.5, FeO 34.3, CaAl2O4 10.2, MgO 8.2, Fe 0.8%. Density 4217 kg/m3."
+      }
+    ],
+    "3 Processing": [],
+    "4 Particle Size": [
+      {
+        "Source_ID": "SRC-W4311448211",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Steel_Slag_Type": "BOF",
+        "Measurement_Method": "Assumed PSD classes (modelling)",
+        "Particle_Size_Notes": "Baseline/'Standard' PSD peak ~5-7 um (≈ggbs, 4500 cm2/g); 'Overground' peak ~1/10 (45,086 cm2/g); 'Large' ~10x (637 cm2/g). Recommended grinding ~1-10 um without amorphization."
+      },
+      {
+        "Source_ID": "SRC-W4311448211",
+        "Material_ID": "MAT-0002",
+        "Experiment_ID": "EXP-0002",
+        "Steel_Slag_Type": "EAF",
+        "Measurement_Method": "Assumed PSD classes (modelling)",
+        "Particle_Size_Notes": "Baseline/'Standard' PSD peak ~5-7 um (≈ggbs, 4500 cm2/g); 'Overground' peak ~1/10 (45,086 cm2/g); 'Large' ~10x (637 cm2/g). Recommended grinding ~1-10 um without amorphization."
+      }
+    ],
+    "5 Activation": [],
+    "6 Concrete Performance": [],
+    "7 Durability": [],
+    "8 Carbon Uptake": [
+      {
+        "Source_ID": "SRC-W4311448211",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Steel_Slag_Type": "BOF",
+        "Carbonation_Method": "Modelled gas-solid CO2 mineralization (UCM/RDM model), not experimental on these slags",
+        "CO2_Source": "Merged ISM flue gas (lime, reheating, sinter furnaces)",
+        "CO2_Concentration": "7.2 mol%",
+        "CO2_Pressure": "101.325 kPa",
+        "Carbonation_Temperature_C": "30",
+        "Carbonation_Time": "Up to 12 d",
+        "Relative_Humidity_pct": "100",
+        "CO2_Uptake_kg_per_t": "462",
+        "Measurement_Method": "Theoretical (total mineralization potential psi from Ca+Mg content)",
+        "CO2_Basis": "kg CO2 per t slag (theoretical maximum)",
+        "Carbonation_Notes": "Psi 0.462 kg-CO2/kg. Baseline PSD reaches ~100% extent within ~2-3 days at 7.2% CO2 (Fig. 7c); D_slag 3.7e-13 m2/s.; CO2_Concentration: 7.2 mol% (baseline); 100% compared"
+      },
+      {
+        "Source_ID": "SRC-W4311448211",
+        "Material_ID": "MAT-0002",
+        "Experiment_ID": "EXP-0002",
+        "Steel_Slag_Type": "EAF",
+        "Carbonation_Method": "Modelled gas-solid CO2 mineralization (UCM/RDM model), not experimental on these slags",
+        "CO2_Source": "Merged ISM flue gas (lime, reheating, sinter furnaces)",
+        "CO2_Concentration": "7.2 mol%",
+        "CO2_Pressure": "101.325 kPa",
+        "Carbonation_Temperature_C": "30",
+        "Carbonation_Time": "Up to 12 d",
+        "Relative_Humidity_pct": "100",
+        "CO2_Uptake_kg_per_t": "354",
+        "Measurement_Method": "Theoretical (total mineralization potential psi from Ca+Mg content)",
+        "CO2_Basis": "kg CO2 per t slag (theoretical maximum)",
+        "Carbonation_Notes": "Psi 0.354 kg-CO2/kg. Baseline PSD near complete within a few days (Fig. 7d); D_slag 1.5e-13 m2/s.; CO2_Concentration: 7.2 mol% (baseline); 100% compared"
+      }
+    ],
+    "9 Citations & Provenance": [
+      {
+        "Source_ID": "SRC-W4311448211",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Fact_or_Data_Element": "CO2_mineralization_potential",
+        "Reported_Value": "0.462",
+        "Unit": "kg-CO2/kg",
+        "Page_or_Table_or_Figure": "Table 1, p.2450",
+        "Extraction_Method": "Manual reading (Claude)",
+        "Original_Source_Text_or_Excerpt": "psi (kg-CO2/kg) 0.408 0.408 0.462 0.354",
+        "Confidence": "High",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06"
+      },
+      {
+        "Source_ID": "SRC-W4311448211",
+        "Material_ID": "MAT-0002",
+        "Experiment_ID": "EXP-0002",
+        "Fact_or_Data_Element": "CO2_mineralization_potential",
+        "Reported_Value": "0.354",
+        "Unit": "kg-CO2/kg",
+        "Page_or_Table_or_Figure": "Table 1, p.2450",
+        "Extraction_Method": "Manual reading (Claude)",
+        "Original_Source_Text_or_Excerpt": "psi (kg-CO2/kg) 0.408 0.408 0.462 0.354",
+        "Confidence": "High",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06"
+      }
+    ]
+  },
+  "reference_cleaned": "2026-11-11 (v9 rules applied; not re-read against the PDF)"
+}

@@ -1,0 +1,298 @@
+{
+  "openalex_id": "W3126866315",
+  "status": "Extracted",
+  "notes": "EAF and ladle slag as sole AAM precursors; chemistry, PSD, leaching; strengths cited from prior work.",
+  "sheets": {
+    "1 Scientific Literature": [
+      {
+        "Source_ID": "SRC-W3126866315",
+        "Title": "Alkali Activation of Metallurgical Slags: Reactivity, Chemical Behavior, and Environmental Assessment",
+        "Authors": "Isabella Lancellotti, Federica Piccolo, Katja Traven, Mark Češnovar, Vilma Ducman, Cristina Leonelli",
+        "Publication_Year": "2021",
+        "Publication_Type": "Journal Article",
+        "Journal_or_Source": "Materials 2021, 14, 639",
+        "DOI_or_URL": "10.3390/ma14030639",
+        "Country_or_Region": "Italy; Slovenia",
+        "Steel_Slag_Type": "EAF; Ladle",
+        "Study_Objective": "Assess reactivity, chemical behavior and leaching of EAF slag and ladle slag before and after alkali activation with sodium silicate.",
+        "Abstract_or_Key_Finding": "EAF slag (56% amorphous) released more soluble Si and Al than ladle slag (35%); both suitable for AAM. Leaching below limits; bivalent ions (Ba, Cd, Cu, Ni, Pb, Zn) immobilised; As and Cr slightly increased; Mo slightly exceeded non-dangerous landfill limit.",
+        "Full_Text_Access": "Open",
+        "Data_Extraction_Status": "Extracted",
+        "Relevant_To_SCM": "Yes",
+        "Notes": "Slag used as alkali-activated binder precursor."
+      }
+    ],
+    "2 Feedstock Chemistry": [
+      {
+        "Source_ID": "SRC-W3126866315",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Steel_Slag_Type": "EAF",
+        "Source/Origin": "Slag A: EAF slag (carbon or stainless steel), SIJ Acroni, Jesenice, Slovenia",
+        "CaO_pct": "20.87",
+        "SiO2_pct": "21.05",
+        "Al2O3_pct": "8.54",
+        "Fe2O3_pct": "11.37",
+        "MgO_pct": "14.88",
+        "SO3_pct": "0.23",
+        "Na2O_pct": "0.13",
+        "K2O_pct": "0.18",
+        "TiO2_pct": "0.40",
+        "P2O5_pct": "0.122",
+        "MnO_pct": "2.24",
+        "Trace_Elements": "{\"Cr2O3\": 3.76, \"V2O5\": 0.0734, \"Co3O4\": 0.010, \"NiO\": 0.1017, \"CuO\": 0.026, \"ZnO\": 0.083, \"As2O3\": 0.03, \"SrO\": 0.0297, \"BaO\": 0.03, \"PbO\": 0.017} wt%",
+        "LOI_pct": "14.15",
+        "Analysis_Method": "XRF",
+        "Basis_As_Reported": "wt.%",
+        "Notes": "Table 1 (WD-XRF). OTH 1.3. LOI at 950 °C. Rietveld (Table 2): amorphous 55.6, merwinite 8.8, dolomite 8.6, calcite 7.2, chromite 6.8, quartz 6.5, periclase 3.1. Specific surface 7.61 m2/g."
+      },
+      {
+        "Source_ID": "SRC-W3126866315",
+        "Material_ID": "MAT-0002",
+        "Experiment_ID": "EXP-0002",
+        "Steel_Slag_Type": "Ladle",
+        "Source/Origin": "Slag R: ladle furnace basic slag (desulfurization stage), SIJ Ravne, Ravne na Koroškem, Slovenia",
+        "CaO_pct": "28.10",
+        "SiO2_pct": "13.80",
+        "Al2O3_pct": "5.25",
+        "Fe2O3_pct": "4.69",
+        "MgO_pct": "23.44",
+        "SO3_pct": "1.229",
+        "Na2O_pct": "0.30",
+        "K2O_pct": "0.15",
+        "TiO2_pct": "0.190",
+        "P2O5_pct": "0.08",
+        "MnO_pct": "0.62",
+        "Trace_Elements": "{\"Cr2O3\": 0.19, \"V2O5\": 0.032, \"NiO\": 0.026, \"CuO\": 0.010, \"ZnO\": 0.2, \"As2O3\": 0.029, \"SrO\": 0.029, \"BaO\": 0.024, \"PbO\": 0.008} wt%",
+        "LOI_pct": "20.47",
+        "Analysis_Method": "XRF",
+        "Basis_As_Reported": "wt.%",
+        "Notes": "Table 1. OTH 2.1. Rietveld: amorphous 35.0, dolomite 19.4, calcite 13.2, quartz 12.9, periclase 6.9, merwinite 4.5, larnite 3.9. Specific surface 3.52 m2/g."
+      }
+    ],
+    "3 Processing": [
+      {
+        "Source_ID": "SRC-W3126866315",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Steel_Slag_Type": "EAF",
+        "Processing_Method": "Milling; Sieving",
+        "Post_Process_Form": "Powder <63 um",
+        "Processing_Notes": "Milled and sieved (63 um)."
+      },
+      {
+        "Source_ID": "SRC-W3126866315",
+        "Material_ID": "MAT-0002",
+        "Experiment_ID": "EXP-0002",
+        "Steel_Slag_Type": "Ladle",
+        "Processing_Method": "Milling; Sieving",
+        "Post_Process_Form": "Powder <63 um",
+        "Processing_Notes": "Milled and sieved (63 um)."
+      }
+    ],
+    "4 Particle Size": [
+      {
+        "Source_ID": "SRC-W3126866315",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Steel_Slag_Type": "EAF",
+        "Measurement_Method": "Laser diffraction (CILAS 920)",
+        "D10_um": "0.80",
+        "D50_um": "5.94",
+        "D90_um": "28.71",
+        "Max_Particle_Size_um": "63",
+        "Particle_Size_Notes": "Milled and sieved to 63 um (Fig. 1a)."
+      },
+      {
+        "Source_ID": "SRC-W3126866315",
+        "Material_ID": "MAT-0002",
+        "Experiment_ID": "EXP-0002",
+        "Steel_Slag_Type": "Ladle",
+        "Measurement_Method": "Laser diffraction (CILAS 920)",
+        "D10_um": "0.83",
+        "D50_um": "5.45",
+        "D90_um": "24.75",
+        "Max_Particle_Size_um": "63",
+        "Particle_Size_Notes": "Fig. 1b."
+      }
+    ],
+    "5 Activation": [
+      {
+        "Source_ID": "SRC-W3126866315",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Steel_Slag_Type": "EAF",
+        "Activation_Type": "Combined",
+        "Activator_or_Additive": "Sodium silicate (Crystal 0112, Tennants; solids 48.5%, Na2O/SiO2 0.51)",
+        "Activator_Dosage": "55 g per 100 g slag + 8 g water",
+        "Activation_Temperature_C": "70",
+        "Activation_Time": "3 d",
+        "Thermal_Activation": "70 °C for 3 d",
+        "Chemical_Activation": "Alkali (sodium silicate) activation",
+        "Activation_Notes": "Mix A50NW; C-(N-)A-S-H gel formed."
+      },
+      {
+        "Source_ID": "SRC-W3126866315",
+        "Material_ID": "MAT-0002",
+        "Experiment_ID": "EXP-0002",
+        "Steel_Slag_Type": "Ladle",
+        "Activation_Type": "Combined",
+        "Activator_or_Additive": "Sodium silicate (Crystal 0112, Tennants; solids 48.5%, Na2O/SiO2 0.51)",
+        "Activator_Dosage": "55 g per 100 g slag + 5 g water",
+        "Activation_Temperature_C": "70",
+        "Activation_Time": "3 d",
+        "Thermal_Activation": "70 °C for 3 d",
+        "Chemical_Activation": "Alkali (sodium silicate) activation",
+        "Activation_Notes": "Mix R50NW; C-(N-)A-S-H gel formed."
+      }
+    ],
+    "6 Concrete Performance": [
+      {
+        "Source_ID": "SRC-W3126866315",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Mix_ID": "A50NW",
+        "Steel_Slag_Type": "EAF",
+        "SCM_Replacement_pct": "100",
+        "Cement_Type": "None (alkali-activated)",
+        "Mix_Proportion_Notes": "Activator/slag ratio 0.35 (optimum from previous work). Prisms.; SCM_Replacement_pct: 100 (sole precursor)",
+        "Flexural_Strength_MPa": "3.8",
+        "Strength_Test_Method": "Not described in this paper",
+        "Strength_Notes": "Compressive 40.3 MPa and bending 3.8 MPa cited from authors' previous work [21,22] for the same activator ratio; age not stated."
+      },
+      {
+        "Source_ID": "SRC-W3126866315",
+        "Material_ID": "MAT-0002",
+        "Experiment_ID": "EXP-0002",
+        "Mix_ID": "R50NW",
+        "Steel_Slag_Type": "Ladle",
+        "SCM_Replacement_pct": "100",
+        "Cement_Type": "None (alkali-activated)",
+        "Mix_Proportion_Notes": "Activator/slag ratio 0.35 (optimum from previous work). Prisms.; SCM_Replacement_pct: 100 (sole precursor)",
+        "Flexural_Strength_MPa": "3.6",
+        "Strength_Test_Method": "Not described in this paper",
+        "Strength_Notes": "Compressive 63.2 MPa and bending 3.6 MPa cited from authors' previous work [21,22] for the same activator ratio; age not stated."
+      }
+    ],
+    "7 Durability": [
+      {
+        "Source_ID": "SRC-W3126866315",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Mix_ID": "A50NW",
+        "Steel_Slag_Type": "EAF",
+        "Test_Category": "Leaching",
+        "Test_Method": "EN 12457-2, L/S 10, 24 h, ICP-OES",
+        "Leaching": "As 0.097, Ba 0.017, Cd <LQ, Cr 1.12, Cu 0.06, Ni 0.02, Pb 0.013, Zn 0.079, Mo 1.477, Sb 0.018 mg/L",
+        "Durability_Result": "All below limits except Mo slightly above 1 mg/L landfill limit for non-dangerous waste",
+        "Durability_Notes": "Tables 5-6. Integrity test in water: no dissolution."
+      },
+      {
+        "Source_ID": "SRC-W3126866315",
+        "Material_ID": "MAT-0002",
+        "Experiment_ID": "EXP-0002",
+        "Mix_ID": "R50NW",
+        "Steel_Slag_Type": "Ladle",
+        "Test_Category": "Leaching",
+        "Test_Method": "EN 12457-2, L/S 10, 24 h, ICP-OES",
+        "Leaching": "As 0.163, Ba 0.018, Cd <LQ, Cr 0.196, Cu 0.04, Ni 0.061, Pb <LQ, Zn 0.075, Mo 1.004, Sb 0.021 mg/L",
+        "Durability_Result": "All below limits except Mo slightly above 1 mg/L landfill limit for non-dangerous waste",
+        "Durability_Notes": "Tables 5-6. Integrity test in water: no dissolution."
+      }
+    ],
+    "8 Carbon Uptake": [],
+    "9 Citations & Provenance": [
+      {
+        "Source_ID": "SRC-W3126866315",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Fact_or_Data_Element": "CaO_pct",
+        "Reported_Value": "20.87",
+        "Unit": "wt.%",
+        "Page_or_Table_or_Figure": "Table 1a, p.3",
+        "Extraction_Method": "Manual reading (Claude)",
+        "Original_Source_Text_or_Excerpt": "CaO 20.87 0.26 28.10 0.34",
+        "Confidence": "High",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06",
+        "Provenance_Notes": null
+      },
+      {
+        "Source_ID": "SRC-W3126866315",
+        "Material_ID": "MAT-0002",
+        "Experiment_ID": "EXP-0002",
+        "Fact_or_Data_Element": "CaO_pct",
+        "Reported_Value": "28.10",
+        "Unit": "wt.%",
+        "Page_or_Table_or_Figure": "Table 1a, p.3",
+        "Extraction_Method": "Manual reading (Claude)",
+        "Original_Source_Text_or_Excerpt": "CaO 20.87 0.26 28.10 0.34",
+        "Confidence": "High",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06",
+        "Provenance_Notes": null
+      },
+      {
+        "Source_ID": "SRC-W3126866315",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Fact_or_Data_Element": "Amorphous_pct",
+        "Reported_Value": "55.6",
+        "Unit": "wt.%",
+        "Page_or_Table_or_Figure": "Table 2, p.3",
+        "Extraction_Method": "Manual reading (Claude)",
+        "Original_Source_Text_or_Excerpt": "Amorphous 55.6 35.0",
+        "Confidence": "High",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06",
+        "Provenance_Notes": null
+      },
+      {
+        "Source_ID": "SRC-W3126866315",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Fact_or_Data_Element": "D50_um",
+        "Reported_Value": "5.94",
+        "Unit": "um",
+        "Page_or_Table_or_Figure": "Fig. 1a, p.4",
+        "Extraction_Method": "Manual reading (Claude)",
+        "Original_Source_Text_or_Excerpt": "C50 = 5.94 um",
+        "Confidence": "High",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06",
+        "Provenance_Notes": null
+      },
+      {
+        "Source_ID": "SRC-W3126866315",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Fact_or_Data_Element": "Compressive_strength_MPa",
+        "Reported_Value": "40.3",
+        "Unit": "MPa",
+        "Page_or_Table_or_Figure": "p.5",
+        "Extraction_Method": "Manual reading (Claude)",
+        "Original_Source_Text_or_Excerpt": "resulting in compressive strengths of 40.3 and 63.2 MPa and bending strengths of 3.8 and 3.6 MPa for Slag A and Slag R",
+        "Confidence": "High",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06",
+        "Provenance_Notes": "Cited from previous work."
+      },
+      {
+        "Source_ID": "SRC-W3126866315",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Fact_or_Data_Element": "Mo_leaching_mg_L",
+        "Reported_Value": "1.477",
+        "Unit": "mg/L",
+        "Page_or_Table_or_Figure": "Table 6, p.13",
+        "Extraction_Method": "Manual reading (Claude)",
+        "Original_Source_Text_or_Excerpt": "Mo 1.477 ± 0.443 1.004 ± 0.301 1",
+        "Confidence": "High",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06",
+        "Provenance_Notes": null
+      }
+    ]
+  },
+  "reference_cleaned": "2026-11-11 (v9 rules applied; not re-read against the PDF)"
+}

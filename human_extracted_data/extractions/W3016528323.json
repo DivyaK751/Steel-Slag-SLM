@@ -1,0 +1,191 @@
+{
+  "openalex_id": "W3016528323",
+  "status": "Extracted",
+  "notes": "Tungsten mining waste AAB; EAF slag only as 10% co-precursor (one mix).",
+  "sheets": {
+    "1 Scientific Literature": [
+      {
+        "Source_ID": "SRC-W3016528323",
+        "Title": "Strength Development and Pore Structure Characterisation of Binary Alkali-activated Binder Based on Tungsten Mining Waste",
+        "Authors": "Naim Sedira, João Castro-Gomes",
+        "Publication_Year": "2020",
+        "Publication_Type": "Conference Paper",
+        "Journal_or_Source": "KnE Engineering, RICON19 - REMINE International Conference, pp. 73-85",
+        "DOI_or_URL": "10.18502/keg.v5i4.6797",
+        "Country_or_Region": "Portugal",
+        "Steel_Slag_Type": "EAF",
+        "Study_Objective": "Improve alkali-activated tungsten mining waste mud (TMWM) binder by replacing 10 vt.% with RCBW, GGBFS or EAF slag; assess strength and MIP pore structure.",
+        "Abstract_or_Key_Finding": "28 d compressive strength rose from 11.23 MPa (100% TMWM) to 17.86 (10% EAFS), 22 (10% GGBFS) and 24.98 MPa (10% RCBW). Total porosity fell from 43.88% to 37.63% with EAFS; critical pore diameter fell from 21.28 to 9.04 um.",
+        "Full_Text_Access": "Open",
+        "Data_Extraction_Status": "Extracted",
+        "Relevant_To_SCM": "Yes",
+        "Notes": "EAF slag is a minor co-precursor in an alkali-activated binder."
+      }
+    ],
+    "2 Feedstock Chemistry": [
+      {
+        "Source_ID": "SRC-W3016528323",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Steel_Slag_Type": "EAF",
+        "Source/Origin": "National steel industry, Maia and Aldeia de Paio Pires (Seixal), Portugal",
+        "CaO_pct": "33.29",
+        "SiO2_pct": "15",
+        "Al2O3_pct": "10.08",
+        "Fe2O3_pct": "30.48",
+        "MgO_pct": "4.54",
+        "SO3_pct": "0.19",
+        "Na2O_pct": "0.13",
+        "TiO2_pct": "0.82",
+        "P2O5_pct": "0.24",
+        "MnO_pct": "3.13",
+        "Trace_Elements": "{\"Cr\": 2.1} wt%",
+        "Analysis_Method": "SEM-EDS",
+        "Basis_As_Reported": "wt.%",
+        "Notes": "Table 1, EDS on Hitachi S-4800. K2O not detected. P listed as 'P2O3' in table (likely P2O5)."
+      }
+    ],
+    "3 Processing": [
+      {
+        "Source_ID": "SRC-W3016528323",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Steel_Slag_Type": "EAF",
+        "Initial_Material_Form": "As-received EAF slag",
+        "Processing_Method": "Drying; Grinding; Milling; Sieving",
+        "Equipment_or_Process": "Oven; crusher mill; ball mill",
+        "Dry_or_Wet": "Dry",
+        "Process_Temperature_C": "60",
+        "Residence_Time": "24 h drying",
+        "Energy_Input_if_Reported": "Crusher 12 kWh/t; ball mill 12.5 kWh/t (coarser) and 37.5 kWh/t (finer)",
+        "Post_Process_Form": "Powder <250 um",
+        "Processing_Notes": "Sieved below 250 um.; Process_Temperature_C: 60 (drying)"
+      }
+    ],
+    "4 Particle Size": [
+      {
+        "Source_ID": "SRC-W3016528323",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Steel_Slag_Type": "EAF",
+        "Measurement_Method": "Laser diffraction (CILAS 1190)",
+        "D50_um": "49.65",
+        "Max_Particle_Size_um": "250",
+        "Grinding_Equipment": "Crusher mill + ball mill",
+        "Particle_Size_Notes": "TMWM D50 145.83, GGBFS 10.91, RCBW 85.72 um."
+      }
+    ],
+    "5 Activation": [
+      {
+        "Source_ID": "SRC-W3016528323",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Steel_Slag_Type": "EAF",
+        "Activation_Type": "Combined",
+        "Activator_or_Additive": "Sodium silicate (Solvay D40, Ms 3.23) + NaOH",
+        "Activator_Dosage": "Precursor/activator ratio 3",
+        "Activator_Concentration": "NaOH 10 M; SS:SH = 66.67:33.33 wt%",
+        "Activation_Temperature_C": "60",
+        "Activation_Time": "24 h oven, then laboratory temperature to 28 d",
+        "Thermal_Activation": "Oven curing 60 °C 24 h",
+        "Chemical_Activation": "Alkali activation (Na2SiO3 + NaOH)",
+        "Activation_Notes": "Mix 90TMW+10EAFS; element ratios Si/Al 2.435, Ca/Si 0.118, K/Al 0.216, Na/Si 0.270."
+      }
+    ],
+    "6 Concrete Performance": [
+      {
+        "Source_ID": "SRC-W3016528323",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Mix_ID": "90TMW+10EAFS",
+        "Steel_Slag_Type": "EAF",
+        "SCM_Replacement_pct": "10",
+        "Cement_Type": "None (alkali-activated)",
+        "Mix_Proportion_Notes": "90% TMWM + 10% EAFS; activator SS/SH 2:1, P/A = 3. Paste.; SCM_Replacement_pct: 10 (EAFS replacing TMWM by vt.%)",
+        "Compressive_Strength_7d_MPa": "14.66",
+        "Compressive_Strength_28d_MPa": "17.86",
+        "Strength_Test_Method": "EN 196-1, 25 mm cubes, 0.05 kN/s, mean of 5",
+        "Strength_Notes": "14 d: 15.66 MPa. Text gives 28 d as 17.28 MPa in one place, Table 3 gives 17.86. Control 100TMW: 7.73 / 10.07 / 11.23 MPa at 7/14/28 d."
+      }
+    ],
+    "7 Durability": [
+      {
+        "Source_ID": "SRC-W3016528323",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Mix_ID": "90TMW+10EAFS",
+        "Steel_Slag_Type": "EAF",
+        "Test_Category": "Permeability",
+        "Test_Method": "Mercury intrusion porosimetry (Micromeritics AutoPore IV 9500)",
+        "Test_Age": "28 d",
+        "Permeability": "Total porosity 37.63%; average pore 0.22 um; critical pore 9.04 um",
+        "Durability_Result": "Pores: mesopores 5.55%, macropores 61.78%, air voids/cracks 32.67%; skeletal density 3.84 g/cm3",
+        "Durability_Notes": "Table 4. Control 100TMW porosity 43.88%, critical pore 21.28 um."
+      }
+    ],
+    "8 Carbon Uptake": [],
+    "9 Citations & Provenance": [
+      {
+        "Source_ID": "SRC-W3016528323",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Fact_or_Data_Element": "Compressive_Strength_28d_MPa",
+        "Reported_Value": "17.86",
+        "Unit": "MPa",
+        "Page_or_Table_or_Figure": "Table 3, p.79",
+        "Extraction_Method": "Manual reading (Claude)",
+        "Original_Source_Text_or_Excerpt": "CS at 28 days 11.23 17.86 22 24.98",
+        "Confidence": "High",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06",
+        "Provenance_Notes": "Text p.78 also states 17.28 MPa."
+      },
+      {
+        "Source_ID": "SRC-W3016528323",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Fact_or_Data_Element": "Compressive_Strength_7d_MPa",
+        "Reported_Value": "14.66",
+        "Unit": "MPa",
+        "Page_or_Table_or_Figure": "Table 3, p.79",
+        "Extraction_Method": "Manual reading (Claude)",
+        "Original_Source_Text_or_Excerpt": "CS at 7 days 7.73 14.66 17.2 18.57",
+        "Confidence": "High",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06",
+        "Provenance_Notes": null
+      },
+      {
+        "Source_ID": "SRC-W3016528323",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Fact_or_Data_Element": "CaO_pct",
+        "Reported_Value": "33.29",
+        "Unit": "wt.%",
+        "Page_or_Table_or_Figure": "Table 1, p.76",
+        "Extraction_Method": "Manual reading (Claude)",
+        "Original_Source_Text_or_Excerpt": "CaO 0.69 33.29 48.71 0.82",
+        "Confidence": "High",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06",
+        "Provenance_Notes": null
+      },
+      {
+        "Source_ID": "SRC-W3016528323",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Fact_or_Data_Element": "Total_porosity_pct",
+        "Reported_Value": "37.63",
+        "Unit": "%",
+        "Page_or_Table_or_Figure": "Table 4, p.83",
+        "Extraction_Method": "Manual reading (Claude)",
+        "Original_Source_Text_or_Excerpt": "Porosity (%) 43.88 37.63 25.41 27.28",
+        "Confidence": "High",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06",
+        "Provenance_Notes": null
+      }
+    ]
+  },
+  "reference_cleaned": "2026-11-11 (v9 rules applied; not re-read against the PDF)"
+}
