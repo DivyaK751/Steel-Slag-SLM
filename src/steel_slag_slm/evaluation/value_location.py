@@ -10,7 +10,12 @@ import re
 from typing import Literal
 
 from steel_slag_slm.data.pdf_pages import page_texts
-from steel_slag_slm.evaluation.value_match import MatchType, match_type, normalize_formula, normalize_value
+from steel_slag_slm.evaluation.value_match import (
+    MatchType,
+    match_type,
+    normalize_formula,
+    normalize_value,
+)
 from steel_slag_slm.schemas import FigureReading, ParsedPaper
 
 ParsedSource = Literal["text", "table", "figure_reading", "not_found"]
