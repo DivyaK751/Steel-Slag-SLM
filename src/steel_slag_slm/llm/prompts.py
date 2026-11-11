@@ -21,6 +21,8 @@ class PromptTemplate:
     instruction: str
     input_template: str
     variables: tuple[str, ...]
+    # How the answer is laid out, for prompts that support more than one (e.g. "rows")
+    output_format: str = "default"
 
     def render_input(self, **values: object) -> str:
         """Fill the input template; every declared variable must be given, and no others.
@@ -55,6 +57,7 @@ def load_prompt(name: str, prompts_dir: Path = PROMPTS_DIR) -> PromptTemplate:
         instruction=raw["instruction"],
         input_template=raw["input_template"],
         variables=tuple(raw["variables"]),
+        output_format=raw.get("output_format", "default"),
     )
     if _placeholders(prompt.input_template) != set(prompt.variables):
         raise ValueError(
