@@ -12,6 +12,7 @@ __pycache__/
 service_account*.json
 /reports/evaluation/
 /reports/extraction/
+/reports/extraction_eval/
 pdf_parsing_implementation_guide.pdf
 
 
