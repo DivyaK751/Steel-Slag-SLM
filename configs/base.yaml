@@ -294,6 +294,29 @@ data_extraction:
   # BigQuery on-demand query price; the load jobs that write the rows are free
   bigquery_usd_per_tib: 6.25
 
+extraction_judge:
+  # Scores benchmark runs of extract-data against the hand-extracted reference workbook
+  prompt_name: judge_extraction
+  # Checks disputed values against the paper's text (judge-extraction --adjudicate)
+  adjudication_prompt_name: adjudicate_extraction
+  # A different model from the extractor's, so the judge doesn't favour its own wording;
+  # gemini-3.8-flash ($0.75 / $3.75) and gemini-4-argon ($2.00 / $10.00) also work here.
+  # Scores are kept per judge model, so compare runs judged by the same one
+  model: gemini-3.1-pro-preview
+  max_concurrency: 4
+  call_timeout_s: 300
+  prices:
+    input: 2.00
+    cached_input: 0.20
+    output: 12.00
+  reference_workbook: human_extracted_data/human_extracted_data.xlsx
+  benchmark_file: configs/extraction_benchmark.yaml
+  # Every benchmark run's rows and scores, in GOOGLE_CLOUD_PROJECT; promote-extraction copies
+  # a run that beats the last promoted one into data_extraction.dataset
+  runs_dataset: steel_slag_extraction_runs
+  # Where judge-extraction writes each run's Excel report; git-ignored
+  report_dir: reports/extraction_eval
+
 pdf_parsing:
   source_table: capstone-project-511200.steel_slag.papers
   relevant_labels: ["Yes"]  # papers the relevance screening approved

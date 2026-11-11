@@ -1,0 +1,56 @@
+# The hand-extracted papers (human_extracted_data/) that extraction prompts are scored on.
+# Iterate on dev; extract and judge test only for a prompt you may promote, so the prompt
+# isn't tuned to the papers it is graded on. Moving papers between splits is fine:
+# promote-extraction compares runs on the current test papers, judged by the same judge.
+dev:
+  - W2014482815
+  - W4221096775
+  - W7165632997
+  - W4280519327
+  - W3130633964
+  - W3035579107
+  - W4200481327
+  - W4303649275
+  - W7168360315
+  - W2518789431
+  - W4411096160
+  - W4224466340
+  - W2995159460
+  - W7170093904
+  - W4287832583
+  - W2789941819
+  - W4413753483
+  - W4415357877
+  - W4415427193
+  - W4400857371
+test:
+  - W2566640190
+  - W2902877286
+  - W3016528323
+  - W3034880657
+  - W3044179607
+  - W3119080532
+  - W3126866315
+  - W4283653483
+  - W4285205158
+  - W4296433278
+  - W4297936954
+  - W4304172676
+  - W4311448211
+  - W4323920880
+  - W4328054887
+  - W4367466729
+  - W4388050592
+  - W4390225930
+  - W4391753948
+  - W4392590272
+  - W4399569225
+  - W7116849947
+  - W7125247953
+  - W7128959358
+  - W7133210594
+  - W7140580295
+  - W7151555136
+  - W7169539115
+  - W7203753341
+  - W7216825142

@@ -229,6 +229,30 @@ class DataExtractionSettings(AgentSettings):
     papers_table: str  # fully qualified: project.dataset.table
 
 
+class ExtractionJudgeSettings(AgentSettings):
+    """How the judge scores benchmark extraction runs and where runs and scores are kept."""
+
+    prompt_name: str
+    adjudication_prompt_name: str
+    max_concurrency: int
+    call_timeout_s: float
+    prices: TokenPrices
+    reference_workbook: Path
+    benchmark_file: Path
+    runs_dataset: str  # in GOOGLE_CLOUD_PROJECT, next to data_extraction.dataset
+    report_dir: Path
+
+
+class BenchmarkSplit(BaseModel):
+    """The hand-extracted papers, split into the ones prompts are tuned on and graded on."""
+
+    dev: list[str]
+    test: list[str]
+
+    def papers(self, split: Literal["dev", "test"]) -> list[str]:
+        return self.dev if split == "dev" else self.test
+
+
 class ModelPrice(BaseModel):
     """Gemini list price in USD per 1 million tokens."""
 
@@ -363,6 +387,29 @@ def load_data_extraction_settings(
         **_agent_section(raw_config, "data_extraction"),
         papers_table=_papers_table(raw_config),
     )
+
+
+def load_extraction_judge_settings(
+    config_path: Path = BASE_CONFIG_PATH,
+) -> ExtractionJudgeSettings:
+    """Build the extraction judge's settings, with its file paths made absolute."""
+    section = _agent_section(_read_base_config(config_path), "extraction_judge")
+    for key in ("reference_workbook", "benchmark_file", "report_dir"):
+        section[key] = PROJECT_ROOT / section[key]
+    return ExtractionJudgeSettings(**section)
+
+
+def load_benchmark_split(path: Path) -> BenchmarkSplit:
+    """Read the dev and test paper IDs; a paper in both would let a prompt see its grader.
+
+    Raises:
+        ValueError: If a paper is listed in both splits.
+    """
+    split = BenchmarkSplit(**yaml.safe_load(path.read_text()))
+    overlap = set(split.dev) & set(split.test)
+    if overlap:
+        raise ValueError(f"{path.name}: papers in both dev and test: {sorted(overlap)}")
+    return split
 
 
 def load_evaluation_settings(

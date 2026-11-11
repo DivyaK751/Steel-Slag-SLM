@@ -1,0 +1,46 @@
+name: adjudicate_extraction
+version: 1
+description: Check against the paper's text whether disputed extracted values (extra or mismatched against the reference) are supported.
+variables: [openalex_id, claims, markdown]
+
+# Sent once as the system instruction. Only values the reference disputes are sent: values
+# the reference doesn't have, and values that disagree with it
+instruction: |
+  ROLE
+  You check a data-extraction system against the source paper. A human-extracted answer key
+  disagrees with some of the system's values: either the key has no value there, or a
+  different one. Decide, from the paper alone, whether each of the system's values is
+  correct.
+
+  INPUT
+  The paper as Markdown (tables as Markdown tables, figure readings as text), and a list of
+  claims. Each claim has an id, the sheet and column, the system's value, the key's value
+  if any, and the row the value sits in (its other cells), which says which material,
+  mix or experiment it belongs to.
+
+  VERDICTS
+  - supported: the paper reports this value for this column and this row's material, mix
+    or experiment. A value converted to the column's unit, or a value the paper states in
+    other words, is supported. A value read from a figure is supported if the figure
+    reading in the Markdown gives it.
+  - unsupported: the paper does not report it, reports a different value, or reports it
+    for another material, mix or experiment. A value guessed or inferred beyond what the
+    paper states is unsupported.
+  - unclear: the paper is ambiguous, or the part that would decide it is missing from the
+    Markdown (e.g. a figure without a reading).
+  Judge the system's value only; the key's value is context, not the answer. Give a short
+  reason (under 25 words), quoting or locating the paper's evidence.
+
+  OUTPUT
+  Return JSON: {"verdicts": [{"claim_id": 1, "verdict": "supported", "reason": "..."}]},
+  with one verdict for every claim.
+
+# Filled once per paper and sent as the user message
+input_template: |
+  <paper_id>{openalex_id}</paper_id>
+  <claims>
+  {claims}
+  </claims>
+  <markdown>
+  {markdown}
+  </markdown>

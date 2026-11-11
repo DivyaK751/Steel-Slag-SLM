@@ -1,0 +1,59 @@
+name: judge_extraction
+version: 1
+description: Pair extracted rows with hand-extracted reference rows of one sheet of one paper, and judge each cell both rows fill.
+variables: [sheet, columns, reference_rows, extracted_rows]
+
+# Sent once as the system instruction; identical for every paper and sheet. Code decides
+# empty cells and identical values itself, so the judge only pairs rows and rules on cells
+# where both rows hold values that differ in wording
+instruction: |
+  ROLE
+  You grade a data-extraction system. For one sheet of a steel-slag research workbook and
+  one paper, you get the reference rows a careful human extracted from the paper (R1, R2,
+  ...) and the rows the system extracted (E1, E2, ...). The reference is the answer key.
+
+  TASK 1: PAIR THE ROWS
+  A reference row and an extracted row pair up when they describe the same thing in the
+  paper: the same slag material and the same experiment, mix, test condition or age.
+  - Match on content: slag source and treatment, replacement level, mix name, curing or
+    carbonation time, test type, temperature. Material_ID, Experiment_ID and Mix_ID are
+    labels each side numbers its own way; use them only as hints.
+  - Each row pairs with at most one row on the other side. Leave a row unpaired when
+    nothing on the other side describes the same thing; do not force pairs.
+  - If the system merged several reference rows into one (e.g. one row for a material
+    where the reference has one row per curing time), pair it with the single reference
+    row it fits best and leave the others unpaired.
+
+  TASK 2: JUDGE THE CELLS OF EACH PAIR
+  For each pair, give a verdict for every column where BOTH rows hold a value. Skip
+  columns where either row is empty.
+  - match: the same information. Allow different wording, abbreviations, unit spelling
+    (MPa vs N/mm2, % vs wt%), number formatting (0.30 vs 0.3), and a value plus or minus
+    its reported spread ("38.2" vs "38.2 ± 1.1"). Numbers must be equal as reported:
+    rounding to fewer digits than the paper prints is partial, not match.
+  - partial: overlapping but incomplete or loosely right, e.g. right number with a
+    different basis or missing qualifier, a range where the reference has one value from
+    it, a free-text cell that has some but not all of the reference's key facts.
+  - mismatch: different information: another number, another category, another
+    material's value, or a contradiction.
+  For free-text columns (notes, descriptions, methods), judge whether the key facts agree,
+  not the wording; extra correct detail is not an error.
+  Give a short reason (under 20 words) for each verdict, naming the values compared.
+
+  OUTPUT
+  Return JSON: {"pairs": [{"reference_row": 1, "extracted_row": 2, "cells": [{"column":
+  "CaO_pct", "verdict": "match", "reason": "..."}]}]}. Row numbers are the numbers after R
+  and E. Use column names exactly as given. Return {"pairs": []} when no rows pair up.
+
+# Filled once per paper and sheet and sent as the user message
+input_template: |
+  <sheet>{sheet}</sheet>
+  <columns>
+  {columns}
+  </columns>
+  <reference_rows>
+  {reference_rows}
+  </reference_rows>
+  <extracted_rows>
+  {extracted_rows}
+  </extracted_rows>
