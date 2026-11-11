@@ -94,6 +94,11 @@ PROVENANCE_TABLE = SHEET_TABLES[-1].table
 # Filled by the pipeline from the paper and its material list, never by the model directly
 KEY_HEADERS = ("Source_ID", "Material_ID", "Experiment_ID", "Mix_ID", "Steel_Slag_Type")
 
+# Labels each side of a comparison numbers its own way, so they are not data
+ID_HEADERS = ("Source_ID", "Material_ID", "Experiment_ID", "Mix_ID")
+# The workbook asks for blank or NA where a paper doesn't report a field
+_EMPTY_VALUES = {"", "na", "n/a", "nan"}
+
 # Columns limited to the workbook's controlled vocabulary (plus Dry_or_Wet, by its name)
 ALLOWED_VALUES: dict[str, tuple[str, ...]] = {
     "Steel_Slag_Type": get_args(SteelSlagType),
@@ -105,7 +110,6 @@ ALLOWED_VALUES: dict[str, tuple[str, ...]] = {
     "Analysis_Method": ("XRF", "ICP-OES", "ICP-MS", "XRD", "SEM-EDS", "Other"),
     "Dry_or_Wet": ("Dry", "Wet"),
 }  # fmt: skip
-
 # Allowed-value columns that may list several values in order, e.g. "Grinding; Sieving"
 LIST_COLUMNS = ("Processing_Method",)
 LIST_SEPARATOR = ";"
@@ -136,6 +140,18 @@ RUN_FIELDS = [
     bigquery.SchemaField("extracted_at", "TIMESTAMP", mode="REQUIRED"),
     bigquery.SchemaField("extraction_model", "STRING", description="Gemini model ID"),
 ]
+# Added to the benchmark-run copies of the tables, which keep every run's rows side by side
+RUN_ID_FIELD = bigquery.SchemaField("run_id", "STRING", mode="REQUIRED")
+
+
+def data_columns(sheet_table: SheetTable) -> tuple[str, ...]:
+    """The headers of a sheet that hold data, i.e. everything but the ID labels."""
+    return tuple(header for header in sheet_table.headers if header not in ID_HEADERS)
+
+
+def is_filled(value: object) -> bool:
+    """Whether a cell holds a value; blank and NA mean the paper doesn't report it."""
+    return value is not None and str(value).strip().lower() not in _EMPTY_VALUES
 
 
 def column_unit(header: str) -> str | None:
@@ -151,8 +167,10 @@ def to_column_name(header: str) -> str:
     return _UNSAFE_CHARS.sub("_", header.lower().replace("/", "_or_"))
 
 
-def build_schema(sheet_table: SheetTable) -> list[bigquery.SchemaField]:
+def build_schema(sheet_table: SheetTable, with_run_id: bool = False) -> list[bigquery.SchemaField]:
     """Columns for one sheet's table: its headers in order, then the run fields.
+
+    with_run_id adds the run_id column of the benchmark-run tables.
 
     Values are STRING because the workbook asks for them exactly as reported, and papers
     report ranges ("45-60") and bounds (">40") as often as plain numbers.
@@ -170,23 +188,26 @@ def build_schema(sheet_table: SheetTable) -> list[bigquery.SchemaField]:
         for header in sheet_table.headers
         if header != "Source_ID"
     ]
-    return fields + RUN_FIELDS
+    return fields + RUN_FIELDS + ([RUN_ID_FIELD] if with_run_id else [])
 
 
 def ensure_extraction_tables(
-    client: bigquery.Client, settings: ExtractionTablesSettings
+    client: bigquery.Client, settings: ExtractionTablesSettings, with_run_id: bool = False
 ) -> list[str]:
-    """Create the dataset and one table per workbook sheet if missing; return their full IDs."""
+    """Create the dataset and one table per workbook sheet if missing; return their full IDs.
+
+    with_run_id creates the benchmark-run tables, where many runs share each table.
+    """
     dataset = bigquery.Dataset(f"{client.project}.{settings.dataset}")
     dataset.location = settings.location
     client.create_dataset(dataset, exists_ok=True)
     table_ids = []
     for sheet_table in SHEET_TABLES:
         table_id = f"{client.project}.{settings.dataset}.{sheet_table.table}"
-        table = bigquery.Table(table_id, schema=build_schema(sheet_table))
+        table = bigquery.Table(table_id, schema=build_schema(sheet_table, with_run_id))
         table.description = f'Rows of the "{sheet_table.sheet}" sheet of the CNS input workbook'
-        # Every read and re-extraction filters on one paper, so cluster on it
-        table.clustering_fields = ["source_id"]
+        # Every read and re-extraction filters on one paper (within one run), so cluster on it
+        table.clustering_fields = ["run_id", "source_id"] if with_run_id else ["source_id"]
         client.create_table(table, exists_ok=True)
         table_ids.append(table_id)
     return table_ids
@@ -205,21 +226,27 @@ def replace_paper_rows(
     dataset_id: str,
     source_id: str,
     rows_by_table: Mapping[str, Sequence[dict[str, Any]]],
+    run_id: str | None = None,
 ) -> int:
     """Delete one paper's rows from every sheet table, then load its new rows.
 
     The literature row is loaded last, so a run that stops halfway leaves the paper looking
-    unextracted and the next run redoes it.
+    unextracted and the next run redoes it. With run_id, the tables are benchmark-run tables
+    and only that run's rows of the paper are replaced.
 
     Returns:
         Bytes billed for the delete; load jobs are free, so this is the paper's whole charge.
     """
+    run_filter = " AND run_id = @run_id" if run_id else ""
     deletes = "\n".join(
-        f"DELETE FROM `{dataset_id}.{sheet_table.table}` WHERE source_id = @source_id;"
+        f"DELETE FROM `{dataset_id}.{sheet_table.table}` WHERE source_id = @source_id{run_filter};"
         for sheet_table in SHEET_TABLES
     )
     job_config = bigquery.QueryJobConfig(
-        query_parameters=[bigquery.ScalarQueryParameter("source_id", "STRING", source_id)]
+        query_parameters=[
+            bigquery.ScalarQueryParameter("source_id", "STRING", source_id),
+            bigquery.ScalarQueryParameter("run_id", "STRING", run_id),
+        ]
     )
     delete_job = client.query(deletes, job_config=job_config)
     delete_job.result()
@@ -229,8 +256,11 @@ def replace_paper_rows(
             continue
         # A load job, not a streaming insert: streamed rows can't be deleted for ~30 minutes
         load_config = bigquery.LoadJobConfig(
-            schema=build_schema(sheet_table), write_disposition="WRITE_APPEND"
+            schema=build_schema(sheet_table, with_run_id=bool(run_id)),
+            write_disposition="WRITE_APPEND",
         )
+        if run_id:
+            rows = [{**row, "run_id": run_id} for row in rows]
         client.load_table_from_json(
             list(rows), f"{dataset_id}.{sheet_table.table}", job_config=load_config
         ).result()

@@ -425,3 +425,91 @@ class RowExtraction(BaseModel):
             for value in row.values
         ]
         return PaperExtraction(literature=self.literature, materials=self.materials, facts=facts)
+
+
+# How a judged cell's extracted value compares with the hand-extracted reference value
+CellOutcome = Literal["match", "partial", "mismatch", "missed", "extra"]
+CellVerdictLabel = Literal["match", "partial", "mismatch"]
+# Whether the paper's text backs the extracted value (judge-extraction --adjudicate)
+AdjudicationLabel = Literal["supported", "unsupported", "unclear"]
+
+
+class CellVerdict(BaseModel):
+    """The judge's call on one column where both rows of a pair hold a value."""
+
+    column: str  # workbook header
+    verdict: CellVerdictLabel
+    reason: str
+
+
+class RowPair(BaseModel):
+    """A reference row and the extracted row that records the same material and experiment."""
+
+    reference_row: int  # R number shown to the judge
+    extracted_row: int  # E number shown to the judge
+    cells: list[CellVerdict]
+
+
+class TableJudgement(BaseModel):
+    """The judge's answer for one paper and one sheet: which rows pair up, and their cells."""
+
+    pairs: list[RowPair]
+
+
+class ClaimVerdict(BaseModel):
+    """Whether the paper's text supports one extracted value the reference disputes."""
+
+    claim_id: int
+    verdict: AdjudicationLabel
+    reason: str
+
+
+class Adjudication(BaseModel):
+    """The adjudicator's answer for one paper's disputed values."""
+
+    verdicts: list[ClaimVerdict]
+
+
+@dataclass(slots=True)
+class JudgedCell:
+    """One data cell of one paper and sheet, compared between reference and extraction.
+
+    Cells empty on both sides are not kept: they are neither right nor wrong.
+    """
+
+    source_id: str
+    table: str
+    column: str  # workbook header
+    reference_row: int | None  # None when the extracted row has no reference partner
+    extracted_row: int | None  # None when the reference row was not extracted
+    reference_value: str | None
+    extracted_value: str | None
+    outcome: CellOutcome
+    reason: str = ""
+    adjudication: AdjudicationLabel | None = None
+    adjudication_reason: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class JudgedTable:
+    """Row and filled-cell counts of one paper's sheet on each side, for fill rates."""
+
+    source_id: str
+    table: str
+    reference_rows: int
+    extracted_rows: int
+    reference_filled: int  # data cells holding a value
+    extracted_filled: int
+    matched_rows: int | None  # None for sheets the judge doesn't compare (provenance)
+
+
+@dataclass(frozen=True, slots=True)
+class ExtractionRun:
+    """One extract-data run over a benchmark split, kept so prompt versions can be compared."""
+
+    run_id: str
+    prompt_name: str
+    prompt_version: int
+    model: str
+    split: str
+    paper_ids: tuple[str, ...]
