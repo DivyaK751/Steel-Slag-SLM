@@ -37,3 +37,7 @@ class PapersNotFoundError(ValueError):
     def __init__(self, missing_ids: list[str]) -> None:
         super().__init__(f"No PDF or figures folder for: {', '.join(missing_ids)}")
         self.missing_ids = missing_ids
+
+
+class PromotionError(Exception):
+    """A benchmark run can't be compared on the test papers, so it can't be promoted."""

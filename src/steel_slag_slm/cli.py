@@ -7,27 +7,32 @@ import logging
 import os
 import subprocess
 import textwrap
-from datetime import datetime
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from google.adk.runners import Runner
 from google.cloud import bigquery
 
 from steel_slag_slm.agents.abstract_extractor import build_extractor_agent
 from steel_slag_slm.agents.data_extractor import build_data_extractor_agent
+from steel_slag_slm.agents.extraction_judge import build_adjudicator_agent, build_judge_agent
 from steel_slag_slm.agents.figure_reader import build_figure_reader_agent
 from steel_slag_slm.agents.relevance_screener import build_screener_agent
 from steel_slag_slm.agents.runner import build_runner
 from steel_slag_slm.config import (
     RETRIEVAL_EVAL_PATH,
+    DataExtractionSettings,
     ScreeningSettings,
     Settings,
     load_abstract_extraction_settings,
+    load_benchmark_split,
     load_data_extraction_settings,
     load_drive_connection_settings,
     load_embedding_settings,
     load_evaluation_settings,
+    load_extraction_judge_settings,
     load_extraction_tables_settings,
     load_figure_extraction_settings,
     load_figure_reading_settings,
@@ -37,6 +42,7 @@ from steel_slag_slm.config import (
     load_screening_settings,
     load_settings,
 )
+from steel_slag_slm.data import parsed_index
 from steel_slag_slm.data.drive_storage import (
     build_drive_service,
     ensure_subfolder,
@@ -45,15 +51,37 @@ from steel_slag_slm.data.drive_storage import (
 )
 from steel_slag_slm.data.embedding_store import load_store
 from steel_slag_slm.data.extraction_export import export_workbook
+from steel_slag_slm.data.extraction_runs import (
+    ensure_run_tables,
+    read_run,
+    read_run_rows,
+    record_run,
+    replace_evaluation,
+    set_run_cost,
+)
 from steel_slag_slm.data.extraction_tables import ensure_extraction_tables
 from steel_slag_slm.data.figure_detection import build_figure_converter
 from steel_slag_slm.data.openalex import OpenAlexClient
 from steel_slag_slm.data.paper_registry import build_bigquery_client
+from steel_slag_slm.data.reference_workbook import read_reference_rows
+from steel_slag_slm.evaluation.extraction_report import (
+    SCORE_COLUMNS,
+    VALUE_COLUMNS,
+    format_summary,
+    format_table,
+    format_value_summary,
+    save_workbook,
+    summary_rows,
+    value_rows,
+    write_report,
+)
 from steel_slag_slm.evaluation.figure_checks import total_checks
-from steel_slag_slm.exceptions import PapersNotFoundError
+from steel_slag_slm.evaluation.value_metrics import count_values
+from steel_slag_slm.exceptions import PapersNotFoundError, PromotionError
 from steel_slag_slm.llm.prompts import PromptTemplate, load_prompt
 from steel_slag_slm.pipelines.background_figure_reader import BackgroundFigureReader
 from steel_slag_slm.pipelines.build_index import run_build_index
+from steel_slag_slm.pipelines.compare_extraction import compare_runs
 from steel_slag_slm.pipelines.evaluate_retrieval import (
     format_retrieval_report,
     run_corpus_eval,
@@ -61,12 +89,14 @@ from steel_slag_slm.pipelines.evaluate_retrieval import (
 )
 from steel_slag_slm.pipelines.evaluate_screening import run_evaluation
 from steel_slag_slm.pipelines.export_parsed import run_export_parsed
-from steel_slag_slm.pipelines.extract_data import run_data_extraction
+from steel_slag_slm.pipelines.extract_data import load_parsed_paper, run_data_extraction
 from steel_slag_slm.pipelines.extract_figures import collect_pdf_paths, run_figure_extraction
 from steel_slag_slm.pipelines.fetch_papers import run_fetch
 from steel_slag_slm.pipelines.fill_abstracts import run_fill_abstracts
+from steel_slag_slm.pipelines.judge_extraction import adjudicate_run, judge_run
 from steel_slag_slm.pipelines.paper_selection import select_papers
 from steel_slag_slm.pipelines.parse_pdfs import format_parse_summary, run_pdf_parsing
+from steel_slag_slm.pipelines.promote_extraction import run_promotion
 from steel_slag_slm.pipelines.read_figures import (
     list_paper_dirs,
     run_figure_reading,
@@ -77,7 +107,7 @@ from steel_slag_slm.pipelines.search_index import run_search
 from steel_slag_slm.pipelines.sync_registry import run_registry_sync
 from steel_slag_slm.rag.embeddings import Embedder
 from steel_slag_slm.rag.retrieval import CrossEncoderScorer, TwoStageRetriever
-from steel_slag_slm.schemas import ChunkKind
+from steel_slag_slm.schemas import ChunkKind, ExtractionRun
 
 logger = logging.getLogger(__name__)
 
@@ -526,11 +556,19 @@ def _add_parsed_folder_argument(parser: argparse.ArgumentParser) -> None:
 def extract_data() -> None:
     """Extract workbook data values from parsed papers into the BigQuery sheet tables."""
     parser = argparse.ArgumentParser(description=extract_data.__doc__)
-    parser.add_argument(
+    papers = parser.add_mutually_exclusive_group()
+    papers.add_argument(
         "--paper-ids",
         nargs="+",
         default=None,
         help="OpenAlex IDs to (re-)extract (default: every parsed paper not extracted yet)",
+    )
+    papers.add_argument(
+        "--benchmark",
+        choices=("dev", "test"),
+        default=None,
+        help="extract this split of the hand-extracted papers as a new run in the runs"
+        " dataset, for judge-extraction; production tables are left alone",
     )
     parser.add_argument(
         "--max-papers",
@@ -541,6 +579,8 @@ def extract_data() -> None:
     args = parser.parse_args()
     if args.max_papers is not None and args.max_papers <= 0:
         parser.error("--max-papers must be greater than zero")
+    if args.benchmark and args.max_papers:
+        parser.error("--max-papers can't cap a benchmark run; it must cover the whole split")
     _setup_logging()
     _quiet_gemini_logs()
 
@@ -552,20 +592,199 @@ def extract_data() -> None:
         os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(gcp.credentials_file)
     prompt = load_prompt(settings.prompt_name)
     runner = build_runner(build_data_extractor_agent(settings, prompt))
-    outcomes = asyncio.run(
+    bq_client = build_bigquery_client(gcp.project, gcp.credentials_file)
+    paper_ids, run = args.paper_ids, None
+    if args.benchmark:
+        settings, run = _start_benchmark_run(bq_client, settings, prompt, args.benchmark)
+        paper_ids = list(run.paper_ids)
+    outcomes, cost_usd = asyncio.run(
         run_data_extraction(
             settings,
             load_pdf_parsing_settings(),
-            build_bigquery_client(gcp.project, gcp.credentials_file),
+            bq_client,
             drive_service,
             parsed_folder_id,
             runner,
             prompt,
-            args.paper_ids,
+            paper_ids,
             args.max_papers,
+            run.run_id if run else None,
         )
     )
     print("Summary:", dict(outcomes))
+    if run:
+        set_run_cost(bq_client, f"{gcp.project}.{settings.dataset}", run.run_id, cost_usd)
+        print(f"Run {run.run_id} saved. Score it with:")
+        print(f"  uv run judge-extraction --run-id {run.run_id}")
+
+
+def _start_benchmark_run(
+    bq_client: bigquery.Client,
+    settings: DataExtractionSettings,
+    prompt: PromptTemplate,
+    split: Literal["dev", "test"],
+) -> tuple[DataExtractionSettings, ExtractionRun]:
+    """Register a new benchmark run; return settings that write to the runs dataset, and it."""
+    judge_settings = load_extraction_judge_settings()
+    started_at = datetime.now(UTC)
+    run = ExtractionRun(
+        run_id=f"{prompt.name}-{split}-{started_at:%Y%m%d-%H%M%S}",
+        prompt_name=prompt.name,
+        prompt_version=prompt.version,
+        model=settings.model,
+        split=split,
+        paper_ids=tuple(load_benchmark_split(judge_settings.benchmark_file).papers(split)),
+    )
+    location = load_extraction_tables_settings().location
+    ensure_run_tables(bq_client, judge_settings.runs_dataset, location)
+    record_run(bq_client, f"{bq_client.project}.{judge_settings.runs_dataset}", run, started_at)
+    return settings.model_copy(update={"dataset": judge_settings.runs_dataset}), run
+
+
+def _parsed_markdown_loader() -> Callable[[str], str | None]:
+    """Sign in to Drive and return a function that reads a parsed paper's Markdown."""
+    drive_service, parsed_folder_id = _connect_to_parsed_folder()
+    index = parsed_index.load_index(
+        drive_service, parsed_folder_id, load_pdf_parsing_settings().index_file_name
+    )
+
+    def load_markdown(paper_id: str) -> str | None:
+        entry = index.get(paper_id)
+        if not entry or not entry.get("json_file_id"):
+            return None
+        paper = load_parsed_paper(drive_service, paper_id, str(entry["json_file_id"]))
+        return paper.markdown if paper else None
+
+    return load_markdown
+
+
+def judge_extraction() -> None:
+    """Score a benchmark extraction run against the hand-extracted reference workbook."""
+    parser = argparse.ArgumentParser(description=judge_extraction.__doc__)
+    parser.add_argument("--run-id", required=True, help="printed by extract-data --benchmark")
+    parser.add_argument(
+        "--adjudicate",
+        action="store_true",
+        help="also check every extra or mismatched value against the paper's parsed text",
+    )
+    args = parser.parse_args()
+    _setup_logging()
+    _quiet_gemini_logs()
+
+    gcp = load_gcp_settings()
+    settings = load_extraction_judge_settings()
+    load_markdown = _parsed_markdown_loader() if args.adjudicate else None
+    if gcp.credentials_file:
+        # Set only after Drive signs in, as in extract-data: Gemini uses ADC
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(gcp.credentials_file)
+    bq_client = build_bigquery_client(gcp.project, gcp.credentials_file)
+    runs_dataset_id = f"{gcp.project}.{settings.runs_dataset}"
+    run = read_run(bq_client, runs_dataset_id, args.run_id)
+    if run is None:
+        raise SystemExit(f"No run {args.run_id} in {runs_dataset_id}")
+
+    prompt = load_prompt(settings.prompt_name)
+    reference = read_reference_rows(settings.reference_workbook, run.paper_ids)
+    extracted = read_run_rows(bq_client, runs_dataset_id, run.run_id)
+    runner = build_runner(build_judge_agent(settings, prompt))
+    judging = asyncio.run(judge_run(settings, runner, prompt, run, reference, extracted))
+    if load_markdown:
+        adjudication_prompt = load_prompt(settings.adjudication_prompt_name)
+        adjudicator = build_runner(build_adjudicator_agent(settings, adjudication_prompt))
+        asyncio.run(
+            adjudicate_run(
+                settings, adjudicator, adjudication_prompt, judging, extracted, load_markdown
+            )
+        )
+
+    judge = (settings.model, prompt.version)
+    replace_evaluation(
+        bq_client, runs_dataset_id, run.run_id, judge, datetime.now(UTC),
+        judging.cells, judging.tables,
+    )  # fmt: skip
+    report_path = settings.report_dir / f"{run.run_id}.xlsx"
+    value_counts = count_values(reference, extracted, run.paper_ids)
+    write_report(report_path, run, judge, judging.cells, judging.tables, value_counts)
+    print(f"Run {run.run_id}: {run.prompt_name} v{run.prompt_version}, {run.model},"
+          f" {run.split} split, {len(run.paper_ids)} papers")  # fmt: skip
+    print("Values (numbers and labels, whatever row they are in; no judge involved):")
+    print(format_value_summary(value_rows(value_counts)))
+    print(f"\nRows and cells, as paired by {judge[0]}:")
+    print(format_summary(summary_rows(judging.cells, judging.tables)))
+    print(f"Judge cost: ${judging.cost_usd(settings):.4f} | report: {report_path}")
+    if judging.unjudged:
+        print(f"Not judged (rerun to complete): {', '.join(judging.unjudged)}")
+    if judging.unadjudicated:
+        print(f"Not adjudicated: {', '.join(judging.unadjudicated)}")
+
+
+def promote_extraction() -> None:
+    """Copy a test-split run into the production tables if it beats the last promoted run."""
+    parser = argparse.ArgumentParser(description=promote_extraction.__doc__)
+    parser.add_argument(
+        "--run-id", required=True, help="a judged extract-data --benchmark test run"
+    )
+    parser.add_argument("--force", action="store_true", help="promote even if its F1 is not higher")
+    args = parser.parse_args()
+    _setup_logging()
+
+    gcp = load_gcp_settings()
+    settings = load_extraction_judge_settings()
+    test_ids = load_benchmark_split(settings.benchmark_file).test
+    judge = (settings.model, load_prompt(settings.prompt_name).version)
+    production_dataset_id = f"{gcp.project}.{load_data_extraction_settings().dataset}"
+    try:
+        promotion = run_promotion(
+            build_bigquery_client(gcp.project, gcp.credentials_file),
+            f"{gcp.project}.{settings.runs_dataset}",
+            production_dataset_id,
+            args.run_id,
+            judge,
+            test_ids,
+            args.force,
+        )
+    except PromotionError as error:
+        raise SystemExit(str(error)) from error
+    print(f"{promotion.run_id}: F1 {_percent(promotion.f1)} on {len(test_ids)} test papers")
+    if promotion.champion_id:
+        print(f"Last promoted {promotion.champion_id}: F1 {_percent(promotion.champion_f1)}")
+    if promotion.promoted:
+        print(f"Promoted: its rows replaced those papers' rows in {production_dataset_id}")
+    else:
+        print("Not promoted: F1 is not higher (use --force to promote anyway)")
+
+
+def compare_extraction() -> None:
+    """Compare the scores of every judged benchmark run in one table and workbook."""
+    parser = argparse.ArgumentParser(description=compare_extraction.__doc__)
+    parser.add_argument("--split", choices=("dev", "test"), help="show only runs of this split")
+    args = parser.parse_args()
+
+    gcp = load_gcp_settings()
+    settings = load_extraction_judge_settings()
+    judge = (settings.model, load_prompt(settings.prompt_name).version)
+    run_rows, sheet_rows = compare_runs(
+        build_bigquery_client(gcp.project, gcp.credentials_file),
+        f"{gcp.project}.{settings.runs_dataset}",
+        judge,
+        settings.reference_workbook,
+    )
+    if args.split:
+        run_rows = [row for row in run_rows if row["split"] == args.split]
+        sheet_rows = [row for row in sheet_rows if row["split"] == args.split]
+    path = settings.report_dir / "runs_comparison.xlsx"
+    save_workbook(path, {"Runs": run_rows, "Sheets": sheet_rows})
+    print(f"Scores by {judge[0]} (judge prompt v{judge[1]}); compare runs of the same split")
+    columns = (("run_id", "run", 40), ("split", "split", 6), ("judged", "judged", 7))
+    print("Values (no judge involved):")
+    print(format_table(run_rows, (*columns, *VALUE_COLUMNS[3:], ("cost_usd", "cost $", 8))))
+    print("\nRows and cells:")
+    print(format_table(run_rows, (*columns, *SCORE_COLUMNS)))
+    print(f"Per-sheet scores: {path}")
+
+
+def _percent(value: float | None) -> str:
+    return "n/a" if value is None else f"{value:.1%}"
 
 
 def build_index() -> None:

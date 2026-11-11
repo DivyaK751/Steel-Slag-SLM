@@ -49,7 +49,7 @@ def select_papers(
     return pending if max_papers is None else pending[:max_papers]
 
 
-def _load_paper(drive_service: Any, paper_id: str, json_file_id: str) -> ParsedPaper | None:
+def load_parsed_paper(drive_service: Any, paper_id: str, json_file_id: str) -> ParsedPaper | None:
     """Download and read a paper's parsed.json, or None if it can't be read this run."""
     try:
         return parse_parsed_json(drive_storage.download_file(drive_service, json_file_id))
@@ -65,8 +65,11 @@ def _store_paper(
     answer: StructuredAnswer[PaperExtraction],
     citation: PaperCitation | None,
     outcomes: Counter[str],
+    run_id: str | None,
 ) -> float:
     """Check one paper's answer, replace its rows in BigQuery, count and log it.
+
+    With run_id, the rows go to that benchmark run in the runs dataset instead of production.
 
     Returns:
         What the paper cost in US$: Gemini tokens at list price plus the BigQuery delete.
@@ -83,7 +86,11 @@ def _store_paper(
     for reason in rows.rejected:
         logger.warning("%s: dropped %s", paper.openalex_id, reason)
     bytes_billed = replace_paper_rows(
-        bq_client, f"{bq_client.project}.{settings.dataset}", paper.openalex_id, rows.rows_by_table
+        bq_client,
+        f"{bq_client.project}.{settings.dataset}",
+        paper.openalex_id,
+        rows.rows_by_table,
+        run_id,
     )
     gemini_usd = gemini_cost_usd(usage, settings.prices)
     bigquery_usd = bigquery_query_cost_usd(bytes_billed, settings.bigquery_usd_per_tib)
@@ -115,14 +122,17 @@ async def run_data_extraction(
     prompt: PromptTemplate,
     paper_ids: Sequence[str] | None = None,
     max_papers: int | None = None,
-) -> Counter[str]:
+    run_id: str | None = None,
+) -> tuple[Counter[str], float]:
     """Extract each selected paper and replace its rows in the sheet tables.
 
-    Each paper's cost is logged as it finishes, and the run's total at the end.
+    Each paper's cost is logged as it finishes, and the run's total at the end. With
+    run_id, settings.dataset must be the runs dataset and rows are tagged with the run.
 
     Returns:
         Counts of papers extracted, failed and not parsed, facts stored, rejected, given a
-        lower confidence or not placed on a page, and Gemini input and output tokens.
+        lower confidence or not placed on a page, and Gemini input and output tokens; and
+        the run's cost in US$.
     """
     index = parsed_index.load_index(drive_service, parsed_folder_id, parsing.index_file_name)
     parsed = {paper_id: e for paper_id, e in index.items() if e.get("status") != "skipped"}
@@ -157,7 +167,9 @@ async def run_data_extraction(
     # BigQuery writes between rounds of concurrent Gemini calls
     for start in range(0, len(pending), settings.max_concurrency):
         batch = pending[start : start + settings.max_concurrency]
-        loaded = [_load_paper(drive_service, p, str(parsed[p]["json_file_id"])) for p in batch]
+        loaded = [
+            load_parsed_paper(drive_service, p, str(parsed[p]["json_file_id"])) for p in batch
+        ]
         papers = [paper for paper in loaded if paper is not None]
         outcomes["failed"] += len(loaded) - len(papers)
 
@@ -169,8 +181,9 @@ async def run_data_extraction(
                 continue
             if isinstance(result, Exception):
                 raise result
+            citation = citations.get(paper.openalex_id)
             total_cost_usd += _store_paper(
-                bq_client, settings, paper, result, citations.get(paper.openalex_id), outcomes
+                bq_client, settings, paper, result, citation, outcomes, run_id
             )
     logger.info("Total cost of this run: $%.4f", total_cost_usd)
-    return outcomes
+    return outcomes, total_cost_usd
