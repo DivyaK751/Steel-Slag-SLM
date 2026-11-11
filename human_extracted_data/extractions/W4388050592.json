@@ -1,0 +1,166 @@
+{
+  "openalex_id": "W4388050592",
+  "status": "Extracted",
+  "notes": "EAF slag + FA alkali-activated binder (NaOH 4/8 M); microstructure only, no strength data.",
+  "sheets": {
+    "1 Scientific Literature": [
+      {
+        "Source_ID": "SRC-W4388050592",
+        "Title": "Characterization of Alkali-activated Binder Synthesized from Electric Arc Furnace Slag and Fly Ash",
+        "Authors": "Fatima Ouzoun, Azzedine Moussadik, Hind Agourrame, Mohamed Saadi, Abdeljebbar Diouri",
+        "Publication_Year": "2023",
+        "Publication_Type": "Journal Article",
+        "Journal_or_Source": "NanoWorld Journal 9(S2): S6-S11",
+        "DOI_or_URL": "10.17756/nwj.2023-s2-002",
+        "Country_or_Region": "Morocco",
+        "Steel_Slag_Type": "EAF",
+        "Study_Objective": "Investigate effect of NaOH concentration (4 and 8 M) on alkali-activated binder of 70% EAF slag and 30% class F fly ash after 28 d ambient curing, via XRD, FTIR and TG-DTA.",
+        "Abstract_or_Key_Finding": "8 M NaOH promoted hydrated phases lawsonite, clinotobermorite and ussingite; C-A-S-H and N-A-S-H gels formed; no portlandite detected. Larnite, wüstite and magnetite remained largely unreacted.",
+        "Full_Text_Access": "Open",
+        "Data_Extraction_Status": "Extracted",
+        "Relevant_To_SCM": "Yes",
+        "Notes": "No mechanical test results reported."
+      }
+    ],
+    "2 Feedstock Chemistry": [
+      {
+        "Source_ID": "SRC-W4388050592",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Steel_Slag_Type": "EAF",
+        "Source/Origin": "SONASID-Jorf steel plant, Morocco",
+        "CaO_pct": "26.05",
+        "SiO2_pct": "10.35",
+        "Al2O3_pct": "5.95",
+        "Fe2O3_pct": "23.33",
+        "MgO_pct": "4.68",
+        "SO3_pct": "0.27",
+        "K2O_pct": "0.05",
+        "TiO2_pct": "0.48",
+        "P2O5_pct": "0.34",
+        "MnO_pct": "2.77",
+        "Trace_Elements": "{\"SrO\": 0.086} wt%",
+        "LOI_pct": "24.80",
+        "Analysis_Method": "XRF",
+        "Basis_As_Reported": "Wt.%",
+        "Notes": "Table 1. Na2O not detected. LOI unusually high (24.80%) as printed. XRD: larnite, wüstite, fayalite, olivine with amorphous hump."
+      }
+    ],
+    "3 Processing": [
+      {
+        "Source_ID": "SRC-W4388050592",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Steel_Slag_Type": "EAF",
+        "Processing_Method": "Grinding; Sieving; Milling",
+        "Equipment_or_Process": "Laboratory hammer mill, sieve shaker; co-grinding with FA (mechanical activation)",
+        "Dry_or_Wet": "Dry",
+        "Post_Process_Form": "Powder 40 um, co-ground with FA"
+      }
+    ],
+    "4 Particle Size": [
+      {
+        "Source_ID": "SRC-W4388050592",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Steel_Slag_Type": "EAF",
+        "Measurement_Method": "Sieving",
+        "Target_Size_um": "40",
+        "Grinding_Equipment": "Hammer mill"
+      }
+    ],
+    "5 Activation": [
+      {
+        "Source_ID": "SRC-W4388050592",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Steel_Slag_Type": "EAF",
+        "Activation_Type": "Combined",
+        "Activator_or_Additive": "NaOH solution",
+        "Activator_Concentration": "4 mol/L",
+        "Liquid_to_Solid_Ratio": "0.4",
+        "Activation_Temperature_C": null,
+        "Activation_Time": "28 d",
+        "Mechanical_Activation": "Co-grinding EAFS + FA",
+        "Chemical_Activation": "Alkali (NaOH)",
+        "Activation_Notes": "Mix F30E70N4: EAFS 70 wt%, FA 30 wt%.; Activation_Temperature_C: Room temperature"
+      },
+      {
+        "Source_ID": "SRC-W4388050592",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0002",
+        "Steel_Slag_Type": "EAF",
+        "Activation_Type": "Combined",
+        "Activator_or_Additive": "NaOH solution",
+        "Activator_Concentration": "8 mol/L",
+        "Liquid_to_Solid_Ratio": "0.4",
+        "Activation_Temperature_C": null,
+        "Activation_Time": "28 d",
+        "Mechanical_Activation": "Co-grinding EAFS + FA",
+        "Chemical_Activation": "Alkali (NaOH)",
+        "Activation_Notes": "Mix F30E70N8: EAFS 70 wt%, FA 30 wt%.; Activation_Temperature_C: Room temperature"
+      }
+    ],
+    "6 Concrete Performance": [
+      {
+        "Source_ID": "SRC-W4388050592",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Mix_ID": "F30E70N4",
+        "Steel_Slag_Type": "EAF",
+        "SCM_Replacement_pct": "70",
+        "Cement_Type": "None (alkali-activated)",
+        "Other_SCMs": "Class F fly ash 30% (Safi thermal power plant)",
+        "Water_Binder_Ratio": "0.4",
+        "Mix_Proportion_Notes": "Table 2: EAFS 70, FA 30 wt%, NaOH 4 M, L/S 0.4. Paste.; SCM_Replacement_pct: 70 (EAFS of precursor); Water_Binder_Ratio: 0.4 (L/S)",
+        "Strength_Notes": "No strength measured."
+      },
+      {
+        "Source_ID": "SRC-W4388050592",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0002",
+        "Mix_ID": "F30E70N8",
+        "Steel_Slag_Type": "EAF",
+        "SCM_Replacement_pct": "70",
+        "Cement_Type": "None (alkali-activated)",
+        "Other_SCMs": "Class F fly ash 30% (Safi thermal power plant)",
+        "Water_Binder_Ratio": "0.4",
+        "Mix_Proportion_Notes": "Table 2: EAFS 70, FA 30 wt%, NaOH 8 M, L/S 0.4. Paste.; SCM_Replacement_pct: 70 (EAFS of precursor); Water_Binder_Ratio: 0.4 (L/S)",
+        "Strength_Notes": "No strength measured."
+      }
+    ],
+    "7 Durability": [],
+    "8 Carbon Uptake": [],
+    "9 Citations & Provenance": [
+      {
+        "Source_ID": "SRC-W4388050592",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Fact_or_Data_Element": "CaO_pct",
+        "Reported_Value": "26.05",
+        "Unit": "Wt.%",
+        "Page_or_Table_or_Figure": "Table 1, p.S7",
+        "Extraction_Method": "Manual reading (Claude)",
+        "Original_Source_Text_or_Excerpt": "CaO 26.05 1.711",
+        "Confidence": "High",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06"
+      },
+      {
+        "Source_ID": "SRC-W4388050592",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Fact_or_Data_Element": "LOI_pct",
+        "Reported_Value": "24.80",
+        "Unit": "Wt.%",
+        "Page_or_Table_or_Figure": "Table 1, p.S7",
+        "Extraction_Method": "Manual reading (Claude)",
+        "Original_Source_Text_or_Excerpt": "LOI 24.80 3.7811",
+        "Confidence": "High",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06"
+      }
+    ]
+  },
+  "reference_cleaned": "2026-11-11 (v9 rules applied; not re-read against the PDF)"
+}

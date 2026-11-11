@@ -1,0 +1,137 @@
+{
+  "openalex_id": "W7151555136",
+  "status": "Extracted",
+  "notes": "Characterization only (XRF elemental + SEM-EDS phase maps) of 4 Uzbek steel slags; elemental composition in Trace_Elements/Notes. Pages 15-17 (conclusions/refs) not read.",
+  "sheets": {
+    "1 Scientific Literature": [
+      {
+        "Source_ID": "SRC-W7151555136",
+        "Title": "Multi-Scale Characterization of Industrial Steel Slags Using XRF and SEM–EDS Phase Mapping",
+        "Authors": "Okhunjon Sayfidinov, Susheng Tan, Bakhtiyor Mardonov, Makhliyo Sayfidinova, Baibhaw Kumar",
+        "Publication_Year": "2026",
+        "Publication_Type": "Journal Article",
+        "Journal_or_Source": "Crystals 2026, 16, 246",
+        "DOI_or_URL": "10.3390/cryst16040246",
+        "Country_or_Region": "Uzbekistan; USA; Hungary",
+        "Steel_Slag_Type": "EAF; Ladle",
+        "Study_Objective": "Characterize four steel slags from different production routes at an Uzbek plant via XRF and automated SEM-EDS phase mapping to link chemistry, phases and process.",
+        "Abstract_or_Key_Finding": "Two groups: Mn-Si-O slag (S1, Mn 58.7 mass%, MnSiO/MnO phases) from Mn-alloyed steel, and Ca-rich slags (Ca 83-88 mass%) dominated by Ca-F-O (CaF >98% in S2, S3) from fluorite fluxing; S4 heterogeneous with Mn, Zn, Cu. Ca-rich slags proposed for acid drainage neutralization, cement additive after stabilization; Mn slag for Mn recovery.",
+        "Full_Text_Access": "Open",
+        "Data_Extraction_Status": "Extracted",
+        "Relevant_To_SCM": "Unclear",
+        "Notes": "No cementitious testing; SCM only mentioned as prospect."
+      }
+    ],
+    "2 Feedstock Chemistry": [
+      {
+        "Source_ID": "SRC-W7151555136",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Steel_Slag_Type": "EAF",
+        "Source/Origin": "Sample S1, Navoi Machine Building Plant, Uzbekistan: EAF melting + secondary refining; Mn alloyed wear-resistant steel; slag skimmed after oxidation",
+        "Analysis_Method": "XRF",
+        "Basis_As_Reported": "mass % elemental (ED-XRF, FP method)",
+        "Trace_Elements": "Ca 14.1, Mn 58.7, Si 15.2, Fe 6.38, P ~2, S ~2 (+Cr, Ti trace)",
+        "Notes": "Bulk XRF elemental only; oxide fields blank. SEM-EDS phase map fractions (%): MnSiO 66.9, MnO 29.4, MnCaO 2.5, CrMnAlO 0.4, MnSO 0.1. Slag type inferred from production route in Table 1.; Also analysed by SEM-EDS"
+      },
+      {
+        "Source_ID": "SRC-W7151555136",
+        "Material_ID": "MAT-0002",
+        "Experiment_ID": "EXP-0002",
+        "Steel_Slag_Type": "Ladle",
+        "Source/Origin": "Sample S2, Navoi Machine Building Plant, Uzbekistan: EAF + ladle refining; low-alloy structural steel; lime+fluorite flux",
+        "Analysis_Method": "XRF",
+        "Basis_As_Reported": "mass % elemental (ED-XRF, FP method)",
+        "Trace_Elements": "Ca 88.2, Fe 3.29, Al 2.80, Si 2.10, Mn 1.85, Cl ~0.12 (+P, S, Cr, Cu, Zn, Sr, Zr, Pb trace)",
+        "Notes": "Bulk XRF elemental only; oxide fields blank. SEM-EDS phase map fractions (%): CaF 99.3, SiFO 0.1. Slag type inferred from production route in Table 1.; Also analysed by SEM-EDS"
+      },
+      {
+        "Source_ID": "SRC-W7151555136",
+        "Material_ID": "MAT-0003",
+        "Experiment_ID": "EXP-0003",
+        "Steel_Slag_Type": "Ladle",
+        "Source/Origin": "Sample S3, Navoi Machine Building Plant, Uzbekistan: Secondary refining before casting; medium carbon steel; fluorite-rich flux",
+        "Analysis_Method": "XRF",
+        "Basis_As_Reported": "mass % elemental (ED-XRF, FP method)",
+        "Trace_Elements": "Ca 86.4, Si 3.42, Fe 2.83, Mn 2.78, Al 2.77, Cl ~0.12",
+        "Notes": "Bulk XRF elemental only; oxide fields blank. SEM-EDS phase map fractions (%): CaF 98.9, SiAlO 0.3, FeO 0.1, MgMnCaFO 0.1. Slag type inferred from production route in Table 1.; Also analysed by SEM-EDS"
+      },
+      {
+        "Source_ID": "SRC-W7151555136",
+        "Material_ID": "MAT-0004",
+        "Experiment_ID": "EXP-0004",
+        "Steel_Slag_Type": "EAF",
+        "Source/Origin": "Sample S4, Navoi Machine Building Plant, Uzbekistan: EAF melting with alloy trimming; mixed alloy steel; lime flux",
+        "Analysis_Method": "XRF",
+        "Basis_As_Reported": "mass % elemental (ED-XRF, FP method)",
+        "Trace_Elements": "Ca 83.0, Fe 5.37, Mn 3.71, Si 2.93, Al 2.90 (+Zn, Pb, Mo, Ti trace)",
+        "Notes": "Bulk XRF elemental only; oxide fields blank. SEM-EDS phase map fractions (%): Ca-F-rich (O) 73.3, Ca-O-rich in CaF 14.9, SiO 4.4, MnCaFO 3.7, CaF 1.4, CaFO 0.7. Slag type inferred from production route in Table 1.; Also analysed by SEM-EDS"
+      }
+    ],
+    "3 Processing": [],
+    "4 Particle Size": [],
+    "5 Activation": [],
+    "6 Concrete Performance": [],
+    "7 Durability": [],
+    "8 Carbon Uptake": [],
+    "9 Citations & Provenance": [
+      {
+        "Source_ID": "SRC-W7151555136",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Fact_or_Data_Element": "Mn_elemental_pct",
+        "Reported_Value": "58.7",
+        "Unit": "mass %",
+        "Page_or_Table_or_Figure": "p.10-11 text / Fig. 7",
+        "Extraction_Method": "Manual reading (Claude)",
+        "Original_Source_Text_or_Excerpt": "Sample 1 showed a manganese-rich bulk composition, with Mn as the dominant element at 58.7 mass%, followed by Si at 15.2 mass%, Ca at 14.1 mass%, and Fe at 6.38 mass%",
+        "Confidence": "High",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06"
+      },
+      {
+        "Source_ID": "SRC-W7151555136",
+        "Material_ID": "MAT-0002",
+        "Experiment_ID": "EXP-0002",
+        "Fact_or_Data_Element": "Ca_elemental_pct",
+        "Reported_Value": "88.2",
+        "Unit": "mass %",
+        "Page_or_Table_or_Figure": "p.10-11 text / Fig. 7",
+        "Extraction_Method": "Manual reading (Claude)",
+        "Original_Source_Text_or_Excerpt": "Sample 2 contained 88.2 mass% Ca, with much lower levels of Fe at 3.29 mass%, Al at 2.80 mass%, Si at 2.10 mass%, and Mn at 1.85 mass%",
+        "Confidence": "High",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06"
+      },
+      {
+        "Source_ID": "SRC-W7151555136",
+        "Material_ID": "MAT-0003",
+        "Experiment_ID": "EXP-0003",
+        "Fact_or_Data_Element": "Ca_elemental_pct",
+        "Reported_Value": "86.4",
+        "Unit": "mass %",
+        "Page_or_Table_or_Figure": "p.10-11 text / Fig. 7",
+        "Extraction_Method": "Manual reading (Claude)",
+        "Original_Source_Text_or_Excerpt": "Sample 3 showed a very similar pattern, with 86.4 mass% Ca, 3.42 mass% Si, 2.83 mass% Fe, 2.78 mass% Mn, and 2.77 mass% Al",
+        "Confidence": "High",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06"
+      },
+      {
+        "Source_ID": "SRC-W7151555136",
+        "Material_ID": "MAT-0004",
+        "Experiment_ID": "EXP-0004",
+        "Fact_or_Data_Element": "Ca_elemental_pct",
+        "Reported_Value": "83.0",
+        "Unit": "mass %",
+        "Page_or_Table_or_Figure": "p.10-11 text / Fig. 7",
+        "Extraction_Method": "Manual reading (Claude)",
+        "Original_Source_Text_or_Excerpt": "Sample 4 also remained Ca-rich at 83.0 mass%, but it contained relatively higher Fe at 5.37 mass% and Mn at 3.71 mass%, together with Al at 2.90 mass% and Si at 2.93 mass%",
+        "Confidence": "High",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06"
+      }
+    ]
+  },
+  "reference_cleaned": "2026-11-11 (v9 rules applied; not re-read against the PDF)"
+}

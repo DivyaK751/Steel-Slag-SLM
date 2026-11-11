@@ -1,0 +1,299 @@
+{
+  "openalex_id": "W4391753948",
+  "status": "Extracted",
+  "notes": "Pure BOF steel slag paste with THEED alkanolamine (0-2000 ppm); strength, hydration, pore structure.",
+  "sheets": {
+    "1 Scientific Literature": [
+      {
+        "Source_ID": "SRC-W4391753948",
+        "Title": "Acceleration Mechanism of Steel Slag Hydration Using THEED",
+        "Authors": "Deyu Yue, Jianfeng Wang, Pengchen Huo, Lei Chang, Dingyong He, Suping Cui, Hui Liu",
+        "Publication_Year": "2024",
+        "Publication_Type": "Journal Article",
+        "Journal_or_Source": "Materials 2024, 17, 858",
+        "DOI_or_URL": "10.3390/ma17040858",
+        "Country_or_Region": "China",
+        "Steel_Slag_Type": "BOF",
+        "Study_Objective": "Investigate how THEED (0-2000 ppm) accelerates hydration and strength of pure steel slag paste via calorimetry, XRD, TG, MIP, SEM and ICP.",
+        "Abstract_or_Key_Finding": "2000 ppm THEED raised compressive strength by 733%, 665% and 545% at 3, 7, 28 d (0.30 -> 2.50 MPa at 3 d; 0.75 -> 4.84 MPa at 28 d). THEED accelerates hydration of C3A, C12A7 and C2F to Mc and Pa, increases silicate hydration and refines pores >300 nm, via chelation-driven dissolution.",
+        "Full_Text_Access": "Open",
+        "Data_Extraction_Status": "Extracted",
+        "Relevant_To_SCM": "Yes",
+        "Notes": "Pure slag paste (no cement); intended to raise SS hydraulic activity for SCM use."
+      }
+    ],
+    "2 Feedstock Chemistry": [
+      {
+        "Source_ID": "SRC-W4391753948",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Steel_Slag_Type": "BOF",
+        "Source/Origin": "Hot-stewed BOF steel slag, Shandong Luli Steel Company, China",
+        "CaO_pct": "39.58",
+        "SiO2_pct": "12.41",
+        "Al2O3_pct": "4.05",
+        "Fe2O3_pct": "25.57",
+        "MgO_pct": "5.54",
+        "SO3_pct": "0.35",
+        "Trace_Elements": "{\"Cl\": 0.12} wt%",
+        "LOI_pct": "1.85",
+        "Analysis_Method": "XRF",
+        "Basis_As_Reported": "wt%",
+        "Notes": "Table 1; others 10.53%. Table 2 mineral wt%: C3S 6.48, C2S 27.78, C3A 7.95, C12A7 0.57, C2F 9.78, FeO 12.32, Ca(OH)2 0.64, CaCO3 0.88."
+      }
+    ],
+    "3 Processing": [
+      {
+        "Source_ID": "SRC-W4391753948",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Steel_Slag_Type": "BOF",
+        "Processing_Method": "Other",
+        "Equipment_or_Process": "Hot-stewed at plant",
+        "Post_Process_Form": "Powder 520 m2/kg"
+      }
+    ],
+    "4 Particle Size": [
+      {
+        "Source_ID": "SRC-W4391753948",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Steel_Slag_Type": "BOF",
+        "Measurement_Method": "Specific surface area",
+        "Blaine_m2_per_kg": "520"
+      }
+    ],
+    "5 Activation": [
+      {
+        "Source_ID": "SRC-W4391753948",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0002",
+        "Steel_Slag_Type": "BOF",
+        "Activation_Type": "Chemical",
+        "Activator_or_Additive": "THEED (N,N,N',N'-tetrakis(2-hydroxyethyl)ethylenediamine, 99%)",
+        "Activator_Concentration": "500 ppm",
+        "Activation_Temperature_C": null,
+        "Chemical_Activation": "Alkanolamine chelating agent",
+        "Activation_Notes": "Chelation of Ca2+/Fe(OH)4- promotes dissolution of C3A, C12A7, C2F; forms Mc and Pa.; Activation_Temperature_C: Standard curing"
+      },
+      {
+        "Source_ID": "SRC-W4391753948",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0003",
+        "Steel_Slag_Type": "BOF",
+        "Activation_Type": "Chemical",
+        "Activator_or_Additive": "THEED (N,N,N',N'-tetrakis(2-hydroxyethyl)ethylenediamine, 99%)",
+        "Activator_Concentration": "1000 ppm",
+        "Activation_Temperature_C": null,
+        "Chemical_Activation": "Alkanolamine chelating agent",
+        "Activation_Notes": "Chelation of Ca2+/Fe(OH)4- promotes dissolution of C3A, C12A7, C2F; forms Mc and Pa.; Activation_Temperature_C: Standard curing"
+      },
+      {
+        "Source_ID": "SRC-W4391753948",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0004",
+        "Steel_Slag_Type": "BOF",
+        "Activation_Type": "Chemical",
+        "Activator_or_Additive": "THEED (N,N,N',N'-tetrakis(2-hydroxyethyl)ethylenediamine, 99%)",
+        "Activator_Concentration": "2000 ppm",
+        "Activation_Temperature_C": null,
+        "Chemical_Activation": "Alkanolamine chelating agent",
+        "Activation_Notes": "Chelation of Ca2+/Fe(OH)4- promotes dissolution of C3A, C12A7, C2F; forms Mc and Pa.; Activation_Temperature_C: Standard curing"
+      }
+    ],
+    "6 Concrete Performance": [
+      {
+        "Source_ID": "SRC-W4391753948",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Mix_ID": "Blank",
+        "Steel_Slag_Type": "BOF",
+        "SCM_Replacement_pct": "100",
+        "Cement_Type": "None",
+        "Water_Binder_Ratio": "0.35",
+        "Admixtures": null,
+        "Mix_Proportion_Notes": "Pure SS paste, 20 mm cubes, standard curing (GB/T 1346-2011 mixing).; SCM_Replacement_pct: 100 (pure steel slag paste)",
+        "Compressive_Strength_3d_MPa": "0.3",
+        "Compressive_Strength_7d_MPa": "0.4",
+        "Compressive_Strength_28d_MPa": "0.75",
+        "Strength_Test_Method": "20x20x20 mm cubes, mean of 6",
+        "Strength_Notes": "Fig. 1 data labels. Chemically bound water 3/28 d 5.8/7.5 g/100 g; CH content 3/28 d 1.00/1.36 g/100 g (Fig. 4)."
+      },
+      {
+        "Source_ID": "SRC-W4391753948",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0002",
+        "Mix_ID": "THEED 500 ppm",
+        "Steel_Slag_Type": "BOF",
+        "SCM_Replacement_pct": "100",
+        "Cement_Type": "None",
+        "Water_Binder_Ratio": "0.35",
+        "Admixtures": "THEED 500 ppm in mixing solution",
+        "Mix_Proportion_Notes": "Pure SS paste, 20 mm cubes, standard curing (GB/T 1346-2011 mixing).; SCM_Replacement_pct: 100 (pure steel slag paste)",
+        "Compressive_Strength_3d_MPa": "0.75",
+        "Compressive_Strength_7d_MPa": "0.98",
+        "Compressive_Strength_28d_MPa": "1.62",
+        "Strength_Test_Method": "20x20x20 mm cubes, mean of 6",
+        "Strength_Notes": "Fig. 1 data labels. Chemically bound water 3/28 d 5.8/8.13 g/100 g; CH content 3/28 d 0.97/1.35 g/100 g (Fig. 4)."
+      },
+      {
+        "Source_ID": "SRC-W4391753948",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0003",
+        "Mix_ID": "THEED 1000 ppm",
+        "Steel_Slag_Type": "BOF",
+        "SCM_Replacement_pct": "100",
+        "Cement_Type": "None",
+        "Water_Binder_Ratio": "0.35",
+        "Admixtures": "THEED 1000 ppm in mixing solution",
+        "Mix_Proportion_Notes": "Pure SS paste, 20 mm cubes, standard curing (GB/T 1346-2011 mixing).; SCM_Replacement_pct: 100 (pure steel slag paste)",
+        "Compressive_Strength_3d_MPa": "1.49",
+        "Compressive_Strength_7d_MPa": "1.95",
+        "Compressive_Strength_28d_MPa": "3.01",
+        "Strength_Test_Method": "20x20x20 mm cubes, mean of 6",
+        "Strength_Notes": "Fig. 1 data labels. Chemically bound water 3/28 d 6.99/9.42 g/100 g; CH content 3/28 d 1.12/1.54 g/100 g (Fig. 4)."
+      },
+      {
+        "Source_ID": "SRC-W4391753948",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0004",
+        "Mix_ID": "THEED 2000 ppm",
+        "Steel_Slag_Type": "BOF",
+        "SCM_Replacement_pct": "100",
+        "Cement_Type": "None",
+        "Water_Binder_Ratio": "0.35",
+        "Admixtures": "THEED 2000 ppm in mixing solution",
+        "Mix_Proportion_Notes": "Pure SS paste, 20 mm cubes, standard curing (GB/T 1346-2011 mixing).; SCM_Replacement_pct: 100 (pure steel slag paste)",
+        "Compressive_Strength_3d_MPa": "2.5",
+        "Compressive_Strength_7d_MPa": "3.06",
+        "Compressive_Strength_28d_MPa": "4.84",
+        "Strength_Test_Method": "20x20x20 mm cubes, mean of 6",
+        "Strength_Notes": "Fig. 1 data labels. Chemically bound water 3/28 d 7.93/10.6 g/100 g; CH content 3/28 d 1.25/1.71 g/100 g (Fig. 4)."
+      }
+    ],
+    "7 Durability": [
+      {
+        "Source_ID": "SRC-W4391753948",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Mix_ID": "Blank",
+        "Steel_Slag_Type": "BOF",
+        "Test_Category": "Permeability",
+        "Test_Method": "MIP (Autopore IV 9510)",
+        "Test_Age": "28 d",
+        "Permeability": "Cumulative intrusion 0.2780 mL/g ; avg pore 148.8 nm, total porosity 46.4%",
+        "Durability_Notes": "Fig. 6."
+      },
+      {
+        "Source_ID": "SRC-W4391753948",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0002",
+        "Mix_ID": "THEED 500 ppm",
+        "Steel_Slag_Type": "BOF",
+        "Test_Category": "Permeability",
+        "Test_Method": "MIP (Autopore IV 9510)",
+        "Test_Age": "28 d",
+        "Permeability": "Cumulative intrusion 0.2659 mL/g",
+        "Durability_Notes": "Fig. 6."
+      },
+      {
+        "Source_ID": "SRC-W4391753948",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0003",
+        "Mix_ID": "THEED 1000 ppm",
+        "Steel_Slag_Type": "BOF",
+        "Test_Category": "Permeability",
+        "Test_Method": "MIP (Autopore IV 9510)",
+        "Test_Age": "28 d",
+        "Permeability": "Cumulative intrusion 0.2706 mL/g",
+        "Durability_Notes": "Fig. 6."
+      },
+      {
+        "Source_ID": "SRC-W4391753948",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0004",
+        "Mix_ID": "THEED 2000 ppm",
+        "Steel_Slag_Type": "BOF",
+        "Test_Category": "Permeability",
+        "Test_Method": "MIP (Autopore IV 9510)",
+        "Test_Age": "28 d",
+        "Permeability": "Cumulative intrusion 0.2624 mL/g",
+        "Durability_Notes": "Fig. 6."
+      }
+    ],
+    "8 Carbon Uptake": [],
+    "9 Citations & Provenance": [
+      {
+        "Source_ID": "SRC-W4391753948",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Fact_or_Data_Element": "Compressive_Strength_28d_MPa",
+        "Reported_Value": "0.75",
+        "Unit": "MPa",
+        "Page_or_Table_or_Figure": "Fig. 1, p.4",
+        "Extraction_Method": "Manual reading of figure labels (Claude)",
+        "Original_Source_Text_or_Excerpt": "The hssp with 2000 ppm THEED exhibits a 3 d compressive strength value of 2.5 MPa, while the strength of the blank paste is only 0.30 MPa.",
+        "Confidence": "High",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06"
+      },
+      {
+        "Source_ID": "SRC-W4391753948",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0002",
+        "Fact_or_Data_Element": "Compressive_Strength_28d_MPa",
+        "Reported_Value": "1.62",
+        "Unit": "MPa",
+        "Page_or_Table_or_Figure": "Fig. 1, p.4",
+        "Extraction_Method": "Manual reading of figure labels (Claude)",
+        "Original_Source_Text_or_Excerpt": "Fig. 1 label 1.62",
+        "Confidence": "High",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06"
+      },
+      {
+        "Source_ID": "SRC-W4391753948",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0003",
+        "Fact_or_Data_Element": "Compressive_Strength_28d_MPa",
+        "Reported_Value": "3.01",
+        "Unit": "MPa",
+        "Page_or_Table_or_Figure": "Fig. 1, p.4",
+        "Extraction_Method": "Manual reading of figure labels (Claude)",
+        "Original_Source_Text_or_Excerpt": "Fig. 1 label 3.01",
+        "Confidence": "High",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06"
+      },
+      {
+        "Source_ID": "SRC-W4391753948",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0004",
+        "Fact_or_Data_Element": "Compressive_Strength_28d_MPa",
+        "Reported_Value": "4.84",
+        "Unit": "MPa",
+        "Page_or_Table_or_Figure": "Fig. 1, p.4",
+        "Extraction_Method": "Manual reading of figure labels (Claude)",
+        "Original_Source_Text_or_Excerpt": "The hssp with 2000 ppm THEED exhibits a 3 d compressive strength value of 2.5 MPa, while the strength of the blank paste is only 0.30 MPa.",
+        "Confidence": "High",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06"
+      },
+      {
+        "Source_ID": "SRC-W4391753948",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Fact_or_Data_Element": "CaO_pct",
+        "Reported_Value": "39.58",
+        "Unit": "wt%",
+        "Page_or_Table_or_Figure": "Table 1, p.2",
+        "Extraction_Method": "Manual reading (Claude)",
+        "Original_Source_Text_or_Excerpt": "wt% 39.58 12.41 4.05 25.57 5.54 0.35 0.12 1.85 10.53",
+        "Confidence": "High",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06"
+      }
+    ]
+  },
+  "reference_cleaned": "2026-11-11 (v9 rules applied; not re-read against the PDF)"
+}

@@ -1,0 +1,379 @@
+{
+  "openalex_id": "W7216825142",
+  "status": "Extracted",
+  "notes": "Steel slag + rice husk ash hybrid SCM concrete with LCA; business journal, limited methodological detail; values mostly from simple charts.",
+  "sheets": {
+    "1 Scientific Literature": [
+      {
+        "Source_ID": "SRC-W7216825142",
+        "Title": "Economic and Environmental Feasibility of Hybrid Concrete Incorporating Steel Slag and Rice Husk Ash: A Path Toward Green and Circular Construction Finance",
+        "Authors": "Chau-A Thai",
+        "Publication_Year": "2025",
+        "Publication_Type": "Journal Article",
+        "Journal_or_Source": "Advance Business Journal, Vol. 1, No. 2 (2025), pp. 10-21",
+        "Country_or_Region": "Portugal (author affiliation); Vietnam (email)",
+        "Steel_Slag_Type": "Other Steel Slag",
+        "Study_Objective": "Evaluate mechanical, durability, LCA and cost performance of concrete with steel slag (10-15%) and rice husk ash (0-15%) replacing OPC.",
+        "Abstract_or_Key_Finding": "M4 (15% SS + 10% RHA) gave ≈47.8 MPa at 28 d (+6.7% vs 44.8 MPa control), RCPT ~1450 vs ~2600 C, GWP 210 vs 365 kg CO2-eq/m3 (-42.5%), and 12.8% lower production cost.",
+        "Full_Text_Access": "Open",
+        "Data_Extraction_Status": "Extracted",
+        "Relevant_To_SCM": "Yes",
+        "Notes": "DOI not printed. Business journal; data presentation limited (no 7/56 d values)."
+      }
+    ],
+    "2 Feedstock Chemistry": [
+      {
+        "Source_ID": "SRC-W7216825142",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0002",
+        "Steel_Slag_Type": "Other Steel Slag",
+        "Source/Origin": "Local steel manufacturing plant (not named); ground and aged",
+        "CaO_pct": "38.2",
+        "SiO2_pct": "14.6",
+        "Al2O3_pct": "3.8",
+        "Fe2O3_pct": "12.5",
+        "MgO_pct": "6.7",
+        "SO3_pct": "1.1",
+        "LOI_pct": "3.2",
+        "Analysis_Method": "XRF",
+        "Basis_As_Reported": "wt%",
+        "Notes": "Table 1. RHA SiO2 86.4%."
+      }
+    ],
+    "3 Processing": [
+      {
+        "Source_ID": "SRC-W7216825142",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0002",
+        "Steel_Slag_Type": "Other Steel Slag",
+        "Processing_Method": "Grinding; Other",
+        "Processing_Notes": "Ground and aged to minimize free lime and MgO expansion (no details)."
+      }
+    ],
+    "4 Particle Size": [],
+    "5 Activation": [],
+    "6 Concrete Performance": [
+      {
+        "Source_ID": "SRC-W7216825142",
+        "Material_ID": null,
+        "Experiment_ID": "EXP-0001",
+        "Mix_ID": "M0",
+        "Steel_Slag_Type": "Other Steel Slag",
+        "SCM_Replacement_pct": "0",
+        "Cement_Type": "OPC ASTM C150 Type I",
+        "Other_SCMs": null,
+        "Water_Binder_Ratio": "0.45",
+        "Admixtures": "Polycarboxylate SP 0.8%",
+        "Mix_Proportion_Notes": "OPC 100%, SS 0%, RHA 0%; fine agg 650, coarse agg 1200 kg/m3 (Table 2). Binder content not stated. 150 mm cubes.",
+        "Compressive_Strength_28d_MPa": "44.8",
+        "Strength_Test_Method": "ASTM C39",
+        "Strength_Notes": "Stated approx. in text (≈). 7 and 56 d tested but not reported numerically."
+      },
+      {
+        "Source_ID": "SRC-W7216825142",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0002",
+        "Mix_ID": "M1",
+        "Steel_Slag_Type": "Other Steel Slag",
+        "SCM_Replacement_pct": "10",
+        "Cement_Type": "OPC ASTM C150 Type I",
+        "Other_SCMs": null,
+        "Water_Binder_Ratio": "0.45",
+        "Admixtures": "Polycarboxylate SP 0.8%",
+        "Mix_Proportion_Notes": "OPC 90%, SS 10%, RHA 0%; fine agg 650, coarse agg 1200 kg/m3 (Table 2). Binder content not stated. 150 mm cubes.",
+        "Compressive_Strength_28d_MPa": "45.6",
+        "Strength_Test_Method": "ASTM C39",
+        "Strength_Notes": "Read from Fig. 3. 7 and 56 d tested but not reported numerically."
+      },
+      {
+        "Source_ID": "SRC-W7216825142",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0003",
+        "Mix_ID": "M2",
+        "Steel_Slag_Type": "Other Steel Slag",
+        "SCM_Replacement_pct": "15",
+        "Cement_Type": "OPC ASTM C150 Type I",
+        "Other_SCMs": null,
+        "Water_Binder_Ratio": "0.45",
+        "Admixtures": "Polycarboxylate SP 0.8%",
+        "Mix_Proportion_Notes": "OPC 85%, SS 15%, RHA 0%; fine agg 650, coarse agg 1200 kg/m3 (Table 2). Binder content not stated. 150 mm cubes.",
+        "Compressive_Strength_28d_MPa": "46.9",
+        "Strength_Test_Method": "ASTM C39",
+        "Strength_Notes": "Read from Fig. 3. 7 and 56 d tested but not reported numerically."
+      },
+      {
+        "Source_ID": "SRC-W7216825142",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0004",
+        "Mix_ID": "M3",
+        "Steel_Slag_Type": "Other Steel Slag",
+        "SCM_Replacement_pct": "15",
+        "Cement_Type": "OPC ASTM C150 Type I",
+        "Other_SCMs": "Rice husk ash 5%",
+        "Water_Binder_Ratio": "0.45",
+        "Admixtures": "Polycarboxylate SP 0.8%",
+        "Mix_Proportion_Notes": "OPC 80%, SS 15%, RHA 5%; fine agg 650, coarse agg 1200 kg/m3 (Table 2). Binder content not stated. 150 mm cubes.",
+        "Compressive_Strength_28d_MPa": "47.2",
+        "Strength_Test_Method": "ASTM C39",
+        "Strength_Notes": "Read from Fig. 3. 7 and 56 d tested but not reported numerically."
+      },
+      {
+        "Source_ID": "SRC-W7216825142",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0005",
+        "Mix_ID": "M4",
+        "Steel_Slag_Type": "Other Steel Slag",
+        "SCM_Replacement_pct": "15",
+        "Cement_Type": "OPC ASTM C150 Type I",
+        "Other_SCMs": "Rice husk ash 10%",
+        "Water_Binder_Ratio": "0.45",
+        "Admixtures": "Polycarboxylate SP 0.8%",
+        "Mix_Proportion_Notes": "OPC 75%, SS 15%, RHA 10%; fine agg 650, coarse agg 1200 kg/m3 (Table 2). Binder content not stated. 150 mm cubes.",
+        "Compressive_Strength_28d_MPa": "47.8",
+        "Strength_Test_Method": "ASTM C39",
+        "Strength_Notes": "Stated approx. in text (≈). 7 and 56 d tested but not reported numerically."
+      },
+      {
+        "Source_ID": "SRC-W7216825142",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0006",
+        "Mix_ID": "M5",
+        "Steel_Slag_Type": "Other Steel Slag",
+        "SCM_Replacement_pct": "15",
+        "Cement_Type": "OPC ASTM C150 Type I",
+        "Other_SCMs": "Rice husk ash 15%",
+        "Water_Binder_Ratio": "0.45",
+        "Admixtures": "Polycarboxylate SP 0.8%",
+        "Mix_Proportion_Notes": "OPC 70%, SS 15%, RHA 15%; fine agg 650, coarse agg 1200 kg/m3 (Table 2). Binder content not stated. 150 mm cubes.",
+        "Compressive_Strength_28d_MPa": "46.0",
+        "Strength_Test_Method": "ASTM C39",
+        "Strength_Notes": "Read from Fig. 3. 7 and 56 d tested but not reported numerically."
+      }
+    ],
+    "7 Durability": [
+      {
+        "Source_ID": "SRC-W7216825142",
+        "Material_ID": null,
+        "Experiment_ID": "EXP-0001",
+        "Mix_ID": "M0",
+        "Steel_Slag_Type": "Other Steel Slag",
+        "Test_Category": "Chloride penetration",
+        "Test_Method": "RCPT ASTM C1202; water absorption ASTM C642",
+        "Chloride_Resistance": "2600 C",
+        "Water_Absorption": "Hybrid mixes 20-30% lower than OPC (no values)",
+        "Durability_Notes": "Read from Fig. 4 (text ~2600 / ~1450 C)."
+      },
+      {
+        "Source_ID": "SRC-W7216825142",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0002",
+        "Mix_ID": "M1",
+        "Steel_Slag_Type": "Other Steel Slag",
+        "Test_Category": "Chloride penetration",
+        "Test_Method": "RCPT ASTM C1202; water absorption ASTM C642",
+        "Chloride_Resistance": "2350 C",
+        "Water_Absorption": "Hybrid mixes 20-30% lower than OPC (no values)",
+        "Durability_Notes": "Read from Fig. 4."
+      },
+      {
+        "Source_ID": "SRC-W7216825142",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0003",
+        "Mix_ID": "M2",
+        "Steel_Slag_Type": "Other Steel Slag",
+        "Test_Category": "Chloride penetration",
+        "Test_Method": "RCPT ASTM C1202; water absorption ASTM C642",
+        "Chloride_Resistance": "2000 C",
+        "Water_Absorption": "Hybrid mixes 20-30% lower than OPC (no values)",
+        "Durability_Notes": "Read from Fig. 4."
+      },
+      {
+        "Source_ID": "SRC-W7216825142",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0004",
+        "Mix_ID": "M3",
+        "Steel_Slag_Type": "Other Steel Slag",
+        "Test_Category": "Chloride penetration",
+        "Test_Method": "RCPT ASTM C1202; water absorption ASTM C642",
+        "Chloride_Resistance": "1650 C",
+        "Water_Absorption": "Hybrid mixes 20-30% lower than OPC (no values)",
+        "Durability_Notes": "Read from Fig. 4."
+      },
+      {
+        "Source_ID": "SRC-W7216825142",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0005",
+        "Mix_ID": "M4",
+        "Steel_Slag_Type": "Other Steel Slag",
+        "Test_Category": "Chloride penetration",
+        "Test_Method": "RCPT ASTM C1202; water absorption ASTM C642",
+        "Chloride_Resistance": "1450 C",
+        "Water_Absorption": "Hybrid mixes 20-30% lower than OPC (no values)",
+        "Durability_Notes": "Read from Fig. 4 (text ~2600 / ~1450 C)."
+      },
+      {
+        "Source_ID": "SRC-W7216825142",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0006",
+        "Mix_ID": "M5",
+        "Steel_Slag_Type": "Other Steel Slag",
+        "Test_Category": "Chloride penetration",
+        "Test_Method": "RCPT ASTM C1202; water absorption ASTM C642",
+        "Chloride_Resistance": "1550 C",
+        "Water_Absorption": "Hybrid mixes 20-30% lower than OPC (no values)",
+        "Durability_Notes": "Read from Fig. 4."
+      }
+    ],
+    "8 Carbon Uptake": [
+      {
+        "Source_ID": "SRC-W7216825142",
+        "Material_ID": null,
+        "Experiment_ID": "EXP-0001",
+        "Steel_Slag_Type": "Other Steel Slag",
+        "Net_GWP_if_Reported": "365 kg CO2-eq/m3",
+        "Carbonation_Notes": "Cradle-to-gate LCA (SimaPro, Ecoinvent); Fig. 5. No CO2 uptake test."
+      },
+      {
+        "Source_ID": "SRC-W7216825142",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0002",
+        "Steel_Slag_Type": "Other Steel Slag",
+        "Net_GWP_if_Reported": "320 kg CO2-eq/m3",
+        "Carbonation_Notes": "Cradle-to-gate LCA (SimaPro, Ecoinvent); Fig. 5. No CO2 uptake test."
+      },
+      {
+        "Source_ID": "SRC-W7216825142",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0003",
+        "Steel_Slag_Type": "Other Steel Slag",
+        "Net_GWP_if_Reported": "290 kg CO2-eq/m3",
+        "Carbonation_Notes": "Cradle-to-gate LCA (SimaPro, Ecoinvent); Fig. 5. No CO2 uptake test."
+      },
+      {
+        "Source_ID": "SRC-W7216825142",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0004",
+        "Steel_Slag_Type": "Other Steel Slag",
+        "Net_GWP_if_Reported": "250 kg CO2-eq/m3",
+        "Carbonation_Notes": "Cradle-to-gate LCA (SimaPro, Ecoinvent); Fig. 5. No CO2 uptake test."
+      },
+      {
+        "Source_ID": "SRC-W7216825142",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0005",
+        "Steel_Slag_Type": "Other Steel Slag",
+        "Net_GWP_if_Reported": "210 kg CO2-eq/m3",
+        "Carbonation_Notes": "Cradle-to-gate LCA (SimaPro, Ecoinvent); Fig. 5. No CO2 uptake test."
+      },
+      {
+        "Source_ID": "SRC-W7216825142",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0006",
+        "Steel_Slag_Type": "Other Steel Slag",
+        "Net_GWP_if_Reported": "225 kg CO2-eq/m3",
+        "Carbonation_Notes": "Cradle-to-gate LCA (SimaPro, Ecoinvent); Fig. 5. No CO2 uptake test."
+      }
+    ],
+    "9 Citations & Provenance": [
+      {
+        "Source_ID": "SRC-W7216825142",
+        "Material_ID": null,
+        "Experiment_ID": "EXP-0001",
+        "Fact_or_Data_Element": "Compressive_Strength_28d_MPa",
+        "Reported_Value": "44.8",
+        "Unit": "MPa",
+        "Page_or_Table_or_Figure": "p.16 / Fig. 3",
+        "Extraction_Method": "Manual reading (Claude)",
+        "Original_Source_Text_or_Excerpt": "The control mix (M0) with 100% OPC recorded the lowest strength (≈44.8 MPa) ... M4 (15% SS + 10% RHA) achieved the highest compressive strength of ≈47.8 MPa",
+        "Confidence": "High",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06"
+      },
+      {
+        "Source_ID": "SRC-W7216825142",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0002",
+        "Fact_or_Data_Element": "Compressive_Strength_28d_MPa",
+        "Reported_Value": "45.6",
+        "Unit": "MPa",
+        "Page_or_Table_or_Figure": "p.16 / Fig. 3",
+        "Extraction_Method": "Manual reading of figure (Claude)",
+        "Original_Source_Text_or_Excerpt": "Fig. 3 M1",
+        "Confidence": "Medium",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06"
+      },
+      {
+        "Source_ID": "SRC-W7216825142",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0003",
+        "Fact_or_Data_Element": "Compressive_Strength_28d_MPa",
+        "Reported_Value": "46.9",
+        "Unit": "MPa",
+        "Page_or_Table_or_Figure": "p.16 / Fig. 3",
+        "Extraction_Method": "Manual reading of figure (Claude)",
+        "Original_Source_Text_or_Excerpt": "Fig. 3 M2",
+        "Confidence": "Medium",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06"
+      },
+      {
+        "Source_ID": "SRC-W7216825142",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0004",
+        "Fact_or_Data_Element": "Compressive_Strength_28d_MPa",
+        "Reported_Value": "47.2",
+        "Unit": "MPa",
+        "Page_or_Table_or_Figure": "p.16 / Fig. 3",
+        "Extraction_Method": "Manual reading of figure (Claude)",
+        "Original_Source_Text_or_Excerpt": "Fig. 3 M3",
+        "Confidence": "Medium",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06"
+      },
+      {
+        "Source_ID": "SRC-W7216825142",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0005",
+        "Fact_or_Data_Element": "Compressive_Strength_28d_MPa",
+        "Reported_Value": "47.8",
+        "Unit": "MPa",
+        "Page_or_Table_or_Figure": "p.16 / Fig. 3",
+        "Extraction_Method": "Manual reading (Claude)",
+        "Original_Source_Text_or_Excerpt": "The control mix (M0) with 100% OPC recorded the lowest strength (≈44.8 MPa) ... M4 (15% SS + 10% RHA) achieved the highest compressive strength of ≈47.8 MPa",
+        "Confidence": "High",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06"
+      },
+      {
+        "Source_ID": "SRC-W7216825142",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0006",
+        "Fact_or_Data_Element": "Compressive_Strength_28d_MPa",
+        "Reported_Value": "46.0",
+        "Unit": "MPa",
+        "Page_or_Table_or_Figure": "p.16 / Fig. 3",
+        "Extraction_Method": "Manual reading of figure (Claude)",
+        "Original_Source_Text_or_Excerpt": "Fig. 3 M5",
+        "Confidence": "Medium",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06"
+      },
+      {
+        "Source_ID": "SRC-W7216825142",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0002",
+        "Fact_or_Data_Element": "CaO_pct",
+        "Reported_Value": "38.2",
+        "Unit": "wt%",
+        "Page_or_Table_or_Figure": "Table 1, p.13",
+        "Extraction_Method": "Manual reading (Claude)",
+        "Original_Source_Text_or_Excerpt": "CAO 63.4 38.2 1.5",
+        "Confidence": "High",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06"
+      }
+    ]
+  },
+  "reference_cleaned": "2026-11-11 (v9 rules applied; not re-read against the PDF)"
+}

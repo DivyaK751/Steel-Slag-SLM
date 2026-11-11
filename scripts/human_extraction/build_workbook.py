@@ -65,16 +65,22 @@ def _check_record(name: str, record: dict[str, Any], headers: dict[str, list[str
 
 
 def _update_tracker(records: dict[str, dict[str, Any]]) -> tuple[int, int]:
-    """Copy each extraction's status and notes into the tracker; return (done, total)."""
+    """Copy each extraction's status, cleaning and notes into the tracker; return (done, total).
+
+    reference_cleaned is the date a paper's rows were checked against its PDF and brought
+    to the current extraction rules (check_reference.py); blank means not yet.
+    """
     with TRACKER_PATH.open() as tracker:
         rows = list(csv.DictReader(tracker))
     for row in rows:
         record = records.get(row["openalex_id"])
         if record:
             row["extraction_status"] = record.get("status", "Extracted")
+            row["reference_cleaned"] = record.get("reference_cleaned", "")
             row["notes"] = record.get("notes", "")
+    fieldnames = [name for name in rows[0] if name != "notes"] + ["notes"]
     with TRACKER_PATH.open("w", newline="") as tracker:
-        writer = csv.DictWriter(tracker, fieldnames=list(rows[0]))
+        writer = csv.DictWriter(tracker, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
     done = sum(row["extraction_status"] == "Extracted" for row in rows)

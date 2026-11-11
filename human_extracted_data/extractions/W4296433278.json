@@ -1,0 +1,346 @@
+{
+  "openalex_id": "W4296433278",
+  "status": "Extracted",
+  "notes": "Ladle slag as 20% co-binder in alkali-activated fayalite slag mortars; durability under acid/sulfate-chloride/freeze-thaw.",
+  "sheets": {
+    "1 Scientific Literature": [
+      {
+        "Source_ID": "SRC-W4296433278",
+        "Title": "Durability of alkali-activated Fe-rich fayalite slag-based mortars subjected to different environmental conditions",
+        "Authors": "Adeolu Adediran, Juho Yliniemi, Valter Carvelli, Elijah Adesanya, Mirja Illikainen",
+        "Publication_Year": "2022",
+        "Publication_Type": "Journal Article",
+        "Journal_or_Source": "Cement and Concrete Research 162 (2022) 106984",
+        "DOI_or_URL": "10.1016/j.cemconres.2022.106984",
+        "Country_or_Region": "Finland; Italy",
+        "Steel_Slag_Type": "Ladle",
+        "Study_Objective": "Evaluate shrinkage and durability (acid, sulfate+chloride, freeze-thaw, dry-wet) of alkali-activated fayalite slag mortars with 20% ladle slag or BFS co-binder.",
+        "Abstract_or_Key_Finding": "LS or BFS co-binders raised 28 d strength (AAFS 19, AAFS-BFS 40, AAFS-LS 48 MPa), lowered porosity and greatly improved durability; sole FS mortars disintegrated after 180 freeze-thaw cycles in water, acid and sulfate-chloride. LS increased drying shrinkage most.",
+        "Full_Text_Access": "Open",
+        "Data_Extraction_Status": "Extracted",
+        "Relevant_To_SCM": "Yes",
+        "Notes": "Ladle slag is a co-binder in an AAM, not a Portland cement replacement."
+      }
+    ],
+    "2 Feedstock Chemistry": [
+      {
+        "Source_ID": "SRC-W4296433278",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Steel_Slag_Type": "Ladle",
+        "Source/Origin": "SSAB, Raahe, Finland; from slag cooling pit after natural cooling",
+        "CaO_pct": "48.6",
+        "SiO2_pct": "9.3",
+        "Al2O3_pct": "29.6",
+        "Fe2O3_pct": "1.8",
+        "MgO_pct": "6.6",
+        "SO3_pct": "0.4",
+        "Na2O_pct": "0.2",
+        "K2O_pct": "0.03",
+        "TiO2_pct": "1.5",
+        "P2O5_pct": "0.03",
+        "MnO_pct": "0.9",
+        "LOI_pct": "1.3",
+        "Analysis_Method": "XRF",
+        "Basis_As_Reported": "wt%",
+        "Notes": "Table 1, XRF melt fused tablet; LOI at 950 °C. QXRD (Table 2): mayenite 30.9, gamma-C2S 21.3, C3A 12.9, Q-phase 14.4, periclase 8.2, perovskite 1.3, amorphous 11%. Density 3.0 g/cm3."
+      }
+    ],
+    "3 Processing": [
+      {
+        "Source_ID": "SRC-W4296433278",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Steel_Slag_Type": "Ladle",
+        "Initial_Material_Form": "Naturally cooled LS",
+        "Processing_Method": "Sieving; Drying; Milling",
+        "Equipment_or_Process": "2 mm sieve (remove steel flakes); ball mill TPR-D-950-V-FU-EH (Germatec), 82 rpm, 150 steel balls",
+        "Dry_or_Wet": "Dry",
+        "Process_Temperature_C": "60",
+        "Residence_Time": "Drying 24 h; milling 2 h (2 kg batch)",
+        "Post_Process_Form": "Powder d50 9.6 um",
+        "Processing_Notes": "Process_Temperature_C: 60 (drying)"
+      }
+    ],
+    "4 Particle Size": [
+      {
+        "Source_ID": "SRC-W4296433278",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Steel_Slag_Type": "Ladle",
+        "Measurement_Method": "Laser diffraction (Beckman Coulter LS 13320), isopropanol dispersant",
+        "D10_um": "1.3",
+        "D50_um": "9.6",
+        "D90_um": "45.3",
+        "Target_Size_um": "10",
+        "Grinding_Time": "2 h",
+        "Grinding_Equipment": "Ball mill",
+        "Particle_Size_Notes": "Target size is a d50"
+      }
+    ],
+    "5 Activation": [
+      {
+        "Source_ID": "SRC-W4296433278",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Steel_Slag_Type": "Ladle",
+        "Activation_Type": "Chemical",
+        "Activator_or_Additive": "Sodium silicate solution + 10 M NaOH",
+        "Activator_Dosage": "22.5 g NaOH sol. + 22.5 g Na-silicate sol. per 100 g binder",
+        "Activator_Concentration": "NaOH 10 M; SiO2/Na2O = 1.0, H2O/Na2O = 15.7",
+        "Activation_Temperature_C": "23",
+        "Activation_Time": "28 d sealed",
+        "Chemical_Activation": "Alkali activation",
+        "Activation_Notes": "Gels: C-A-S-H, C-(N)-A-S-H, N-F-S."
+      }
+    ],
+    "6 Concrete Performance": [
+      {
+        "Source_ID": "SRC-W4296433278",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Mix_ID": "AAFS-LS",
+        "Steel_Slag_Type": "Ladle",
+        "SCM_Replacement_pct": "20",
+        "Cement_Type": "None (alkali-activated)",
+        "Other_SCMs": "Fayalite slag 80 g (binder) + granular FS aggregate 200 g",
+        "Mix_Proportion_Notes": "FS 80 g, LS 20 g, FSA 200 g, SH 22.5 g, SS 22.5 g; aggregate/binder 2. 50 mm cubes.; SCM_Replacement_pct: 20 (LS replacing FS binder)",
+        "Compressive_Strength_28d_MPa": "48",
+        "Strength_Test_Method": "Zwick 100 kN, 2.4 kN/s, 50 mm cubes",
+        "Strength_Notes": "Reference AAFS 19 MPa; AAFS-BFS 40 MPa."
+      }
+    ],
+    "7 Durability": [
+      {
+        "Source_ID": "SRC-W4296433278",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Mix_ID": "AAFS-LS",
+        "Steel_Slag_Type": "Ladle",
+        "Test_Category": "Sulfate attack",
+        "Test_Method": "Sulfuric acid 5%, freeze-thaw (-18/+4 °C)",
+        "Test_Age": "90 cycles",
+        "Durability_Result": "Compressive strength 48 -> ~15 MPa; mass loss ~10%",
+        "Durability_Notes": "From Fig. 6-7 (approximate) and text; sole fayalite slag mix (AAFS) disintegrated after 180 cycles; AAFS-BFS (no steel slag) not extracted."
+      },
+      {
+        "Source_ID": "SRC-W4296433278",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001-2",
+        "Mix_ID": "AAFS-LS",
+        "Steel_Slag_Type": "Ladle",
+        "Test_Category": "Sulfate attack",
+        "Test_Method": "Sulfuric acid 5%, freeze-thaw (-18/+4 °C)",
+        "Test_Age": "180 cycles",
+        "Durability_Result": "Compressive strength 48 -> 12 MPa; mass loss 20%",
+        "Durability_Notes": "From Fig. 6-7 (approximate) and text; sole fayalite slag mix (AAFS) disintegrated after 180 cycles; AAFS-BFS (no steel slag) not extracted."
+      },
+      {
+        "Source_ID": "SRC-W4296433278",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Mix_ID": "AAFS-LS",
+        "Steel_Slag_Type": "Ladle",
+        "Test_Category": "Sulfate attack",
+        "Test_Method": "Sulfuric acid 5%, room temperature immersion",
+        "Test_Age": "30 d",
+        "Durability_Result": "Compressive strength 48 -> ~28 MPa; mass loss ~4%",
+        "Durability_Notes": "From Fig. 6-7 (approximate) and text; sole fayalite slag mix (AAFS) disintegrated after 180 cycles; AAFS-BFS (no steel slag) not extracted."
+      },
+      {
+        "Source_ID": "SRC-W4296433278",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001-2",
+        "Mix_ID": "AAFS-LS",
+        "Steel_Slag_Type": "Ladle",
+        "Test_Category": "Sulfate attack",
+        "Test_Method": "Sulfuric acid 5%, room temperature immersion",
+        "Test_Age": "60 d",
+        "Durability_Result": "Compressive strength 48 -> 23 MPa; mass loss 7.1%",
+        "Durability_Notes": "From Fig. 6-7 (approximate) and text; sole fayalite slag mix (AAFS) disintegrated after 180 cycles; AAFS-BFS (no steel slag) not extracted."
+      },
+      {
+        "Source_ID": "SRC-W4296433278",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Mix_ID": "AAFS-LS",
+        "Steel_Slag_Type": "Ladle",
+        "Test_Category": "Freeze-thaw",
+        "Test_Method": "5% Na2SO4 + 3% NaCl, freeze-thaw",
+        "Test_Age": "90 cycles",
+        "Durability_Result": "Compressive strength 48 -> ~28.5 MPa; mass loss ~3%",
+        "Durability_Notes": "From Fig. 6-7 (approximate) and text; sole fayalite slag mix (AAFS) disintegrated after 180 cycles; AAFS-BFS (no steel slag) not extracted."
+      },
+      {
+        "Source_ID": "SRC-W4296433278",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001-2",
+        "Mix_ID": "AAFS-LS",
+        "Steel_Slag_Type": "Ladle",
+        "Test_Category": "Freeze-thaw",
+        "Test_Method": "5% Na2SO4 + 3% NaCl, freeze-thaw",
+        "Test_Age": "180 cycles",
+        "Durability_Result": "Compressive strength 48 -> 20 MPa; mass loss 10%",
+        "Durability_Notes": "From Fig. 6-7 (approximate) and text; sole fayalite slag mix (AAFS) disintegrated after 180 cycles; AAFS-BFS (no steel slag) not extracted."
+      },
+      {
+        "Source_ID": "SRC-W4296433278",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Mix_ID": "AAFS-LS",
+        "Steel_Slag_Type": "Ladle",
+        "Test_Category": "Chloride penetration",
+        "Test_Method": "5% Na2SO4 + 3% NaCl, room temperature",
+        "Test_Age": "30 d",
+        "Durability_Result": "Compressive strength 48 -> ~44 MPa; mass loss ~1%",
+        "Durability_Notes": "From Fig. 6-7 (approximate) and text; sole fayalite slag mix (AAFS) disintegrated after 180 cycles; AAFS-BFS (no steel slag) not extracted."
+      },
+      {
+        "Source_ID": "SRC-W4296433278",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001-2",
+        "Mix_ID": "AAFS-LS",
+        "Steel_Slag_Type": "Ladle",
+        "Test_Category": "Chloride penetration",
+        "Test_Method": "5% Na2SO4 + 3% NaCl, room temperature",
+        "Test_Age": "60 d",
+        "Durability_Result": "Compressive strength 48 -> 41 MPa; mass loss 2.2%",
+        "Durability_Notes": "From Fig. 6-7 (approximate) and text; sole fayalite slag mix (AAFS) disintegrated after 180 cycles; AAFS-BFS (no steel slag) not extracted."
+      },
+      {
+        "Source_ID": "SRC-W4296433278",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Mix_ID": "AAFS-LS",
+        "Steel_Slag_Type": "Ladle",
+        "Test_Category": "Freeze-thaw",
+        "Test_Method": "Freeze-thaw in water (ASTM C666)",
+        "Test_Age": "90 cycles",
+        "Durability_Result": "Compressive strength 48 -> ~34 MPa; mass loss ~2.5%",
+        "Durability_Notes": "From Fig. 6-7 (approximate) and text; sole fayalite slag mix (AAFS) disintegrated after 180 cycles; AAFS-BFS (no steel slag) not extracted."
+      },
+      {
+        "Source_ID": "SRC-W4296433278",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001-2",
+        "Mix_ID": "AAFS-LS",
+        "Steel_Slag_Type": "Ladle",
+        "Test_Category": "Freeze-thaw",
+        "Test_Method": "Freeze-thaw in water (ASTM C666)",
+        "Test_Age": "180 cycles",
+        "Durability_Result": "Compressive strength 48 -> 30 MPa; mass loss 6.1%",
+        "Durability_Notes": "From Fig. 6-7 (approximate) and text; sole fayalite slag mix (AAFS) disintegrated after 180 cycles; AAFS-BFS (no steel slag) not extracted."
+      },
+      {
+        "Source_ID": "SRC-W4296433278",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Mix_ID": "AAFS-LS",
+        "Steel_Slag_Type": "Ladle",
+        "Test_Category": "Other",
+        "Test_Method": "Dry-wet cycles (24 h water / 24 h dry)",
+        "Test_Age": "30 d",
+        "Durability_Result": "Compressive strength 48 -> 46 MPa",
+        "Durability_Notes": "From Fig. 6-7 (approximate) and text; sole fayalite slag mix (AAFS) disintegrated after 180 cycles; AAFS-BFS (no steel slag) not extracted."
+      },
+      {
+        "Source_ID": "SRC-W4296433278",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001-2",
+        "Mix_ID": "AAFS-LS",
+        "Steel_Slag_Type": "Ladle",
+        "Test_Category": "Other",
+        "Test_Method": "Dry-wet cycles (24 h water / 24 h dry)",
+        "Test_Age": "60 d",
+        "Durability_Result": "Compressive strength 48 -> 43 MPa",
+        "Durability_Notes": "From Fig. 6-7 (approximate) and text; sole fayalite slag mix (AAFS) disintegrated after 180 cycles; AAFS-BFS (no steel slag) not extracted."
+      },
+      {
+        "Source_ID": "SRC-W4296433278",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Mix_ID": "AAFS-LS",
+        "Steel_Slag_Type": "Ladle",
+        "Test_Category": "Other",
+        "Test_Method": "Drying shrinkage EN 12617-4, RH 60-65%",
+        "Test_Age": "90 d",
+        "Durability_Result": "Drying shrinkage ~0.49% (highest of 3 mixes; AAFS ~0.40%)",
+        "Durability_Notes": "Fig. 2."
+      }
+    ],
+    "8 Carbon Uptake": [],
+    "9 Citations & Provenance": [
+      {
+        "Source_ID": "SRC-W4296433278",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Fact_or_Data_Element": "Compressive_Strength_28d_MPa",
+        "Reported_Value": "48",
+        "Unit": "MPa",
+        "Page_or_Table_or_Figure": "p.8",
+        "Extraction_Method": "Manual reading (Claude)",
+        "Original_Source_Text_or_Excerpt": "the initial average compressive strengths of the mortar samples of AAFS, AAFS-BFS and AAFS-LS after 28 days of curing at room temperature were 19, 40, and 48 MPa",
+        "Confidence": "High",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06"
+      },
+      {
+        "Source_ID": "SRC-W4296433278",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Fact_or_Data_Element": "CaO_pct",
+        "Reported_Value": "48.6",
+        "Unit": "wt%",
+        "Page_or_Table_or_Figure": "Table 1, p.2",
+        "Extraction_Method": "Manual reading (Claude)",
+        "Original_Source_Text_or_Excerpt": "CaO 1.9 38.5 48.6",
+        "Confidence": "High",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06"
+      },
+      {
+        "Source_ID": "SRC-W4296433278",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Fact_or_Data_Element": "Mass_loss_acid_RT_60d_pct",
+        "Reported_Value": "7.1",
+        "Unit": "%",
+        "Page_or_Table_or_Figure": "p.7",
+        "Extraction_Method": "Manual reading (Claude)",
+        "Original_Source_Text_or_Excerpt": "After 60 days of immersion in acid solution at room temperature, AAFS-LS and AAFS-BFS lost only 7.1 % and 5.3 %",
+        "Confidence": "High",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06"
+      },
+      {
+        "Source_ID": "SRC-W4296433278",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Fact_or_Data_Element": "Compressive_after_180FT_water_MPa",
+        "Reported_Value": "30",
+        "Unit": "MPa",
+        "Page_or_Table_or_Figure": "p.9",
+        "Extraction_Method": "Manual reading (Claude)",
+        "Original_Source_Text_or_Excerpt": "After 180 freeze-thaw cycles in water, the compressive strength of AAFS-LS and AAFS-BFS decreased to 30 and 20 MPa",
+        "Confidence": "High",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06"
+      },
+      {
+        "Source_ID": "SRC-W4296433278",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Fact_or_Data_Element": "Compressive_after_60d_sulfate_chloride_RT_MPa",
+        "Reported_Value": "41",
+        "Unit": "MPa",
+        "Page_or_Table_or_Figure": "p.9",
+        "Extraction_Method": "Manual reading (Claude)",
+        "Original_Source_Text_or_Excerpt": "After 60 days of exposure in combined sulfate and chloride solution at room temperature, the compressive strength of AAFS-LS, AAFS-BFS and AAFS was 41, 28, and 13 MPa",
+        "Confidence": "High",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06"
+      }
+    ]
+  },
+  "reference_cleaned": "2026-11-11 (v9 rules applied; not re-read against the PDF)"
+}

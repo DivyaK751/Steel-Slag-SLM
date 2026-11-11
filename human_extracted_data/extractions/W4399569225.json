@@ -1,0 +1,105 @@
+{
+  "openalex_id": "W4399569225",
+  "status": "Extracted",
+  "notes": "Review of BFS/SS recycling (glass-ceramics, ceramics, mineral wool, cementitious, carbonation, adsorbents); qualitative; pages 20-23 (conclusions/refs) not read.",
+  "sheets": {
+    "1 Scientific Literature": [
+      {
+        "Source_ID": "SRC-W4399569225",
+        "Title": "Recycling of iron and steel slag for carbon reduction and low-environment load application",
+        "Authors": "Ying Xu, Enshuo Li, Chenguang Hu, Fucheng Zhang, Xianguang Meng",
+        "Publication_Year": "2024",
+        "Publication_Type": "Journal Article",
+        "Journal_or_Source": "Carbon Neutralization 2024;3:606-628",
+        "DOI_or_URL": "10.1002/cnl2.137",
+        "Country_or_Region": "China",
+        "Steel_Slag_Type": "Other Steel Slag",
+        "Study_Objective": "Review low-carbon, waste-heat-based utilization of BFS and steel slag (glass-ceramics, ceramics, mineral wool, cementitious materials, adsorbents) and their CO2 sequestration.",
+        "Abstract_or_Key_Finding": "Molten slag latent heat (~1400 MJ/t for SS) enables online modification. SS cementitious use limited by poor hydration activity and f-CaO/f-MgO instability; online reconstruction with CaF2, fly ash, SiO2, lime or BFS reduces f-CaO. Direct gas-solid SS carbonation rate rose 70-fold from 400 to 600 °C; grinding with alumina beads raised carbonation to 78%. 4.7 t converter slag binds 1 t CO2 (indirect).",
+        "Full_Text_Access": "Open",
+        "Data_Extraction_Status": "Extracted",
+        "Relevant_To_SCM": "Yes",
+        "Notes": "Review; covers BFS and all SS types."
+      }
+    ],
+    "2 Feedstock Chemistry": [
+      {
+        "Source_ID": "SRC-W4399569225",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Steel_Slag_Type": "Other Steel Slag",
+        "Source/Origin": "General steel slag (review statement)",
+        "CaO_pct": "20-55",
+        "SiO2_pct": "10-24",
+        "Basis_As_Reported": "% (range)",
+        "Notes": "p.608: main phases C2S, C3S, CaMg[SiO4], C4AF, C2F, RO, f-CaO; trace MnO, P2O5, TiO2."
+      }
+    ],
+    "3 Processing": [],
+    "4 Particle Size": [],
+    "5 Activation": [],
+    "6 Concrete Performance": [],
+    "7 Durability": [],
+    "8 Carbon Uptake": [
+      {
+        "Source_ID": "SRC-W4399569225",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Steel_Slag_Type": "Other Steel Slag",
+        "Carbonation_Method": "Review: direct gas-solid, direct wet, indirect (acetic acid, ammonium salts)",
+        "Carbonation_Temperature_C": "300-600",
+        "CO2_Uptake_kg_per_t": "213",
+        "CO2_Basis": "Derived ratio as cited",
+        "Carbonation_Notes": "Gas-solid: negligible <300 °C, 60% conversion at 400 °C, rate x70 from 400 to 600 °C (Tian et al.). Alumina-bead grinding: carbonation degree 78% (Bodénan). Ultrasonic: Ca leaching 96.7% (Liu). NH4Cl Ca recovery 59.5% (Kodama).; Carbonation_Temperature_C: 300-600 (gas-solid); CO2_Uptake_kg_per_t: ~213 (1 t CO2 per 4.7 t converter slag, indirect, Eloneva et al.)"
+      }
+    ],
+    "9 Citations & Provenance": [
+      {
+        "Source_ID": "SRC-W4399569225",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Fact_or_Data_Element": "CO2_binding_ratio",
+        "Reported_Value": "4.7 t slag per t CO2",
+        "Unit": "t/t",
+        "Page_or_Table_or_Figure": "p.623",
+        "Extraction_Method": "Manual reading (Claude)",
+        "Original_Source_Text_or_Excerpt": "Eloneva et al. calculated that to bind 1 t of CO2, 4.7 t of steel converter slag is consumed and produces 2.3 and 3.4 t of CaCO3 and residual slag",
+        "Confidence": "High",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06",
+        "Provenance_Notes": "Cited literature value in review."
+      },
+      {
+        "Source_ID": "SRC-W4399569225",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Fact_or_Data_Element": "Carbonation_degree_pct",
+        "Reported_Value": "78",
+        "Unit": "%",
+        "Page_or_Table_or_Figure": "p.622",
+        "Extraction_Method": "Manual reading (Claude)",
+        "Original_Source_Text_or_Excerpt": "Bodénan et al. demonstrated that the carbonation degree of SS increases to 78% after grinding with alumina beads",
+        "Confidence": "High",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06",
+        "Provenance_Notes": "Cited literature value in review."
+      },
+      {
+        "Source_ID": "SRC-W4399569225",
+        "Material_ID": "MAT-0001",
+        "Experiment_ID": "EXP-0001",
+        "Fact_or_Data_Element": "CaO_range_pct",
+        "Reported_Value": "20-55",
+        "Unit": "%",
+        "Page_or_Table_or_Figure": "p.608",
+        "Extraction_Method": "Manual reading (Claude)",
+        "Original_Source_Text_or_Excerpt": "The contents of CaO and SiO2 range from 20% to 55% and 10% to 24%, respectively.",
+        "Confidence": "High",
+        "Reviewer": "claude-extraction",
+        "Review_Date": "2026-11-06",
+        "Provenance_Notes": "Review statement."
+      }
+    ]
+  },
+  "reference_cleaned": "2026-11-11 (v9 rules applied; not re-read against the PDF)"
+}
