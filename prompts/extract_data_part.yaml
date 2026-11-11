@@ -1,0 +1,21 @@
+name: extract_data_part
+version: 1
+description: Added after an extraction prompt's input when a paper is extracted in parts, so each answer stays under Gemini's output limit.
+variables: [sheets, materials]
+
+# Not sent on its own: the extraction prompt's instruction applies to every part
+instruction: |
+  (none; the input below is appended to the extraction prompt's input)
+
+# Appended to the extraction prompt's filled input, once per part
+input_template: |
+
+  <part>
+  This answer covers only part of the paper's data; the other sheets are asked for in a
+  separate answer, so a long paper fits the answer's length limit.
+  - Return facts only for these sheets: {sheets}. Leave out facts for any other sheet,
+    even if the paper reports them.
+  - {materials}
+  - Return literature as usual. Apply every rule above, including the FINAL CHECK, to
+    these sheets only.
+  </part>

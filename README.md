@@ -213,7 +213,16 @@ On GitHub, the "Extract paper data" workflow takes a comma-separated list of pap
   dropped and logged.
 - Each fact's page is found from its excerpt, and its confidence drops from High to Medium
   when the stored value isn't printed as such (a unit conversion, for example).
-- Every paper's token count and cost are logged. Images are not sent to the model yet.
+- Every paper's token count and cost are logged (about $0.20 a paper with
+  `gemini-3.8-flash`). The prompt (`extract_data_v9`) also gets each figure's Gemini reading
+  from `parsed.json` (plotted values as a table, XRD phases, process steps), so results shown
+  only in figures are extracted (confidence Low).
+- Each distinct experimental condition (replacement level, curing or carbonation time,
+  dosage...) is its own row; strengths at different ages stay in one row's age columns.
+- Gemini answers in rows (IDs, location and quote once per row, then its values), short
+  enough for a whole paper to fit its ~65k-token output limit (thinking included) in one
+  call. An answer cut off at that limit is asked for again in two parts (sheets 2-4 and 6,
+  then 5, 7 and 8).
 - Code: `agents/data_extractor.py`, `data/extraction_rows.py` (rules and rows),
   `data/extraction_tables.py` (table definitions) and `pipelines/extract_data.py`.
 

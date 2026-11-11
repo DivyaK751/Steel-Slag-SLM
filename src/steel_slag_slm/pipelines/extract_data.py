@@ -12,7 +12,7 @@ from google.cloud import bigquery
 from google.genai.errors import APIError
 from googleapiclient.errors import HttpError
 
-from steel_slag_slm.agents.data_extractor import extract_paper_data
+from steel_slag_slm.agents.data_extractor import EXTRACTION_PARTS, extract_paper_data
 from steel_slag_slm.agents.runner import StructuredAnswer, gather_bounded
 from steel_slag_slm.config import DataExtractionSettings, PdfParsingSettings
 from steel_slag_slm.data import drive_storage, parsed_index
@@ -22,7 +22,7 @@ from steel_slag_slm.data.paper_registry import read_citations
 from steel_slag_slm.data.parsed_document import parse_parsed_json
 from steel_slag_slm.exceptions import AgentOutputError
 from steel_slag_slm.llm.pricing import bigquery_query_cost_usd, gemini_cost_usd
-from steel_slag_slm.llm.prompts import PromptTemplate
+from steel_slag_slm.llm.prompts import PromptTemplate, load_prompt
 from steel_slag_slm.schemas import PaperCitation, PaperExtraction, ParsedPaper
 
 logger = logging.getLogger(__name__)
@@ -141,11 +141,15 @@ async def run_data_extraction(
         len(pending), settings.model, prompt.name, prompt.version,
     )  # fmt: skip
 
+    part_prompt = load_prompt(settings.part_prompt_name)
+
     async def extract(paper: ParsedPaper) -> StructuredAnswer[PaperExtraction]:
         citation = citations.get(paper.openalex_id)
         title = citation.title if citation else None
         return await asyncio.wait_for(
-            extract_paper_data(runner, prompt, paper, title), settings.call_timeout_s
+            extract_paper_data(runner, prompt, part_prompt, paper, title),
+            # One call, or one per part; a cut-off single call is followed by the parts
+            settings.call_timeout_s * (len(EXTRACTION_PARTS) + 1),
         )
 
     total_cost_usd = 0.0

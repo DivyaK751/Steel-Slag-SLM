@@ -106,6 +106,16 @@ ALLOWED_VALUES: dict[str, tuple[str, ...]] = {
     "Dry_or_Wet": ("Dry", "Wet"),
 }  # fmt: skip
 
+# Allowed-value columns that may list several values in order, e.g. "Grinding; Sieving"
+LIST_COLUMNS = ("Processing_Method",)
+LIST_SEPARATOR = ";"
+
+
+def split_list(value: str) -> list[str]:
+    """The values of a list cell ("Grinding; Sieving" -> ["Grinding", "Sieving"])."""
+    return [part.strip() for part in value.split(LIST_SEPARATOR) if part.strip()]
+
+
 # A header ending in one of these holds a bare number (or range) in that unit
 _UNIT_SUFFIXES = {
     "_pct_by_Mass": "% by mass",

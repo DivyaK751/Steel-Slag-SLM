@@ -9,10 +9,12 @@ from typing import Any
 from steel_slag_slm.data.extraction_tables import (
     ALLOWED_VALUES,
     KEY_HEADERS,
+    LIST_COLUMNS,
     LITERATURE_TABLE,
     PROVENANCE_TABLE,
     TABLES_BY_NAME,
     column_unit,
+    split_list,
     to_column_name,
 )
 from steel_slag_slm.schemas import (
@@ -24,7 +26,7 @@ from steel_slag_slm.schemas import (
 
 _NUMBER = r"[-−]?\d+(?:\.\d+)?"
 # A bare number, a bound (">40"), a range ("45-60", "3 to 5") or a mean with spread ("38.2 ± 1.1")
-_NUMERIC_VALUE = re.compile(
+NUMERIC_VALUE = re.compile(
     rf"^(?:[<>≤≥~]=?\s*)?{_NUMBER}(?:\s*(?:-|–|to|±)\s*{_NUMBER})?$", re.IGNORECASE
 )
 _NUMBER_IN_TEXT = re.compile(r"\d+(?:\.\d+)?")
@@ -56,10 +58,11 @@ def check_fact(fact: ExtractedFact, material_ids: set[str]) -> str | None:
     value = fact.value.strip()
     if not value:
         return "empty value"
-    if column_unit(fact.field) and not _NUMERIC_VALUE.match(value):
+    if column_unit(fact.field) and not NUMERIC_VALUE.match(value):
         return f"not a number in {column_unit(fact.field)}"
     allowed = ALLOWED_VALUES.get(fact.field)
-    if allowed and value not in allowed:
+    values = split_list(value) if fact.field in LIST_COLUMNS else [value]
+    if allowed and any(item not in allowed for item in values):
         return f"not one of {', '.join(allowed)}"
     return None
 

@@ -265,24 +265,32 @@ registry:
   location: US
 
 data_extraction:
-  prompt_name: extract_data_v4
-  # Strongest Gemini this project can call; 3.8 and 3.5 Pro return 404 here (2026-10-23)
-  model: gemini-3.1-pro-preview
+  # Answers in rows, short enough for a whole paper in one call
+  prompt_name: extract_data_v9
+  # A paper whose answer is cut off at Gemini's output limit is asked again in two parts;
+  # this prompt tells each part which sheets it covers
+  part_prompt_name: extract_data_part
+  # About $0.20 a paper; gemini-3.1-pro-preview ($2.00 / $12.00) costs ~$1. Lower thinking
+  # levels missed most values in dev runs (2026-11-10)
+  model: gemini-3.8-flash
+  thinking_level: high
   # One table per data sheet of the CNS input workbook, joined to papers on source_id
   dataset: steel_slag_extraction
   location: US
   # export-extraction writes one workbook per run here; git-ignored
   export_dir: reports/extraction
-  # Gemini calls in flight at once; the Pro preview often answers 503 under load
+  # Papers in flight at once
   max_concurrency: 2
-  # A whole paper with thinking can take minutes; a slower call is retried on the next run
+  # Per Gemini call; a paper with thinking takes minutes; a slower paper is retried on the
+  # next run
   call_timeout_s: 600
   # Vertex list prices of `model` above (US$ per 1M tokens, prompts under 200k tokens), for
   # the cost logged per paper; change them together with the model
+  # Intro rate until 2026-12-31, then 1.50 / 7.50; cached input assumed at 10% of input
   prices:
-    input: 2.00
-    cached_input: 0.20
-    output: 12.00
+    input: 0.75
+    cached_input: 0.075
+    output: 3.75
   # BigQuery on-demand query price; the load jobs that write the rows are free
   bigquery_usd_per_tib: 6.25
 
