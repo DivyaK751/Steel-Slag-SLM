@@ -42,6 +42,14 @@ def page_text(pdf: bytes) -> str:
         return "\n".join(page.get_text() for page in document)
 
 
+def page_texts(pdf: bytes) -> list[str]:
+    """Return each page's text layer separately, in page order starting at page 1.
+    Used to report which page a value sits on, which the concatenated page_text loses.
+    """
+    with pymupdf.open(stream=pdf, filetype="pdf") as document:
+        return [page.get_text() for page in document]
+
+
 def render_regions(pdf: bytes, regions: list[tuple[int, PageBox]], dpi: int) -> list[bytes]:
     """Render each (page number, box) region of the PDF as PNG bytes, in the order given.
 
