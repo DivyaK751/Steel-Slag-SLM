@@ -14,7 +14,7 @@ from docling.exceptions import ConversionError
 from pydantic import BaseModel
 
 from steel_slag_slm.config import TableInspectionCase
-from steel_slag_slm.data.drive_storage import parse_openalex_id
+from steel_slag_slm.data.local_pdfs import select_local_pdfs
 from steel_slag_slm.data.table_inspection import InspectedTable, capture_tables
 
 logger = logging.getLogger(__name__)
@@ -47,18 +47,10 @@ def inspect_local_tables(
     """
     if not cases or len({case.paper_id for case in cases}) != len(cases):
         raise ValueError("Select at least one paper, with only one page per paper")
-    sources: list[Path] = []
+    sources = select_local_pdfs([case.paper_id for case in cases], pdf_dir)
     for case in cases:
-        matches = [
-            path for path in pdf_dir.glob("*.pdf") if parse_openalex_id(path.name) == case.paper_id
-        ]
-        if len(matches) != 1:
-            raise ValueError(
-                f"{case.paper_id}: expected one PDF in {pdf_dir}, found {len(matches)}"
-            )
         if (output_dir / f"{case.paper_id}.json").exists():
             raise FileExistsError(f"Inspection already exists for {case.paper_id} in {output_dir}")
-        sources.append(matches[0])
 
     output_dir.mkdir(parents=True, exist_ok=True)
     reports: list[TableInspectionReport] = []
