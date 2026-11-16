@@ -108,6 +108,8 @@ def render_table_evidence(table: InspectedTable) -> TableEvidence:
     ]
     if not context:
         result.issues.append(RenderingIssue(reason="Missing caption or full-width table context"))
+    if any(not c.text.strip() for c in headers if c not in context_headers):
+        result.issues.append(RenderingIssue(reason="Blank column header"))
     if not paths or any(not path for path in paths):
         result.issues.append(RenderingIssue(reason="Missing column header path"))
     if result.issues:

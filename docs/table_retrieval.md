@@ -114,3 +114,7 @@ the steel-slag chemistry passage kept CaO 38.96 under percent and Cr 442.30 unde
 All 30 saved row-to-cell mappings and parent inspection hashes were checked.
 This tests representation fidelity only; usefulness, token fit and retrieval gains remain
 unmeasured. Next: review candidates before implementing token-budgeted chunks.
+
+Review hardening: blank native column headers now block rendering even when another header
+level supplies text. Otherwise a lost age or property label could silently yield an incomplete
+path. Intentionally blank headers are conservatively deferred for manual review.

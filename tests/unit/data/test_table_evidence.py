@@ -128,3 +128,12 @@ def test_missing_headers_and_empty_tables_are_explicit() -> None:
     assert render_table_evidence(table).issues[0].reason == "Missing or interleaved column headers"
     table.data.table_cells.clear()
     assert render_table_evidence(table).issues
+
+
+@pytest.mark.parametrize("header_index", [2, 4])
+def test_blank_group_or_age_header_blocks_incomplete_context(header_index: int) -> None:
+    table = _table()
+    table.data.table_cells[header_index].text = " "
+    rendered = render_table_evidence(table)
+    assert not rendered.rows
+    assert rendered.issues[0].reason == "Blank column header"
