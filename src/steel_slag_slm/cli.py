@@ -105,6 +105,7 @@ from steel_slag_slm.pipelines.read_figures import (
     run_figure_reading,
     summarize_costs,
 )
+from steel_slag_slm.pipelines.render_table_evidence import render_local_table_evidence
 from steel_slag_slm.pipelines.screen_papers import run_screening
 from steel_slag_slm.pipelines.search_index import run_search
 from steel_slag_slm.pipelines.sync_registry import run_registry_sync
@@ -133,6 +134,22 @@ def inspect_tables() -> None:
         print(f"{report.case.paper_id}: {report.status}, {len(report.tables)} table(s)")
     if any(report.status == "no_tables" for report in reports):
         raise SystemExit("Some selected pages yielded no tables; inspect the saved reports")
+
+
+def render_table_evidence() -> None:
+    """Render review-only row passages from local table inspection reports."""
+    parser = argparse.ArgumentParser(description=render_table_evidence.__doc__)
+    parser.add_argument("--inspection-dir", type=Path, required=True)
+    parser.add_argument("--out-dir", type=Path, required=True)
+    args = parser.parse_args()
+    _setup_logging()
+    reports = render_local_table_evidence(args.inspection_dir, args.out_dir)
+    for report in reports:
+        rows = sum(len(table.rows) for table in report.tables)
+        issues = sum(len(table.issues) for table in report.tables)
+        print(f"{report.paper_id}: {rows} candidate row(s), {issues} issue(s); unreviewed")
+    if any(not any(table.rows for table in report.tables) for report in reports):
+        raise SystemExit("Some papers have no candidate rows; review the saved issues")
 
 
 def _setup_logging() -> None:

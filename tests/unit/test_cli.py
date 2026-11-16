@@ -8,6 +8,24 @@ import pytest
 import steel_slag_slm.cli as cli
 
 
+@pytest.mark.parametrize("has_rows", [False, True])
+def test_render_table_evidence_reports_blocked_papers(monkeypatch, has_rows) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["render-table-evidence", "--inspection-dir", "in", "--out-dir", "out"],
+    )
+    report = MagicMock(tables=[MagicMock(rows=[1] if has_rows else [], issues=[])])
+    render = MagicMock(return_value=[report])
+    monkeypatch.setattr(cli, "render_local_table_evidence", render)
+    if has_rows:
+        cli.render_table_evidence()
+    else:
+        with pytest.raises(SystemExit, match="no candidate rows"):
+            cli.render_table_evidence()
+    render.assert_called_once_with(Path("in"), Path("out"))
+
+
 @pytest.mark.parametrize("status", ["captured", "no_tables"])
 def test_inspect_tables_exposes_empty_page_failure(monkeypatch, status) -> None:
     report = MagicMock(status=status)

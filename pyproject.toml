@@ -43,6 +43,7 @@ extract-figures = "steel_slag_slm.cli:extract_figures"
 read-figures = "steel_slag_slm.cli:read_figures"
 export-parsed = "steel_slag_slm.cli:export_parsed"
 inspect-tables = "steel_slag_slm.cli:inspect_tables"
+render-table-evidence = "steel_slag_slm.cli:render_table_evidence"
 
 [dependency-groups]
 dev = [

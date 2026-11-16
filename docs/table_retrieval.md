@@ -90,3 +90,27 @@ These passages are not yet token-budgeted chunks and are not added to any index.
 
 Round 2 is on a stacked branch based on Round 1. Review its diff against `fix/parsed_table`;
 do not combine both rounds into one oversized PR to main.
+
+Run locally without reconverting PDFs or loading models:
+
+```bash
+uv run render-table-evidence \
+  --inspection-dir data/interim/table_retrieval/inspection \
+  --out-dir data/interim/table_retrieval/evidence
+```
+
+Outputs retain the original PDF hash plus the input inspection filename and SHA-256.
+All JSON inputs are validated before writing. Empty/invalid inputs and existing outputs fail
+explicitly; use a new output directory to rerun. Papers with zero candidate rows still receive
+reports, with a nonzero command exit. Inspect every report's `issues` as well as `rows`.
+
+The first saved run produced **30 candidate rows from five tables** across four papers.
+Two tables were blocked: image chemistry lacked table context; carbonation lacked a header
+for one column. Five incomplete body rows were omitted, including Table 4's summary rows.
+The nonzero exit for these two blocked papers is expected, not a lost report.
+
+Spot checks retained mix 9#, sodium sulfate 0.5%, and 28-day UCS 45.14 MPa in one passage;
+the steel-slag chemistry passage kept CaO 38.96 under percent and Cr 442.30 under mg/kg.
+All 30 saved row-to-cell mappings and parent inspection hashes were checked.
+This tests representation fidelity only; usefulness, token fit and retrieval gains remain
+unmeasured. Next: review candidates before implementing token-budgeted chunks.
