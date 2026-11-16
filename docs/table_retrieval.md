@@ -118,3 +118,40 @@ unmeasured. Next: review candidates before implementing token-budgeted chunks.
 Review hardening: blank native column headers now block rendering even when another header
 level supplies text. Otherwise a lost age or property label could silently yield an incomplete
 path. Intentionally blank headers are conservatively deferred for manual review.
+
+## Round 3: tokenizer-budgeted whole rows
+
+The local candidate chunker keeps **one complete rendered row per chunk**, rather than
+cutting by characters. Oversize rows are explicitly omitted, never truncated or split away
+from their mix, age or conditions. This deliberately conservative first variant can lose
+coverage; keep the original tables as baseline evidence for the later comparison.
+
+It reuses the production passage-formatting helpers. Counts include the filename-derived
+title, embedding special tokens, reranker pair special tokens and an explicit query reserve.
+The reserve excludes pair special tokens. The example reserves 64 reranker tokens per query;
+future evaluation must check actual query lengths and reject or re-budget longer queries.
+This is not a guarantee for unlimited queries. No embedding or reranker weights are loaded.
+
+```bash
+uv run budget-table-evidence \
+  --inspection-dir data/interim/table_retrieval/inspection \
+  --out-dir data/interim/table_retrieval/budgeted \
+  --embedding-limit 512 --reranker-limit 512 --query-reserve 64
+```
+
+The command reads model names from the existing embedding configuration and requires their
+tokenizers already cached locally. Missing assets fail explicitly. Only public tokenizer
+assets were downloaded for this experiment; source PDFs and passages are never uploaded.
+Reports fingerprint tokenizer configurations, library versions and original inspections.
+Filename stems are provisional title metadata, not registry-verified titles; evaluation must
+use identical, verified titles in both variants and re-count if they change.
+
+Outputs remain unreviewed and local. No production parser, index or retrieval default changes.
+Existing output files are refused; blocked papers still get reports and cause a nonzero exit.
+This round is stacked on `exp/table-evidence-rendering`, not a combined PR to main.
+
+Measured six-paper result: all 30 candidate rows fit, with **60-232 embedding tokens** and
+**127-306 reranker pair tokens**, including an actual 64-token boundary query. No additional
+rows were dropped by budgeting. All source row mappings, unchanged text and parent hashes
+were checked after saving. Two previously blocked tables remain blocked. These measurements
+show token fit and fidelity, not improved top-k retrieval; the 50-paper comparison is next.

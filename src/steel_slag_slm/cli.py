@@ -82,6 +82,7 @@ from steel_slag_slm.evaluation.value_metrics import count_values
 from steel_slag_slm.exceptions import PapersNotFoundError, PromotionError
 from steel_slag_slm.llm.prompts import PromptTemplate, load_prompt
 from steel_slag_slm.pipelines.background_figure_reader import BackgroundFigureReader
+from steel_slag_slm.pipelines.budget_table_evidence import budget_local_table_evidence
 from steel_slag_slm.pipelines.build_index import run_build_index
 from steel_slag_slm.pipelines.compare_extraction import compare_runs
 from steel_slag_slm.pipelines.evaluate_retrieval import (
@@ -111,6 +112,7 @@ from steel_slag_slm.pipelines.search_index import run_search
 from steel_slag_slm.pipelines.sync_registry import run_registry_sync
 from steel_slag_slm.rag.embeddings import Embedder
 from steel_slag_slm.rag.retrieval import CrossEncoderScorer, TwoStageRetriever
+from steel_slag_slm.rag.table_budgeting import TableTokenBudget
 from steel_slag_slm.schemas import ChunkKind, ExtractionRun
 
 logger = logging.getLogger(__name__)
@@ -150,6 +152,35 @@ def render_table_evidence() -> None:
         print(f"{report.paper_id}: {rows} candidate row(s), {issues} issue(s); unreviewed")
     if any(not any(table.rows for table in report.tables) for report in reports):
         raise SystemExit("Some papers have no candidate rows; review the saved issues")
+
+
+def budget_table_evidence() -> None:
+    """Budget complete table rows locally; leave production indexes unchanged."""
+    parser = argparse.ArgumentParser(description=budget_table_evidence.__doc__)
+    parser.add_argument("--inspection-dir", type=Path, required=True)
+    parser.add_argument("--out-dir", type=Path, required=True)
+    parser.add_argument("--embedding-limit", type=int, required=True)
+    parser.add_argument("--reranker-limit", type=int, required=True)
+    parser.add_argument("--query-reserve", type=int, required=True)
+    args = parser.parse_args()
+    _setup_logging()
+    settings = load_embedding_settings()
+    budget = TableTokenBudget(
+        embedding_limit=args.embedding_limit,
+        reranker_limit=args.reranker_limit,
+        query_reserve=args.query_reserve,
+    )
+    reports = budget_local_table_evidence(
+        args.inspection_dir,
+        args.out_dir,
+        budget,
+        settings.model,
+        settings.reranker,
+    )
+    for report in reports:
+        print(f"{report.paper_id}: {sum(len(t.rows) for t in report.tables)} unreviewed chunk(s)")
+    if any(not any(t.rows for t in report.tables) for report in reports):
+        raise SystemExit("Some papers have no budgeted rows; review the saved issues")
 
 
 def _setup_logging() -> None:

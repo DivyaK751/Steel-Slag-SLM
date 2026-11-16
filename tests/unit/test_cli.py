@@ -9,6 +9,38 @@ import steel_slag_slm.cli as cli
 
 
 @pytest.mark.parametrize("has_rows", [False, True])
+def test_budget_table_evidence_exposes_empty_papers(monkeypatch, has_rows) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "budget-table-evidence",
+            "--inspection-dir",
+            "in",
+            "--out-dir",
+            "out",
+            "--embedding-limit",
+            "512",
+            "--reranker-limit",
+            "512",
+            "--query-reserve",
+            "64",
+        ],
+    )
+    settings = MagicMock(model="embed", reranker="rerank")
+    monkeypatch.setattr(cli, "load_embedding_settings", lambda: settings)
+    run = MagicMock(return_value=[MagicMock(tables=[MagicMock(rows=[1] if has_rows else [])])])
+    monkeypatch.setattr(cli, "budget_local_table_evidence", run)
+    if has_rows:
+        cli.budget_table_evidence()
+    else:
+        with pytest.raises(SystemExit, match="no budgeted rows"):
+            cli.budget_table_evidence()
+    assert run.call_args.args[2].query_reserve == 64
+    assert run.call_args.args[3:] == ("embed", "rerank")
+
+
+@pytest.mark.parametrize("has_rows", [False, True])
 def test_render_table_evidence_reports_blocked_papers(monkeypatch, has_rows) -> None:
     monkeypatch.setattr(
         sys,
