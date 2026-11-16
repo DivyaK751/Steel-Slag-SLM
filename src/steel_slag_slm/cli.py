@@ -84,6 +84,7 @@ from steel_slag_slm.llm.prompts import PromptTemplate, load_prompt
 from steel_slag_slm.pipelines.background_figure_reader import BackgroundFigureReader
 from steel_slag_slm.pipelines.budget_table_evidence import budget_local_table_evidence
 from steel_slag_slm.pipelines.build_index import run_build_index
+from steel_slag_slm.pipelines.capture_table_corpus import capture_local_corpus
 from steel_slag_slm.pipelines.compare_extraction import compare_runs
 from steel_slag_slm.pipelines.evaluate_retrieval import (
     format_retrieval_report,
@@ -181,6 +182,31 @@ def budget_table_evidence() -> None:
         print(f"{report.paper_id}: {sum(len(t.rows) for t in report.tables)} unreviewed chunk(s)")
     if any(not any(t.rows for t in report.tables) for report in reports):
         raise SystemExit("Some papers have no budgeted rows; review the saved issues")
+
+
+def capture_table_corpus() -> None:
+    """Cache full local PDFs for a paired table-retrieval experiment without publishing."""
+    parser = argparse.ArgumentParser(description=capture_table_corpus.__doc__)
+    parser.add_argument("--benchmark", type=Path, required=True)
+    parser.add_argument("--pdf-dir", type=Path, required=True)
+    parser.add_argument("--out-dir", type=Path, required=True)
+    parser.add_argument("--paper-ids", nargs="+")
+    args = parser.parse_args()
+    _setup_logging()
+    split = load_benchmark_split(args.benchmark)
+    paper_ids = split.dev + split.test
+    if args.paper_ids is not None:
+        unknown = set(args.paper_ids) - set(paper_ids)
+        if unknown:
+            raise ValueError(f"Paper IDs outside benchmark: {sorted(unknown)}")
+        paper_ids = args.paper_ids
+    paths = capture_local_corpus(
+        paper_ids,
+        args.pdf_dir,
+        args.out_dir,
+        build_docling_converter(include_figures=True),
+    )
+    print(f"Verified {len(paths)} full-document capture(s); no indexes changed")
 
 
 def _setup_logging() -> None:

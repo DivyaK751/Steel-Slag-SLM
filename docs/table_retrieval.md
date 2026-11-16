@@ -155,3 +155,57 @@ Measured six-paper result: all 30 candidate rows fit, with **60-232 embedding to
 rows were dropped by budgeting. All source row mappings, unchanged text and parent hashes
 were checked after saving. Two previously blocked tables remain blocked. These measurements
 show token fit and fidelity, not improved top-k retrieval; the 50-paper comparison is next.
+
+## Round 4a: shared full-document corpus
+
+The 50 benchmark PDFs were resolved locally: 857 physical pages in total. Selected-page
+inspection is not a full-corpus benchmark. Before comparing representations, capture complete
+native documents so both variants derive from the **same conversion**, not different parser
+runs. Production parsing and cloud artifacts remain untouched.
+
+```bash
+HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 \
+uv run capture-table-corpus \
+  --benchmark configs/extraction_benchmark.yaml \
+  --pdf-dir data/interim/pdf_parsing/raw/table_retrieval/pdfs \
+  --out-dir data/interim/table_retrieval/full_documents
+```
+
+Add `--paper-ids W4280519327` for the one-paper smoke test. Omitting that flag selects both
+benchmark splits; this captures source documents, not training examples or answer labels.
+One successful full-document snapshot is stored per paper. Every physical page must be present.
+Reports retain source hashes, Docling versions, a stable options fingerprint and the native
+document, including tables, text, captions, footnotes and picture metadata.
+
+Identical existing snapshots are validated and reused without conversion. Changed sources,
+parser settings, incomplete conversions or corrupt reports fail explicitly; use a new directory
+for an intentional parser change. A write interrupted mid-file is not reusable. Earlier completed
+papers survive errors. All requested filename matches are checked before conversion starts.
+Use the same cached models/environment throughout a corpus run: this fingerprint does not pin
+all transitive library versions or model revisions. No Gemini reading or cloud writes occur.
+
+The full-paper smoke test captured all 15 pages and six tables of W4280519327. Its steel-slag
+CaO 38.96% and Cr 442.30 mg/kg associations remained intact. The conservative renderer and
+budgeter yielded 40 candidate rows from four tables, with two other tables explicitly blocked.
+Docling warned about dense vector separators on page 11 and used its reading-order fallback;
+successful conversion is not an accuracy certificate. Cross-process cache reuse was verified
+after fixing unordered-set serialization in the options fingerprint. Only this one paper has
+been fully captured so far; the other 49 and the retrieval comparison remain pending.
+
+Next, finish the snapshots, derive baseline chunks with the original formatting and compare
+against the same corpus augmented by candidate rows. Keep original tables when rows are blocked.
+Keep titles, non-table content, figure policy and retrieval models identical. This capture does
+not reproduce production Gemini figure readings; either share existing readings across both
+variants or explicitly evaluate text/tables without those readings. Enforce actual query token
+lengths before scoring. Report source coverage and value-condition correctness alongside top-k
+retrieval; the existing answer-string metric alone cannot establish the latter.
+
+### Implications for fine-tuning
+
+Parsing/OCR, retrieval and answer generation are separate failure stages. Fine-tuning cannot
+recover omitted table cells or evidence absent from the model context. Do not train on
+unreviewed candidate passages as if they were ground truth. Keep paper-level train/test separation,
+teach grounded citations and abstention, and test age, mix, unit and material confusions.
+GGBFS must remain distinct from steel slag; elemental and oxide reporting bases are not
+interchangeable. AI summaries and semantic repairs remain deferred until deterministic
+retrieval has been evaluated.

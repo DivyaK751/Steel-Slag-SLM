@@ -8,6 +8,54 @@ import pytest
 import steel_slag_slm.cli as cli
 
 
+@pytest.mark.parametrize("selection", [[], ["--paper-ids", "W123"]])
+def test_capture_table_corpus_selects_only_benchmark_inputs(monkeypatch, selection) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "capture-table-corpus",
+            "--benchmark",
+            "split.yaml",
+            "--pdf-dir",
+            "pdfs",
+            "--out-dir",
+            "out",
+            *selection,
+        ],
+    )
+    monkeypatch.setattr(
+        cli, "load_benchmark_split", lambda _: MagicMock(dev=["W123"], test=["W456"])
+    )
+    monkeypatch.setattr(cli, "build_docling_converter", lambda **_: "converter")
+    run = MagicMock(return_value=[])
+    monkeypatch.setattr(cli, "capture_local_corpus", run)
+    cli.capture_table_corpus()
+    expected = ["W123"] if selection else ["W123", "W456"]
+    run.assert_called_once_with(expected, Path("pdfs"), Path("out"), "converter")
+
+
+def test_capture_table_corpus_rejects_ids_outside_benchmark(monkeypatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "capture-table-corpus",
+            "--benchmark",
+            "split.yaml",
+            "--pdf-dir",
+            "pdfs",
+            "--out-dir",
+            "out",
+            "--paper-ids",
+            "W999",
+        ],
+    )
+    monkeypatch.setattr(cli, "load_benchmark_split", lambda _: MagicMock(dev=["W123"], test=[]))
+    with pytest.raises(ValueError, match="outside benchmark"):
+        cli.capture_table_corpus()
+
+
 @pytest.mark.parametrize("has_rows", [False, True])
 def test_budget_table_evidence_exposes_empty_papers(monkeypatch, has_rows) -> None:
     monkeypatch.setattr(
