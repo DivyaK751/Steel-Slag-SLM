@@ -70,3 +70,23 @@ This supports a conservative deterministic renderer, not automatic correctness f
 table. Start with unambiguous rows and native header paths; preserve review findings as
 relational text. Defer unresolved row groups, OCR repair and factor-definition linking.
 No measured retrieval improvement is claimed.
+
+## Round 2: conservative, review-only row evidence
+
+`data.table_evidence.render_table_evidence` creates candidate passages, not verified facts.
+It joins column-header paths to exact cell strings, keeps all columns of a complete row
+together, and repeats caption/table-level text and linked footnotes. Full-width native
+headers above narrower headers supply table context without being repeated for every field.
+Explicit body row spans are expanded; empty cells are never filled from previous rows.
+Source table references, provenance, zero-based row indices and native cell-list indices
+remain attached for auditing.
+
+Missing context or column-header paths, interleaved/crossing headers, incomplete body rows,
+section cells and multi-column body cells produce explicit issues rather than guessed text.
+Invalid geometry raises an error. Every output remains `unreviewed`, even with no issues:
+these checks cannot detect all OCR mistakes, missing units or incomplete material definitions.
+Nearby prose is not incorporated, factor codes are not expanded, and values are not normalized.
+These passages are not yet token-budgeted chunks and are not added to any index.
+
+Round 2 is on a stacked branch based on Round 1. Review its diff against `fix/parsed_table`;
+do not combine both rounds into one oversized PR to main.
