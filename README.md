@@ -73,6 +73,9 @@ and is retried on the next run. Settings: the `abstract_extraction:` section of
 
 ## PDF parsing
 
+[Local table-retrieval experiments](docs/table_retrieval.md) inspect selected source tables
+without changing the production parser or shared artifacts.
+
 `parse-pdfs` reads paper IDs and PDF Drive links from the configured BigQuery source table.
 It uses one Docling conversion to extract text, tables and figure regions, then uses PyMuPDF
 to render figure regions as PNGs. Parsing does not call Gemini or modify source PDFs.

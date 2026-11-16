@@ -41,6 +41,7 @@ from steel_slag_slm.config import (
     load_retrieval_eval_set,
     load_screening_settings,
     load_settings,
+    load_table_inspection_cases,
 )
 from steel_slag_slm.data import parsed_index
 from steel_slag_slm.data.drive_storage import (
@@ -63,6 +64,7 @@ from steel_slag_slm.data.extraction_tables import ensure_extraction_tables
 from steel_slag_slm.data.figure_detection import build_figure_converter
 from steel_slag_slm.data.openalex import OpenAlexClient
 from steel_slag_slm.data.paper_registry import build_bigquery_client
+from steel_slag_slm.data.pdf_parsing import build_docling_converter
 from steel_slag_slm.data.reference_workbook import read_reference_rows
 from steel_slag_slm.evaluation.extraction_report import (
     SCORE_COLUMNS,
@@ -93,6 +95,7 @@ from steel_slag_slm.pipelines.extract_data import load_parsed_paper, run_data_ex
 from steel_slag_slm.pipelines.extract_figures import collect_pdf_paths, run_figure_extraction
 from steel_slag_slm.pipelines.fetch_papers import run_fetch
 from steel_slag_slm.pipelines.fill_abstracts import run_fill_abstracts
+from steel_slag_slm.pipelines.inspect_tables import inspect_local_tables
 from steel_slag_slm.pipelines.judge_extraction import adjudicate_run, judge_run
 from steel_slag_slm.pipelines.paper_selection import select_papers
 from steel_slag_slm.pipelines.parse_pdfs import format_parse_summary, run_pdf_parsing
@@ -110,6 +113,26 @@ from steel_slag_slm.rag.retrieval import CrossEncoderScorer, TwoStageRetriever
 from steel_slag_slm.schemas import ChunkKind, ExtractionRun
 
 logger = logging.getLogger(__name__)
+
+
+def inspect_tables() -> None:
+    """Capture native table structure from selected local PDF pages for manual inspection."""
+    parser = argparse.ArgumentParser(description=inspect_tables.__doc__)
+    parser.add_argument("--cases", type=Path, required=True)
+    parser.add_argument("--pdf-dir", type=Path, required=True)
+    parser.add_argument("--out-dir", type=Path, required=True)
+    args = parser.parse_args()
+    _setup_logging()
+    reports = inspect_local_tables(
+        load_table_inspection_cases(args.cases),
+        args.pdf_dir,
+        args.out_dir,
+        build_docling_converter(include_figures=True),
+    )
+    for report in reports:
+        print(f"{report.case.paper_id}: {report.status}, {len(report.tables)} table(s)")
+    if any(report.status == "no_tables" for report in reports):
+        raise SystemExit("Some selected pages yielded no tables; inspect the saved reports")
 
 
 def _setup_logging() -> None:

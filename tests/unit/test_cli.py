@@ -8,6 +8,30 @@ import pytest
 import steel_slag_slm.cli as cli
 
 
+@pytest.mark.parametrize("status", ["captured", "no_tables"])
+def test_inspect_tables_exposes_empty_page_failure(monkeypatch, status) -> None:
+    report = MagicMock(status=status)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["inspect-tables", "--cases", "cases.yaml", "--pdf-dir", "pdfs", "--out-dir", "out"],
+    )
+    load_cases = MagicMock(return_value=["case"])
+    build = MagicMock(return_value="converter")
+    inspect = MagicMock(return_value=[report])
+    monkeypatch.setattr(cli, "load_table_inspection_cases", load_cases)
+    monkeypatch.setattr(cli, "build_docling_converter", build)
+    monkeypatch.setattr(cli, "inspect_local_tables", inspect)
+    if status == "no_tables":
+        with pytest.raises(SystemExit, match="no tables"):
+            cli.inspect_tables()
+    else:
+        cli.inspect_tables()
+    load_cases.assert_called_once_with(Path("cases.yaml"))
+    build.assert_called_once_with(include_figures=True)
+    inspect.assert_called_once_with(["case"], Path("pdfs"), Path("out"), "converter")
+
+
 def _fake_parse_pdfs_clients(monkeypatch, calls: dict[str, object]) -> MagicMock:
     """Stub settings, clients and indexing for parse-pdfs; return the parsing settings."""
     parsing_settings = MagicMock(output_folder_name="_parsed_approved")

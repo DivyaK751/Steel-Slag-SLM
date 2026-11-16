@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 import yaml
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field, SecretStr, model_validator
+from pydantic import BaseModel, Field, SecretStr, TypeAdapter, model_validator
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CONFIGS_DIR = PROJECT_ROOT / "configs"
@@ -14,6 +14,22 @@ BASE_CONFIG_PATH = CONFIGS_DIR / "base.yaml"
 RETRIEVAL_EVAL_PATH = CONFIGS_DIR / "retrieval_eval.yaml"
 # Kept outside the repo so a personal Google login can never be committed
 DEFAULT_GOOGLE_TOKEN_PATH = Path.home() / ".config" / "steel_slag_slm" / "google_token.json"
+
+
+class TableInspectionCase(BaseModel):
+    """Select a physical PDF page and name the table a reviewer should check."""
+
+    paper_id: str = Field(pattern=r"^W\d+$")
+    page: int = Field(ge=1)
+    target: str
+
+
+def load_table_inspection_cases(path: Path) -> list[TableInspectionCase]:
+    """Read unique per-paper page selections without loading credentials."""
+    cases = TypeAdapter(list[TableInspectionCase]).validate_python(yaml.safe_load(path.read_text()))
+    if not cases or len({case.paper_id for case in cases}) != len(cases):
+        raise ValueError("Select at least one paper, with only one page per paper")
+    return cases
 
 
 class FetchSettings(BaseModel):
