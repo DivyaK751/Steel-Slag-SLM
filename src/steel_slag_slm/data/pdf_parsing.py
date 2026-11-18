@@ -45,7 +45,7 @@ def parse_pdf(pdf_bytes: bytes, converter: DocumentConverter) -> ParsedDocument:
         DocumentStream(name="paper.pdf", stream=BytesIO(pdf_bytes))
     ).document
     markdown = document.export_to_markdown()
-    content_blocks = _extract_content_blocks(document)
+    content_blocks = extract_content_blocks(document)
     tables = tuple(block.text for block in content_blocks if block.kind == "table")
 
     images = _extract_embedded_images(pdf_bytes)
@@ -63,7 +63,8 @@ def parse_pdf(pdf_bytes: bytes, converter: DocumentConverter) -> ParsedDocument:
     )
 
 
-def _extract_content_blocks(document: DoclingDocument) -> tuple[ParsedContentBlock, ...]:
+def extract_content_blocks(document: DoclingDocument) -> tuple[ParsedContentBlock, ...]:
+    """Export native text and tables in the production block format."""
     content_blocks: list[ParsedContentBlock] = []
 
     for item, _ in document.iterate_items():
@@ -165,7 +166,7 @@ def parse_pdf_with_figures(
         raise ConversionError(f"Docling conversion did not succeed: {result.status.value}")
 
     document = result.document
-    content_blocks = _extract_content_blocks(document)
+    content_blocks = extract_content_blocks(document)
 
     return ParsedDocument(
         text_parser="Docling",

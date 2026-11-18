@@ -8,6 +8,10 @@ from pydantic import BaseModel
 from steel_slag_slm.data.table_inspection import InspectedTable
 
 
+class TableGeometryError(ValueError):
+    """Indicate native cells whose coordinates cannot be rendered safely."""
+
+
 class RenderingIssue(BaseModel):
     """Identify a blocked table or zero-based body row without hiding missing evidence."""
 
@@ -55,11 +59,13 @@ def render_table_evidence(table: InspectedTable) -> TableEvidence:
             and r1 - r0 == cell.row_span
             and c1 - c0 == cell.col_span
         ):
-            raise ValueError(f"{table.reference}: invalid geometry for cell {index}")
+            raise TableGeometryError(f"{table.reference}: invalid geometry for cell {index}")
         for row in range(r0, r1):
             for col in range(c0, c1):
                 if (row, col) in grid:
-                    raise ValueError(f"{table.reference}: overlapping cells at ({row}, {col})")
+                    raise TableGeometryError(
+                        f"{table.reference}: overlapping cells at ({row}, {col})"
+                    )
                 grid[row, col] = index
 
     headers = sorted(
