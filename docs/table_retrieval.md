@@ -274,6 +274,23 @@ rate while crowding out other evidence. Review saved top-five passages for these
 before changing production, and do not compare this corpus directly with historical scores
 from the larger distractor corpus.
 
+### Measured CPU pilot
+
+The W4280519327 pilot (question `x18`, steel-slag CaO) took 8 min 18 s with two
+CPU threads and cached weights. Both arms put the answer-bearing Table 1 evidence at
+rank 1 and hit all three top-five proxies. The baseline ranked its original Markdown
+chunk first; the augmented arm ranked the contextual steel-slag row first and kept
+the Markdown at rank 2. There were 104 baseline chunks and 40 added rows from four of
+six detected tables. In the augmented arm all five top results came from Table 1.
+This demonstrates a more explicit top passage, not a measured gain in top-five recall.
+
+Budget roughly 2-10 hours to capture the remaining 47 PDFs on comparable hardware;
+three observed papers took about 1.5, 2.7 and 12.7 minutes each. For retrieval, the
+25-question run could take roughly 8-20 hours on the same CPU setting. Each question
+can rerank chunks from five shortlisted papers instead of one, twice. These are
+planning estimates, not measured full-run times; OCR load, chunk count and passage
+length can move them considerably. Prefer CUDA for the full reranking run if available.
+
 These are coverage counts over **detected** tables, before token budgeting or manual review.
 They cannot measure how many source tables Docling missed, OCR accuracy, retrieval gains or
 correct value-condition associations. Tables with some candidate rows may still have blocked
