@@ -306,6 +306,20 @@ reading and indexing. Check both the parsing summary (including skipped and fail
 and a known row in the manifest. Rerun with the same inputs to resume a timed-out run;
 completed manifests are reused, and deliberately skipped papers are reported separately.
 
+For an unattended run, start a **fresh** dispatch on `exp/table-corpus-audit` with
+`max_papers=1000`, `paper_ids` blank, and `follow_up_runs=12`. This allows the initial
+run plus up to 12 more, not an unlimited loop. Do not start another parsing run in
+parallel. A batch hands off early after 150 minutes of parsing, or after a successful
+capped batch with work deferred, but only if at least one paper was published or
+recorded as skipped in Drive. It stops on a reported parser failure or a timeout
+without progress. The final run has no follow-ups and uses the ordinary job timeout.
+
+Check the **Dispatch the next batch** step for a successful handoff and watch the new
+run in Actions. A runner outage or GitHub hard timeout can prevent handoff; in that
+case, or if dispatch is denied, start a fresh run manually after checking the logs.
+Cancel the active run to stop the chain; if a successor was already dispatched,
+cancel that queued run too. Skipped PDFs remain in the Drive inventory for review.
+
 Indexing can be run separately when needed. It reads the same manifest, keeps the original
 chunks, and appends complete contextual rows that fit the token budget. The row budget
 reserves 64 reranker query tokens.

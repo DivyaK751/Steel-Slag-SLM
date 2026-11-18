@@ -13,6 +13,11 @@ on:
         required: false
         default: ""
         type: string
+      follow_up_runs:
+        description: "Automatic follow-up runs (0 = off; maximum 12)"
+        required: false
+        default: "0"
+        type: string
 
 permissions:
   contents: read
@@ -21,18 +26,19 @@ concurrency:
   group: parse-trial-pdfs
   cancel-in-progress: false
 
-env:
-  DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
-  GOOGLE_OAUTH_TOKEN_JSON: ${{ secrets.GOOGLE_OAUTH_TOKEN_JSON }}
-  GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
-  GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
-  GOOGLE_CLOUD_LOCATION: global
-  GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
-
 jobs:
   parse:
     runs-on: ubuntu-latest
     timeout-minutes: 180
+    outputs:
+      follow_up_runs: ${{ steps.parse.outputs.follow_up_runs }}
+    env:
+      DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+      GOOGLE_OAUTH_TOKEN_JSON: ${{ secrets.GOOGLE_OAUTH_TOKEN_JSON }}
+      GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+      GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+      GOOGLE_CLOUD_LOCATION: global
+      GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
 
     steps:
       - uses: actions/checkout@v4
@@ -67,17 +73,31 @@ jobs:
           key: docling-pdf-parsing-${{ runner.os }}-${{ hashFiles('uv.lock') }}
 
       - name: Parse PDFs into Drive v3
+        id: parse
         env:
           MAX_PAPERS: ${{ inputs.max_papers }}
           PAPER_IDS: ${{ inputs.paper_ids }}
+          FOLLOW_UP_RUNS: ${{ inputs.follow_up_runs }}
+        run: bash .github/scripts/parse_pdf_batch.sh
+
+  continue:
+    needs: parse
+    if: >-
+      ${{ !cancelled() && github.run_attempt == 1 && needs.parse.result == 'success'
+          && needs.parse.outputs.follow_up_runs != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch the next batch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAX_PAPERS: ${{ inputs.max_papers }}
+          PAPER_IDS: ${{ inputs.paper_ids }}
+          FOLLOW_UP_RUNS: ${{ needs.parse.outputs.follow_up_runs }}
         run: |
           set -euo pipefail
-          args=(--contextual-tables --no-figure-reading --skip-index)
-          if [ -n "$MAX_PAPERS" ]; then
-            args+=(--max-papers "$MAX_PAPERS")
-          fi
-          if [ -n "$PAPER_IDS" ]; then
-            read -r -a paper_ids <<< "$PAPER_IDS"
-            args+=(--paper-ids "${paper_ids[@]}")
-          fi
-          uv run parse-pdfs "${args[@]}"
+          gh workflow run parse_pdfs.yml --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME" \
+            -f "max_papers=$MAX_PAPERS" -f "paper_ids=$PAPER_IDS" \
+            -f "follow_up_runs=$FOLLOW_UP_RUNS"
