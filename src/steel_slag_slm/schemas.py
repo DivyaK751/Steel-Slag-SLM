@@ -2,9 +2,12 @@
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field, model_validator
+
+if TYPE_CHECKING:
+    from steel_slag_slm.data.table_evidence import TableEvidence
 
 # Bands from prompts/screen_relevance.yaml (v2): the score is P(relevant), so a score near
 # either end is a confident decision and the middle is not
@@ -81,6 +84,7 @@ class ParsedDocument:
     images: tuple[ParsedImage, ...]
     content_blocks: tuple[ParsedContentBlock, ...] = ()
     figures: tuple["RenderedFigure", ...] = ()
+    contextual_tables: tuple["TableEvidence", ...] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,6 +97,7 @@ class ParsedPaper:
     # Empty for papers parsed before content blocks existed; the Markdown is used then
     content_blocks: tuple[ParsedContentBlock, ...] = ()
     figures: tuple["PaperFigure", ...] = ()  # in the order parsed.json lists them
+    contextual_tables: tuple["TableEvidence", ...] | None = None
 
 
 @dataclass(frozen=True, slots=True)

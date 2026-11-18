@@ -291,6 +291,40 @@ can rerank chunks from five shortlisted papers instead of one, twice. These are
 planning estimates, not measured full-run times; OCR load, chunk count and passage
 length can move them considerably. Prefer CUDA for the full reranking run if available.
 
+## GitHub Actions canary: publish and index contextual rows
+
+The local benchmark JSON is a report, not a production input. On a ref with the
+canary wiring, **Actions → Parse trial PDFs → Run workflow** accepts
+`contextual_tables=true`, an explicit Drive-backed `paper_ids` value (start with one
+eligible ID), and `max_papers=1`. Keep `contextual_tables=false` for the existing flow.
+
+In canary mode, the job disables Gemini figure reading, runs Docling once per PDF,
+and publishes the original Markdown/tables/figure metadata plus optional
+`contextual_tables` in `parsed.json` under `_parsed_contextual_tables_v1`. The indexer
+reads the same manifest, appends fitting rows with independent chunk positions, and
+writes the corresponding separate index. Original tables remain intact. Geometry
+and rendering issues are preserved in the manifest; token-budget exclusions are
+logged by indexing. The row budget reserves 64 reranker query tokens, so keep
+canary queries within that reserve when checking results.
+
+Check that the job parsed the requested ID, that **Index summary** counts contextual
+rows, and that search returns a known value with the right mix, property, unit and
+PDF page. A successful parse with zero contextual rows is possible; it is not evidence
+that row augmentation worked for that paper. Query the same canary index with:
+
+```bash
+uv run search-index \
+  --parsed-folder _parsed_contextual_tables_v1 \
+  "What CaO content was reported for the steel slag?"
+```
+
+The existing **Extract paper data** job uses the configured default parsed folder and
+sends document Markdown (and figures when its prompt requests them) to its Gemini
+extractor. It neither reads the canary folder nor sends contextual rows to Gemini.
+An extraction-quality comparison would need a separate, non-production run that
+explicitly uses the new representation. Do not equate retrieval results with changes
+to extraction quality or spend.
+
 These are coverage counts over **detected** tables, before token budgeting or manual review.
 They cannot measure how many source tables Docling missed, OCR accuracy, retrieval gains or
 correct value-condition associations. Tables with some candidate rows may still have blocked

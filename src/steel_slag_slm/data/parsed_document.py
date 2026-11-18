@@ -4,8 +4,10 @@ import json
 import logging
 from typing import Any
 
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
+from steel_slag_slm.data.parsed_manifest import validate_contextual_tables
+from steel_slag_slm.data.table_evidence import TableEvidence
 from steel_slag_slm.schemas import (
     ContentPlacement,
     FigureReading,
@@ -15,6 +17,7 @@ from steel_slag_slm.schemas import (
 )
 
 logger = logging.getLogger(__name__)
+_CONTEXTUAL_TABLES = TypeAdapter(list[TableEvidence])
 
 
 def parse_parsed_json(content: bytes) -> ParsedPaper:
@@ -41,12 +44,20 @@ def parse_parsed_json(content: bytes) -> ParsedPaper:
     if not isinstance(tables, list) or not all(isinstance(table, str) for table in tables):
         raise ValueError("parsed.json needs tables to be a list of strings")
 
+    contextual_tables = None
+    if "contextual_tables" in record:
+        page_count = record.get("page_count")
+        if type(page_count) is not int or page_count < 1:
+            raise ValueError("Contextual tables require a positive page_count")
+        contextual_tables = _CONTEXTUAL_TABLES.validate_python(record["contextual_tables"])
+        validate_contextual_tables(contextual_tables, page_count)
     return ParsedPaper(
         openalex_id=paper_id,
         markdown=markdown,
         tables=tuple(tables),
         content_blocks=_parse_content_blocks(record.get("content_blocks", [])),
         figures=_parse_figures(paper_id, record.get("images", [])),
+        contextual_tables=None if contextual_tables is None else tuple(contextual_tables),
     )
 
 
@@ -107,8 +118,9 @@ def _parse_placement(raw: Any) -> ContentPlacement:
     if not isinstance(page_number, int) or not isinstance(bbox, list) or len(bbox) != 4:
         raise ValueError("parsed.json has a placement without a page number and a 4-value bbox")
     coordinate_origin = raw.get("coordinate_origin", "")
+    left, top, right, bottom = bbox
     return ContentPlacement(
         page_number=page_number,
-        bbox=tuple(float(value) for value in bbox),
+        bbox=(float(left), float(top), float(right), float(bottom)),
         coordinate_origin=str(coordinate_origin),
     )

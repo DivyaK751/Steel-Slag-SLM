@@ -6,14 +6,20 @@ from collections.abc import Mapping
 from dataclasses import replace
 from typing import Any
 
+from transformers import AutoTokenizer
+
 from steel_slag_slm.config import EmbeddingSettings, PdfParsingSettings
 from steel_slag_slm.data import drive_storage, embedding_store, parsed_index
 from steel_slag_slm.data.parsed_document import parse_parsed_json
 from steel_slag_slm.rag.chunking import build_chunks, passage_for_embedding
 from steel_slag_slm.rag.embeddings import TextEncoder
+from steel_slag_slm.rag.table_budgeting import TableTokenBudget, budget_table_rows
 from steel_slag_slm.rag.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
+
+_TABLE_QUERY_RESERVE = 64
+_RERANKER_LIMIT = 512
 
 
 def run_build_index(
@@ -80,25 +86,52 @@ def run_build_index(
         outcomes["reindexed"] = len(reparsed)
 
     unsaved = 0
+    embedding_tokenizer = reranker_tokenizer = None
     for paper_id in pending:
         json_file_id = str(indexable_papers[paper_id]["json_file_id"])
         try:
             paper = parse_parsed_json(drive_storage.download_file(drive_service, json_file_id))
+            if paper.openalex_id != paper_id:
+                raise ValueError("Indexed paper does not match its parsed.json")
         except ValueError as error:
             logger.error("Skipping %s: %s", paper_id, error)
             outcomes["failed"] += 1
             continue
 
         generation = str(indexable_papers[paper_id].get("parse_generation", ""))
-        chunks = [
-            replace(chunk, parse_generation=generation)
-            for chunk in build_chunks(
-                paper,
-                settings.chunk_max_chars,
-                settings.table_max_chars,
-                titles.get(paper_id, ""),
-            )
-        ]
+        title = titles.get(paper_id, "")
+        if paper.contextual_tables and not title.strip():
+            title = paper_id
+        chunks = build_chunks(paper, settings.chunk_max_chars, settings.table_max_chars, title)
+        if paper.contextual_tables:
+            for table in paper.contextual_tables:
+                if table.rows:
+                    if embedding_tokenizer is None or reranker_tokenizer is None:
+                        embedding_tokenizer = AutoTokenizer.from_pretrained(settings.model)
+                        reranker_tokenizer = AutoTokenizer.from_pretrained(settings.reranker)
+                    result = budget_table_rows(
+                        table,
+                        paper_id,
+                        title,
+                        TableTokenBudget(
+                            embedding_limit=min(512, embedding_tokenizer.model_max_length),
+                            reranker_limit=_RERANKER_LIMIT,
+                            query_reserve=_TABLE_QUERY_RESERVE,
+                        ),
+                        embedding_tokenizer,
+                        reranker_tokenizer,
+                        len(chunks),
+                    )
+                    chunks.extend(row.chunk for row in result.rows)
+                    outcomes["contextual_rows"] += len(result.rows)
+                    issues = result.issues
+                else:
+                    issues = table.issues
+                for issue in issues:
+                    logger.warning(
+                        "%s %s row %s: %s", paper_id, table.reference, issue.row_index, issue.reason
+                    )
+        chunks = [replace(chunk, parse_generation=generation) for chunk in chunks]
         if not chunks:
             logger.warning("Not indexed, %s produced no chunks", paper_id)
             outcomes["empty"] += 1

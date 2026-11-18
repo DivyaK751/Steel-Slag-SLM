@@ -3,9 +3,10 @@
 from typing import Literal
 
 from docling_core.types.doc.common.reference import ProvenanceItem
+from docling_core.types.doc.document import DoclingDocument
 from pydantic import BaseModel
 
-from steel_slag_slm.data.table_inspection import InspectedTable
+from steel_slag_slm.data.table_inspection import InspectedTable, capture_tables
 
 
 class TableGeometryError(ValueError):
@@ -150,3 +151,34 @@ def render_table_evidence(table: InspectedTable) -> TableEvidence:
     if not result.rows and not result.issues:
         result.issues.append(RenderingIssue(reason="No body rows"))
     return result
+
+
+def render_document_table_evidence(
+    document: DoclingDocument, physical_pages: int
+) -> tuple[TableEvidence, ...]:
+    """Render source-linked rows, recording blocked tables without losing their Markdown."""
+    tables = []
+    for table in capture_tables(document):
+        try:
+            evidence = render_table_evidence(table)
+        except TableGeometryError as exc:
+            evidence = TableEvidence(
+                reference=table.reference,
+                provenance=table.provenance,
+                rows=[],
+                issues=[RenderingIssue(reason=str(exc))],
+            )
+        pages = sorted({p.page_no for p in evidence.provenance})
+        if not pages or any(
+            not 1 <= page <= physical_pages or page not in document.pages for page in pages
+        ):
+            if evidence.provenance or not evidence.issues:
+                evidence.issues.append(RenderingIssue(reason="Missing or invalid source page"))
+            evidence.provenance.clear()
+            evidence.rows.clear()
+        else:
+            pages_text = ", ".join(map(str, pages))
+            for row in evidence.rows:
+                row.text = f"{row.text}\nSource PDF page(s): {pages_text}"
+        tables.append(evidence)
+    return tuple(tables)

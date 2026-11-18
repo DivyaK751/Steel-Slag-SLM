@@ -9,6 +9,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from steel_slag_slm.config import FigureExtractionSettings
+from steel_slag_slm.data.table_evidence import TableEvidence
 from steel_slag_slm.schemas import FigureReading
 
 CONTENT_SCHEMA_VERSION = 4
@@ -117,6 +118,9 @@ class ParsedManifest(BaseModel):
     tables: list[str]
     content_blocks: list[ContentBlock]
     images: list[FigureReference]
+    contextual_tables: list[TableEvidence] | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="after")
     def validate_locations(self) -> "ParsedManifest":
@@ -128,6 +132,8 @@ class ParsedManifest(BaseModel):
         ]
         if any(placement.page_number > self.page_count for placement in placements):
             raise ValueError("Placement page exceeds page_count")
+        if self.contextual_tables is not None:
+            validate_contextual_tables(self.contextual_tables, self.page_count)
 
         ids = [image.figure_id for image in self.images]
         names = [image.file_name for image in self.images]
@@ -144,7 +150,18 @@ class ParsedManifest(BaseModel):
         return self
 
 
-def parser_revision(settings: FigureExtractionSettings) -> str:
+def validate_contextual_tables(tables: list[TableEvidence], page_count: int) -> None:
+    """Reject ambiguous references or rows without valid source pages."""
+    if len({table.reference for table in tables}) != len(tables):
+        raise ValueError("Contextual tables must have unique references")
+    for table in tables:
+        if (table.rows and not table.provenance) or any(
+            not 1 <= source.page_no <= page_count for source in table.provenance
+        ):
+            raise ValueError(f"{table.reference}: invalid contextual table source pages")
+
+
+def parser_revision(settings: FigureExtractionSettings, contextual_tables: bool = False) -> str:
     """Fingerprint extraction settings and installed parser versions, excluding output paths."""
     payload = {
         "pipeline": PIPELINE_REVISION,
@@ -153,5 +170,7 @@ def parser_revision(settings: FigureExtractionSettings) -> str:
         "pymupdf": version("pymupdf"),
         "settings": settings.model_dump(mode="json", exclude={"output_dir"}),
     }
+    if contextual_tables:
+        payload["contextual_tables"] = "native_rows_v1"
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
     return sha256(encoded).hexdigest()

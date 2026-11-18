@@ -497,6 +497,12 @@ def _build_background_reader(max_gemini_usd: float | None) -> BackgroundFigureRe
 def parse_pdfs() -> None:
     """Parse unprocessed screened-paper PDFs and save results to Drive."""
     parser = argparse.ArgumentParser(description=parse_pdfs.__doc__)
+    canary_folder = "_parsed_contextual_tables_v1"
+    parser.add_argument(
+        "--contextual-tables",
+        action="store_true",
+        help=f"add contextual table rows; publish only to {canary_folder}",
+    )
     parser.add_argument(
         "--max-papers",
         type=int,
@@ -555,6 +561,14 @@ def parse_pdfs() -> None:
         help="don't update the folder's search index after parsing",
     )
     args = parser.parse_args()
+    if args.contextual_tables:
+        if not args.paper_ids:
+            parser.error("--contextual-tables requires explicit --paper-ids")
+        if args.output_folder not in (None, canary_folder):
+            parser.error(f"--contextual-tables publishes only to {canary_folder}")
+        args.output_folder = canary_folder
+    elif args.output_folder == canary_folder:
+        parser.error(f"{canary_folder} requires --contextual-tables")
     if args.max_papers is not None and args.max_papers <= 0:
         parser.error("--max-papers must be greater than zero")
     if args.workers <= 0:
@@ -596,6 +610,7 @@ def parse_pdfs() -> None:
             store_images=not args.json_only,
             workers=args.workers,
             figure_reader=reader,
+            contextual_tables=args.contextual_tables,
         )
     finally:
         if reader is not None:
@@ -605,6 +620,14 @@ def parse_pdfs() -> None:
         print(f"Gemini cost of figure reading in this run: about ${reader.spent_usd:.2f}")
         if reader.stop_reason is not None:
             print(f"Figure reading stopped early: {reader.stop_reason}; rerun to continue")
+
+    if args.contextual_tables and (
+        outcomes["not_in_source_table"] or not (outcomes["parsed"] or outcomes["already_parsed"])
+    ):
+        raise SystemExit(
+            "Contextual canary did not find all requested PDFs in the parsing source table "
+            "or no requested paper was successfully parsed; see the summary above"
+        )
 
     # Indexing right after parsing keeps search in step with the folder just parsed
     unindexed = 0

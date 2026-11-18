@@ -15,6 +15,7 @@ from docling_core.types.doc.items.text import TextItem
 from steel_slag_slm.config import FigureExtractionSettings
 from steel_slag_slm.data.figure_detection import detect_figures_in_document
 from steel_slag_slm.data.figure_rendering import render_figures
+from steel_slag_slm.data.table_evidence import render_document_table_evidence
 from steel_slag_slm.schemas import (
     ContentPlacement,
     ImagePlacement,
@@ -149,6 +150,7 @@ def parse_pdf_with_figures(
     pdf_bytes: bytes,
     converter: DocumentConverter,
     settings: FigureExtractionSettings,
+    contextual_tables: bool = False,
 ) -> ParsedDocument:
     """Parse text, tables and figure crops with exactly one Docling conversion.
 
@@ -177,4 +179,7 @@ def parse_pdf_with_figures(
         content_blocks=content_blocks,
         images=(),
         figures=render_figures(pdf_bytes, detect_figures_in_document(document), settings),
+        contextual_tables=(
+            render_document_table_evidence(document, page_count) if contextual_tables else None
+        ),
     )

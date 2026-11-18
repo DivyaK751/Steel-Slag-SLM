@@ -13,6 +13,11 @@ on:
         required: false
         default: ""
         type: string
+      contextual_tables:
+        description: "Isolated contextual-table canary (requires paper IDs; skips Gemini figure reading)"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -73,10 +78,15 @@ jobs:
         env:
           MAX_PAPERS: ${{ inputs.max_papers }}
           PAPER_IDS: ${{ inputs.paper_ids }}
+          CONTEXTUAL_TABLES: ${{ inputs.contextual_tables }}
         run: |
           set -euo pipefail
-          echo "Publishing unified parsing results to $PARSED_FOLDER"
-          args=(--output-folder "$PARSED_FOLDER")
+          if [[ "$CONTEXTUAL_TABLES" == "true" ]]; then
+            args=(--contextual-tables --no-figure-reading)
+          else
+            echo "Publishing unified parsing results to $PARSED_FOLDER"
+            args=(--output-folder "$PARSED_FOLDER")
+          fi
           if [ -n "$MAX_PAPERS" ]; then
             args+=(--max-papers "$MAX_PAPERS")
           fi

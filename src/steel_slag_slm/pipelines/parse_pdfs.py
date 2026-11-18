@@ -85,14 +85,16 @@ def _start_worker(torch_threads: int | None) -> None:
 
 
 def _parse_pdf(
-    pdf_bytes: bytes, figure_settings: FigureExtractionSettings
+    pdf_bytes: bytes, figure_settings: FigureExtractionSettings, contextual_tables: bool
 ) -> ParsedDocument | None:
     """Parse one PDF inside a worker; None means the downloaded file was empty."""
     if not pdf_bytes:
         return None
     if _worker_converter is None:
         raise RuntimeError("Parsing worker was started without a Docling converter")
-    return pdf_parsing.parse_pdf_with_figures(pdf_bytes, _worker_converter, figure_settings)
+    return pdf_parsing.parse_pdf_with_figures(
+        pdf_bytes, _worker_converter, figure_settings, contextual_tables
+    )
 
 
 def _make_executor(workers: int, torch_threads: int, *, isolated: bool = False) -> Executor:
@@ -106,11 +108,14 @@ def _make_executor(workers: int, torch_threads: int, *, isolated: bool = False) 
 
 
 def _submit(
-    pool: Executor, pdf_bytes: bytes, figure_settings: FigureExtractionSettings
+    pool: Executor,
+    pdf_bytes: bytes,
+    figure_settings: FigureExtractionSettings,
+    contextual_tables: bool,
 ) -> Future[ParsedDocument | None]:
     """Queue one PDF; if the pool already broke, return a future holding that error instead."""
     try:
-        return pool.submit(_parse_pdf, pdf_bytes, figure_settings)
+        return pool.submit(_parse_pdf, pdf_bytes, figure_settings, contextual_tables)
     except BrokenProcessPool as error:
         future: Future[ParsedDocument | None] = Future()
         future.set_exception(error)
@@ -118,11 +123,14 @@ def _submit(
 
 
 def _parse_alone(
-    pdf_bytes: bytes, figure_settings: FigureExtractionSettings, torch_threads: int
+    pdf_bytes: bytes,
+    figure_settings: FigureExtractionSettings,
+    torch_threads: int,
+    contextual_tables: bool,
 ) -> Future[ParsedDocument | None]:
     """Parse one PDF in a fresh single-worker process, so a crash can only be this paper's."""
     with _make_executor(1, torch_threads, isolated=True) as solo:
-        future = _submit(solo, pdf_bytes, figure_settings)
+        future = _submit(solo, pdf_bytes, figure_settings, contextual_tables)
         wait([future])
     return future
 
@@ -428,6 +436,7 @@ def run_pdf_parsing(
     store_images: bool = True,
     workers: int = 1,
     figure_reader: BackgroundFigureReader | None = None,
+    contextual_tables: bool = False,
 ) -> Counter[str]:
     """Publish pending papers, parsing up to `workers` at once and continuing past failures.
 
@@ -470,7 +479,7 @@ def run_pdf_parsing(
         output_folder,
         settings.index_file_name,
     )
-    revision = parser_revision(figure_settings)
+    revision = parser_revision(figure_settings, contextual_tables)
     pending = []
     # Parsed papers with figures Gemini hasn't read yet: (source, ID of their parsed.json)
     unread: list[tuple[PdfSource, str]] = []
@@ -554,7 +563,10 @@ def run_pdf_parsing(
                         queued.openalex_id, "failed", "failed: could not download the PDF"
                     )
                     continue
-                parsing[_submit(pool, pdf_bytes, figure_settings)] = (queued, pdf_bytes)
+                parsing[_submit(pool, pdf_bytes, figure_settings, contextual_tables)] = (
+                    queued,
+                    pdf_bytes,
+                )
 
             while (
                 run.can_read
@@ -587,7 +599,7 @@ def run_pdf_parsing(
             )
             for future, source, pdf_bytes in suspects:
                 if _crashed(future):
-                    future = _parse_alone(pdf_bytes, figure_settings, threads)
+                    future = _parse_alone(pdf_bytes, figure_settings, threads, contextual_tables)
                 _settle(run, future, source, pdf_bytes)
             pool = _make_executor(workers, threads)
     finally:

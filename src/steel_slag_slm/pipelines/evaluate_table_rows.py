@@ -13,12 +13,7 @@ from transformers import AutoTokenizer
 
 from steel_slag_slm.config import EmbeddingSettings, EvalQuestion, RetrievalEvalSet
 from steel_slag_slm.data.pdf_parsing import extract_content_blocks
-from steel_slag_slm.data.table_evidence import (
-    RenderingIssue,
-    TableGeometryError,
-    render_table_evidence,
-)
-from steel_slag_slm.data.table_inspection import capture_tables
+from steel_slag_slm.data.table_evidence import render_document_table_evidence
 from steel_slag_slm.evaluation.retrieval_metrics import contains_answer, matches, mean_scores
 from steel_slag_slm.pipelines.capture_table_corpus import FullDocumentCapture
 from steel_slag_slm.pipelines.evaluate_retrieval import run_retrieval_eval
@@ -111,29 +106,7 @@ def _paper_chunks(
     )
     tables = []
     position = len(baseline)
-    for table in capture_tables(capture.document):
-        try:
-            evidence = render_table_evidence(table)
-        except TableGeometryError as exc:
-            logger.warning("%s: %s; retaining original Markdown only", capture.paper_id, exc)
-            tables.append(
-                BudgetedTable(
-                    reference=table.reference,
-                    rows=[],
-                    issues=[
-                        RenderingIssue(reason=str(exc)),
-                    ],
-                )
-            )
-            continue
-        pages = sorted({p.page_no for p in evidence.provenance})
-        if not pages or not set(pages) <= capture.document.pages.keys():
-            evidence.issues.append(RenderingIssue(reason="Missing or invalid source page"))
-            evidence.rows.clear()
-        else:
-            pages_text = ", ".join(map(str, pages))
-            for row in evidence.rows:
-                row.text = f"{row.text}\nSource PDF page(s): {pages_text}"
+    for evidence in render_document_table_evidence(capture.document, capture.source_page_count):
         budgeted = budget_table_rows(
             evidence,
             capture.paper_id,

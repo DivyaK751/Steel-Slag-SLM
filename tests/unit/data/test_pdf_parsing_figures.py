@@ -12,10 +12,15 @@ from docling_core.types.doc.document import DoclingDocument
 from docling_core.types.doc.items.table.table_data import TableCell, TableData
 from docling_core.types.doc.labels import DocItemLabel
 
-from steel_slag_slm.config import FigureExtractionSettings, PdfParsingSettings
-from steel_slag_slm.data import drive_storage, pdf_parsing, pdf_parsing_source
+from steel_slag_slm.config import (
+    FigureExtractionSettings,
+    PdfParsingSettings,
+    load_embedding_settings,
+)
+from steel_slag_slm.data import drive_storage, embedding_store, pdf_parsing, pdf_parsing_source
 from steel_slag_slm.data.parsed_manifest import ParsedManifest
 from steel_slag_slm.data.pdf_parsing_source import PdfSource
+from steel_slag_slm.pipelines import build_index
 from steel_slag_slm.pipelines.export_parsed import run_export_parsed
 from steel_slag_slm.pipelines.parse_pdfs import run_pdf_parsing
 from steel_slag_slm.pipelines.read_figures import load_figures_to_read
@@ -111,6 +116,7 @@ def test_parse_pdf_with_figures_converts_once_and_preserves_all_content(
     legacy_extractor.assert_not_called()
 
     assert parsed.page_count == 2
+    assert parsed.contextual_tables is None
     assert parsed.text_parser == "Docling"
     assert parsed.image_parser == "Docling+PyMuPDF"
     assert "Sample text" in parsed.markdown
@@ -134,6 +140,90 @@ def test_parse_pdf_with_figures_converts_once_and_preserves_all_content(
     assert caption is not None
     assert caption.bbox == (50.0, 310.0, 300.0, 330.0)
     assert (parsed.figures[0].width, parsed.figures[0].height) == (250, 200)
+
+
+def test_contextual_parse_publishes_rows_the_indexer_can_embed(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_drive: Any,
+    keyword_encoder: Any,
+) -> None:
+    settings = PdfParsingSettings(
+        source_table="project.dataset.papers",
+        output_folder_name="_parsed_contextual_tables_v1",
+        index_file_name="index.json",
+    )
+    document = _document()
+    caption = document.add_text(label=DocItemLabel.CAPTION, text="Table 2. Strength")
+    table = document.add_table(
+        data=TableData(
+            num_rows=2,
+            num_cols=2,
+            table_cells=[
+                TableCell(
+                    start_row_offset_idx=row,
+                    end_row_offset_idx=row + 1,
+                    start_col_offset_idx=col,
+                    end_col_offset_idx=col + 1,
+                    text=text,
+                    column_header=row == 0,
+                )
+                for row, fields in enumerate([["Mix", "28-day Strength (MPa)"], ["S30", "41.5"]])
+                for col, text in enumerate(fields)
+            ],
+        ),
+        prov=_provenance(2, (50, 400, 300, 500)),
+    )
+    table.captions.append(caption.get_ref())
+    converter = MagicMock()
+    converter.convert.return_value.status = ConversionStatus.SUCCESS
+    converter.convert.return_value.document = document
+    source = PdfSource("W123", "https://drive.google.com/file/d/SOURCE123/view")
+    monkeypatch.setattr(pdf_parsing_source, "list_pdf_sources", lambda *_: [source])
+    monkeypatch.setattr(pdf_parsing, "build_docling_converter", lambda **_: converter)
+    monkeypatch.setattr(drive_storage, "download_pdf", fake_drive.download_file)
+    fake_drive.contents["SOURCE123"] = _pdf()
+    outcomes = run_pdf_parsing(
+        settings,
+        MagicMock(),
+        None,
+        "root",
+        figure_settings=_settings(),
+        contextual_tables=True,
+    )
+    assert outcomes["parsed"] == 1
+    converter.convert.assert_called_once()
+    folder = fake_drive.find_subfolder_id(None, "root", settings.output_folder_name)
+    paper_folder = fake_drive.find_subfolder_id(None, folder, "W123")
+    manifest = ParsedManifest.model_validate_json(
+        fake_drive.read_file_bytes(None, paper_folder, "parsed.json")
+    )
+    assert manifest.contextual_tables is not None
+    blocked, contextual = manifest.contextual_tables
+    assert blocked.issues and not blocked.rows
+    assert contextual.rows[0].cell_indices == [2, 3]
+    tokenizer = MagicMock(model_max_length=512)
+    tokenizer.encode.side_effect = lambda text, **_: text.split()
+    tokenizer.num_special_tokens_to_add.return_value = 4
+    monkeypatch.setattr(build_index.AutoTokenizer, "from_pretrained", lambda _: tokenizer)
+    embedding = load_embedding_settings()
+    counts = build_index.run_build_index(
+        embedding,
+        settings,
+        None,
+        folder,
+        keyword_encoder,
+        titles={"W123": "Slag study"},
+    )
+    assert counts["contextual_rows"] == 1
+    store = embedding_store.load_store(None, folder, embedding.model, keyword_encoder.dimension)
+    row = store.chunks[-1]
+    assert row.text == contextual.rows[0].text
+    assert "Mix: S30" in row.text and "28-day Strength (MPa): 41.5" in row.text
+    assert row.pages == (2,) and row.text.endswith("Source PDF page(s): 2")
+    assert row.parse_generation == manifest.parse_generation
+    assert row.position == len(store.chunks) - 1
+    assert any(chunk.kind == "table" and "Strength" in chunk.text for chunk in store.chunks[:-1])
+    assert any(row.text in text for text in keyword_encoder.seen)
 
 
 def test_unified_parse_publishes_and_exports_one_manifest_in_isolated_folder(

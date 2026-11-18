@@ -294,7 +294,19 @@ def test_parse_pdfs_builds_clients_and_runs_pipeline(monkeypatch, capsys, paper_
         "store_images": True,
         "workers": 1,
         "figure_reader": None,
+        "contextual_tables": False,
     }
+
+
+@pytest.mark.parametrize("extra", [[], ["--output-folder", "_parsed_v2"]])
+def test_contextual_parse_rejects_missing_ids_or_shared_output(monkeypatch, extra) -> None:
+    args = ["parse-pdfs", "--contextual-tables"]
+    if extra:
+        args += ["--paper-ids", "W123", *extra]
+    monkeypatch.setattr(sys, "argv", args)
+    with pytest.raises(SystemExit) as exc:
+        cli.parse_pdfs()
+    assert exc.value.code == 2
 
 
 def test_parse_pdfs_indexes_the_folder_it_parsed_into(monkeypatch) -> None:

@@ -104,6 +104,9 @@ def publish_parse(
             "tables": list(parsed.tables),
             "content_blocks": [asdict(block) for block in parsed.content_blocks],
             "images": references,
+            "contextual_tables": list(parsed.contextual_tables)
+            if parsed.contextual_tables is not None
+            else None,
         }
     )
 
