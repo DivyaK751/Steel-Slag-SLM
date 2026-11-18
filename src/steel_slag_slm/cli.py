@@ -81,6 +81,7 @@ from steel_slag_slm.evaluation.figure_checks import total_checks
 from steel_slag_slm.evaluation.value_metrics import count_values
 from steel_slag_slm.exceptions import PapersNotFoundError, PromotionError
 from steel_slag_slm.llm.prompts import PromptTemplate, load_prompt
+from steel_slag_slm.pipelines.audit_table_corpus import audit_table_corpus
 from steel_slag_slm.pipelines.background_figure_reader import BackgroundFigureReader
 from steel_slag_slm.pipelines.budget_table_evidence import budget_local_table_evidence
 from steel_slag_slm.pipelines.build_index import run_build_index
@@ -207,6 +208,30 @@ def capture_table_corpus() -> None:
         build_docling_converter(include_figures=True),
     )
     print(f"Verified {len(paths)} full-document capture(s); no indexes changed")
+
+
+def audit_captured_tables() -> None:
+    """Verify a full benchmark capture and report unreviewed table-rendering coverage."""
+    parser = argparse.ArgumentParser(description=audit_captured_tables.__doc__)
+    parser.add_argument("--benchmark", type=Path, required=True)
+    parser.add_argument("--pdf-dir", type=Path, required=True)
+    parser.add_argument("--captures-dir", type=Path, required=True)
+    parser.add_argument("--out", type=Path, required=True)
+    args = parser.parse_args()
+    _setup_logging()
+    split = load_benchmark_split(args.benchmark)
+    report = audit_table_corpus(
+        split.dev + split.test,
+        args.pdf_dir,
+        args.captures_dir,
+        args.out,
+    )
+    tables = [table for paper in report.papers for table in paper.tables]
+    print(
+        f"{len(report.papers)} papers, {sum(p.physical_pages for p in report.papers)} pages, "
+        f"{len(tables)} detected tables, "
+        f"{sum(bool(t.candidate_row_indices) for t in tables)} with candidate rows; unreviewed"
+    )
 
 
 def _setup_logging() -> None:

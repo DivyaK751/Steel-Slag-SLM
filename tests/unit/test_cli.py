@@ -8,6 +8,34 @@ import pytest
 import steel_slag_slm.cli as cli
 
 
+def test_audit_captured_tables_uses_entire_benchmark(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "audit-captured-tables",
+            "--benchmark",
+            "split.yaml",
+            "--pdf-dir",
+            "pdfs",
+            "--captures-dir",
+            "captures",
+            "--out",
+            "audit.json",
+        ],
+    )
+    monkeypatch.setattr(cli, "load_benchmark_split", lambda _: MagicMock(dev=["W1"], test=["W2"]))
+    paper = MagicMock(physical_pages=3, tables=[MagicMock(candidate_row_indices=[1, 2])])
+    run = MagicMock(return_value=MagicMock(papers=[paper]))
+    monkeypatch.setattr(cli, "audit_table_corpus", run)
+    cli.audit_captured_tables()
+    run.assert_called_once_with(["W1", "W2"], Path("pdfs"), Path("captures"), Path("audit.json"))
+    assert (
+        "1 papers, 3 pages, 1 detected tables, 1 with candidate rows; unreviewed"
+        in capsys.readouterr().out
+    )
+
+
 @pytest.mark.parametrize("selection", [[], ["--paper-ids", "W123"]])
 def test_capture_table_corpus_selects_only_benchmark_inputs(monkeypatch, selection) -> None:
     monkeypatch.setattr(

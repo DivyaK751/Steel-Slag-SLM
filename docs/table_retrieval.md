@@ -209,3 +209,27 @@ teach grounded citations and abstention, and test age, mix, unit and material co
 GGBFS must remain distinct from steel slag; elemental and oxide reporting bases are not
 interchangeable. AI summaries and semantic repairs remain deferred until deterministic
 retrieval has been evaluated.
+
+## Round 4b: complete capture and structural coverage audit
+
+Resume `capture-table-corpus` with the full benchmark selection above. Once it finishes,
+verify **every** expected source and snapshot before preparing the paired retrieval inputs:
+
+```bash
+uv run audit-captured-tables \
+  --benchmark configs/extraction_benchmark.yaml \
+  --pdf-dir data/interim/pdf_parsing/raw/table_retrieval/pdfs \
+  --captures-dir data/interim/table_retrieval/full_documents \
+  --out data/interim/table_retrieval/corpus_coverage.json
+```
+
+The audit checks source hashes, paper identities, page counts, complete native documents
+and consistent recorded parser versions/settings. It fingerprints each snapshot, then records
+per-table candidate row indices and explicit renderer issues. Missing snapshots or invalid
+native geometry fail without saving a partial audit. No models are loaded, sources modified,
+or existing reports overwritten. Blocked tables remain in the report rather than disappearing.
+
+These are coverage counts over **detected** tables, before token budgeting or manual review.
+They cannot measure how many source tables Docling missed, OCR accuracy, retrieval gains or
+correct value-condition associations. Tables with some candidate rows may still have blocked
+rows. Review the issue list, not just the headline table count.
