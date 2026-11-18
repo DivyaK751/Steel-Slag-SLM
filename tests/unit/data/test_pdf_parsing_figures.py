@@ -149,7 +149,7 @@ def test_contextual_parse_publishes_rows_the_indexer_can_embed(
 ) -> None:
     settings = PdfParsingSettings(
         source_table="project.dataset.papers",
-        output_folder_name="_parsed_contextual_tables_v1",
+        output_folder_name="_parsed_v3",
         index_file_name="index.json",
     )
     document = _document()

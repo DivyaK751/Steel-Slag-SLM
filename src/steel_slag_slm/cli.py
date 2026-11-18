@@ -497,11 +497,11 @@ def _build_background_reader(max_gemini_usd: float | None) -> BackgroundFigureRe
 def parse_pdfs() -> None:
     """Parse unprocessed screened-paper PDFs and save results to Drive."""
     parser = argparse.ArgumentParser(description=parse_pdfs.__doc__)
-    canary_folder = "_parsed_contextual_tables_v1"
+    contextual_folder = "_parsed_v3"
     parser.add_argument(
         "--contextual-tables",
         action="store_true",
-        help=f"add contextual table rows; publish only to {canary_folder}",
+        help=f"add contextual table rows; publish only to {contextual_folder}",
     )
     parser.add_argument(
         "--max-papers",
@@ -562,13 +562,11 @@ def parse_pdfs() -> None:
     )
     args = parser.parse_args()
     if args.contextual_tables:
-        if not args.paper_ids:
-            parser.error("--contextual-tables requires explicit --paper-ids")
-        if args.output_folder not in (None, canary_folder):
-            parser.error(f"--contextual-tables publishes only to {canary_folder}")
-        args.output_folder = canary_folder
-    elif args.output_folder == canary_folder:
-        parser.error(f"{canary_folder} requires --contextual-tables")
+        if args.output_folder not in (None, contextual_folder):
+            parser.error(f"--contextual-tables publishes only to {contextual_folder}")
+        args.output_folder = contextual_folder
+    elif args.output_folder == contextual_folder:
+        parser.error(f"{contextual_folder} requires --contextual-tables")
     if args.max_papers is not None and args.max_papers <= 0:
         parser.error("--max-papers must be greater than zero")
     if args.workers <= 0:
@@ -625,7 +623,7 @@ def parse_pdfs() -> None:
         outcomes["not_in_source_table"] or not (outcomes["parsed"] or outcomes["already_parsed"])
     ):
         raise SystemExit(
-            "Contextual canary did not find all requested PDFs in the parsing source table "
+            "Contextual run did not find all requested PDFs in the parsing source table "
             "or no requested paper was successfully parsed; see the summary above"
         )
 

@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 
 import steel_slag_slm.cli as cli
+from steel_slag_slm.config import PdfParsingSettings
 
 
 def test_audit_captured_tables_uses_entire_benchmark(monkeypatch, capsys) -> None:
@@ -298,15 +299,43 @@ def test_parse_pdfs_builds_clients_and_runs_pipeline(monkeypatch, capsys, paper_
     }
 
 
-@pytest.mark.parametrize("extra", [[], ["--output-folder", "_parsed_v2"]])
-def test_contextual_parse_rejects_missing_ids_or_shared_output(monkeypatch, extra) -> None:
-    args = ["parse-pdfs", "--contextual-tables"]
-    if extra:
-        args += ["--paper-ids", "W123", *extra]
-    monkeypatch.setattr(sys, "argv", args)
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["--contextual-tables", "--output-folder", "_parsed_v2"],
+        ["--output-folder", "_parsed_v3"],
+    ],
+)
+def test_contextual_parse_rejects_mixing_output_versions(monkeypatch, args) -> None:
+    monkeypatch.setattr(sys, "argv", ["parse-pdfs", *args])
     with pytest.raises(SystemExit) as exc:
         cli.parse_pdfs()
     assert exc.value.code == 2
+
+
+def test_contextual_parse_can_publish_all_eligible_papers_without_indexing(monkeypatch) -> None:
+    calls: dict[str, object] = {}
+    _fake_parse_pdfs_clients(monkeypatch, calls)
+    settings = PdfParsingSettings(
+        source_table="project.dataset.papers",
+        output_folder_name="_parsed",
+        index_file_name="index.json",
+    )
+    monkeypatch.setattr(cli, "load_pdf_parsing_settings", lambda: settings)
+    monkeypatch.setattr(
+        sys, "argv", ["parse-pdfs", "--contextual-tables", "--no-figure-reading", "--skip-index"]
+    )
+    run = MagicMock(return_value=Counter(parsed=2))
+    monkeypatch.setattr(cli, "run_pdf_parsing", run)
+    monkeypatch.setattr(cli, "load_figure_extraction_settings", object)
+
+    cli.parse_pdfs()
+
+    assert run.call_args.args[0].output_folder_name == "_parsed_v3"
+    assert run.call_args.args[4:6] == (None, None)
+    assert run.call_args.kwargs["contextual_tables"] is True
+    assert run.call_args.kwargs["figure_reader"] is None
+    assert "indexed_folder" not in calls
 
 
 def test_parse_pdfs_indexes_the_folder_it_parsed_into(monkeypatch) -> None:
