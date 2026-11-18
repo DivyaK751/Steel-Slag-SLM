@@ -18,6 +18,11 @@ on:
         required: false
         default: "0"
         type: string
+      apply_approved:
+        description: "Approved branch only: update existing parsed.json files (off = dry run)"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -30,7 +35,7 @@ jobs:
   scan_approved:
     if: github.ref == 'refs/heads/exp/approved-table-backfill'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 90
     env:
       DRIVE_FOLDER_ID: "11779zSN_Fb_ooiaHliXP9vebTo-EXdAt"
     steps:
@@ -54,20 +59,24 @@ jobs:
           umask 077
           .github/scripts/write_google_credentials.sh
 
-      - name: Scan approved manifests without writing to Drive
+      - name: Preview or apply approved table rows
         env:
           PAPER_IDS: ${{ inputs.paper_ids }}
+          APPLY_APPROVED: ${{ inputs.apply_approved }}
         run: |
           if [ "$PAPER_IDS" = "all" ]; then
             selection=(--all)
           else
             selection=(--paper-id "${PAPER_IDS:-W2618057564}")
           fi
+          if [ "$APPLY_APPROVED" = "true" ]; then
+            selection+=(--apply)
+          fi
           uv run --locked --no-sync python -m steel_slag_slm.pipelines.scan_approved_tables \
             --folder-id "$DRIVE_FOLDER_ID" "${selection[@]}"
 
   parse:
-    if: github.ref != 'refs/heads/exp/approved-table-backfill'
+    if: github.ref != 'refs/heads/exp/approved-table-backfill' && !inputs.apply_approved
     runs-on: ubuntu-latest
     timeout-minutes: 180
     outputs:

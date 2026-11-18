@@ -321,11 +321,14 @@ def find_subfolder_id(service: Any, parent_id: str, name: str) -> str | None:
     return _find_child_id(service, parent_id, name, f" and mimeType = '{FOLDER_MIME_TYPE}'")
 
 
-def verify_named_folder(service: Any, folder_id: str, expected_name: str) -> None:
+def verify_named_folder(
+    service: Any, folder_id: str, expected_name: str, *, parent_id: str | None = None
+) -> None:
     """Reject IDs that do not identify a live Drive folder with the expected name."""
+    fields = "id,name,mimeType,trashed" + (",parents" if parent_id else "")
     metadata = (
         service.files()
-        .get(fileId=folder_id, fields="id,name,mimeType,trashed", **_ALL_DRIVES)
+        .get(fileId=folder_id, fields=fields, **_ALL_DRIVES)
         .execute(num_retries=DRIVE_RETRIES)
     )
     if (
@@ -333,6 +336,7 @@ def verify_named_folder(service: Any, folder_id: str, expected_name: str) -> Non
         or metadata.get("name") != expected_name
         or metadata.get("mimeType") != FOLDER_MIME_TYPE
         or metadata.get("trashed") is not False
+        or (parent_id is not None and metadata.get("parents") != [parent_id])
     ):
         raise ValueError(f"Drive ID {folder_id!r} is not a live {expected_name!r} folder")
 
@@ -350,6 +354,19 @@ def list_named_file_ids(service: Any, folder_id: str, name: str) -> list[str]:
         " and mimeType != 'application/vnd.google-apps.shortcut'"
     )
     return [item["id"] for item in _list_children(service, folder_id, query)]
+
+
+def replace_existing_json(service: Any, file_id: str, original: bytes, updated: bytes) -> None:
+    """Replace contents by ID, checking for stale input and verifying the saved bytes."""
+    if download_file(service, file_id) != original:
+        raise ValueError("parsed.json changed since it was read; refusing to overwrite it")
+    media = MediaIoBaseUpload(io.BytesIO(updated), mimetype="application/json", resumable=False)
+    # Do not retry a write with an unknown outcome. Re-run the scan to inspect it instead.
+    service.files().update(fileId=file_id, media_body=media, **_ALL_DRIVES).execute()
+    if download_file(service, file_id) != updated:
+        raise RuntimeError(
+            f"Drive read-back did not match for file {file_id}; inspect before retrying"
+        )
 
 
 def list_file_names(service: Any, folder_id: str) -> dict[str, str]:

@@ -3,6 +3,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from steel_slag_slm.data.approved_table_text import enrich_approved_json
 from steel_slag_slm.pipelines.scan_approved_tables import scan_approved_tables
 
 
@@ -114,3 +115,84 @@ def test_scan_rejects_wrong_root_before_listing_papers(field: str, value: str | 
     with pytest.raises(ValueError, match="is not a live '_parsed_approved' folder"):
         scan_approved_tables(service, "root")
     files.list.assert_not_called()
+
+
+def _apply_drive() -> tuple[Mock, Mock]:
+    service, files = _drive("list", "get_media", "update")
+    root = files.get.return_value.execute.return_value
+    files.get.return_value.execute.side_effect = [
+        root,
+        root,
+        {**root, "id": "paper", "name": "W1", "parents": ["root"]},
+    ]
+    files.list.return_value.execute.side_effect = [
+        {"files": [{"name": "W1", "id": "paper"}]},
+        {"files": [{"id": "manifest"}]},
+        {"files": [{"id": "manifest"}]},
+    ]
+    return service, files
+
+
+def test_apply_updates_verified_file_in_place_and_verifies_payload() -> None:
+    service, files = _apply_drive()
+    original = _manifest("W1")
+    updated = enrich_approved_json(original)
+    files.get_media.return_value.execute.side_effect = [original, original, updated]
+
+    assert scan_approved_tables(service, "root", "W1", apply=True) == {"updated": 1}
+    files.update.assert_called_once()
+    args = files.update.call_args.kwargs
+    assert args["fileId"] == "manifest"
+    assert args["media_body"].getbytes(0, len(updated)) == updated
+    assert files.get_media.call_count == 3
+
+
+@pytest.mark.parametrize("reason", ["moved_folder", "different_file", "changed_contents"])
+def test_apply_refuses_to_write_after_a_target_change(reason: str) -> None:
+    service, files = _apply_drive()
+    source = _manifest("W1")
+    files.get_media.return_value.execute.return_value = source
+    if reason == "moved_folder":
+        root = {
+            "id": "root",
+            "name": "_parsed_approved",
+            "trashed": False,
+            "mimeType": "application/vnd.google-apps.folder",
+        }
+        files.get.return_value.execute.side_effect = [
+            root,
+            root,
+            {**root, "id": "paper", "name": "W1", "parents": ["other"]},
+        ]
+    elif reason == "different_file":
+        files.list.return_value.execute.side_effect = [
+            {"files": [{"name": "W1", "id": "paper"}]},
+            {"files": [{"id": "manifest"}]},
+            {"files": [{"id": "other"}]},
+        ]
+    else:
+        files.get_media.return_value.execute.side_effect = [source, source + b"\n"]
+
+    assert scan_approved_tables(service, "root", "W1", apply=True) == {"failed": 1}
+    files.update.assert_not_called()
+
+
+@pytest.mark.parametrize("already_enriched", [False, True])
+def test_apply_leaves_unsupported_or_already_enriched_papers_alone(already_enriched: bool) -> None:
+    service, files = _apply_drive()
+    source = _manifest("W1")
+    files.get_media.return_value.execute.return_value = (
+        enrich_approved_json(source) if already_enriched else source.replace(b"45.00", b"     ")
+    )
+    expected = "already_has_field" if already_enriched else "unsupported"
+    assert scan_approved_tables(service, "root", "W1", apply=True) == {expected: 1}
+    files.update.assert_not_called()
+
+
+def test_apply_fails_loudly_when_saved_content_does_not_match() -> None:
+    service, files = _apply_drive()
+    source = _manifest("W1")
+    files.get_media.return_value.execute.side_effect = [source, source, source]
+    with pytest.raises(RuntimeError, match="read-back did not match"):
+        scan_approved_tables(service, "root", "W1", apply=True)
+    files.update.assert_called_once()

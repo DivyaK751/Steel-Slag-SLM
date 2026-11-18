@@ -1,8 +1,10 @@
-"""Dry-run contextual table enrichment on approved Drive manifests."""
+"""Preview or apply contextual table enrichment on approved Drive manifests."""
 
 import argparse
+import json
 import logging
 from collections import Counter, defaultdict
+from decimal import Decimal
 from re import fullmatch
 from typing import Any
 
@@ -17,7 +19,7 @@ logger = logging.getLogger(__name__)
 _APPROVED_FOLDER_NAME = "_parsed_approved"
 
 
-def _scan_paper(service: Any, paper_id: str, folder_id: str) -> str:
+def _scan_paper(service: Any, paper_id: str, folder_id: str, *, apply_root_id: str | None) -> str:
     file_ids = drive_storage.list_named_file_ids(service, folder_id, "parsed.json")
     if len(file_ids) != 1:
         raise ValueError(f"Expected one parsed.json, found {len(file_ids)}")
@@ -29,7 +31,8 @@ def _scan_paper(service: Any, paper_id: str, folder_id: str) -> str:
         logger.info("%s: already has contextual_tables", paper_id)
         return "already_has_field"
 
-    enriched = ParsedManifest.model_validate_json(enrich_approved_json(source))
+    updated = enrich_approved_json(source)
+    enriched = ParsedManifest.model_validate_json(updated)
     tables = enriched.contextual_tables or []
     issues = [issue for table in tables for issue in table.issues]
     row_count = sum(len(table.rows) for table in tables)
@@ -54,13 +57,29 @@ def _scan_paper(service: Any, paper_id: str, folder_id: str) -> str:
         return "no_tables"
     if not row_count:
         return "unsupported"
-    return "partial" if issues else "ready"
+    if issues:
+        return "partial"
+    if apply_root_id is None:
+        return "ready"
+
+    updated_fields = json.loads(updated, parse_float=Decimal)
+    updated_fields.pop("contextual_tables")
+    if updated_fields != json.loads(source, parse_float=Decimal):
+        raise ValueError("Enrichment would change existing JSON fields")
+    drive_storage.verify_named_folder(service, apply_root_id, _APPROVED_FOLDER_NAME)
+    drive_storage.verify_named_folder(service, folder_id, paper_id, parent_id=apply_root_id)
+    if drive_storage.list_named_file_ids(service, folder_id, "parsed.json") != file_ids:
+        raise ValueError("parsed.json moved or became ambiguous; refusing to overwrite it")
+    logger.info("%s: updating existing parsed.json (Drive ID %s)", paper_id, file_ids[0])
+    drive_storage.replace_existing_json(service, file_ids[0], source, updated)
+    logger.info("%s: updated and verified %d rows; original fields unchanged", paper_id, row_count)
+    return "updated"
 
 
 def scan_approved_tables(
-    service: Any, root_folder_id: str, paper_id: str | None = None
+    service: Any, root_folder_id: str, paper_id: str | None = None, *, apply: bool = False
 ) -> Counter[str]:
-    """Read direct OpenAlex paper folders and report candidates without writing to Drive."""
+    """Scan direct OpenAlex paper folders, updating complete candidates only when requested."""
     drive_storage.verify_named_folder(service, root_folder_id, _APPROVED_FOLDER_NAME)
     logger.info("Verified Drive folder %s (%s)", _APPROVED_FOLDER_NAME, root_folder_id)
     folders: defaultdict[str, list[str]] = defaultdict(list)
@@ -76,10 +95,13 @@ def scan_approved_tables(
         try:
             if len(folder_ids) != 1:
                 raise ValueError(f"Found {len(folder_ids)} folders with the same paper ID")
-            counts[_scan_paper(service, name, folder_ids[0])] += 1
+            outcome = _scan_paper(
+                service, name, folder_ids[0], apply_root_id=root_folder_id if apply else None
+            )
+            counts[outcome] += 1
         except HttpError as error:
             # Auth, quota and server errors must stop rather than produce a misleading report.
-            if error.resp.status != 404:
+            if apply or error.resp.status != 404:
                 raise
             logger.error("%s: paper folder or manifest could not be read (404)", name)
             counts["failed"] += 1
@@ -90,12 +112,13 @@ def scan_approved_tables(
 
 
 def main() -> None:
-    """Run a bounded or explicitly folder-wide Drive dry run."""
+    """Run a one-paper or explicitly folder-wide Drive scan or backfill."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--folder-id", required=True, help="Drive ID of the approved folder")
     selection = parser.add_mutually_exclusive_group(required=True)
     selection.add_argument("--paper-id", help="Scan one OpenAlex paper folder")
     selection.add_argument("--all", action="store_true", help="Scan every approved paper folder")
+    parser.add_argument("--apply", action="store_true", help="Update complete candidates in Drive")
     args = parser.parse_args()
     if not fullmatch(r"[A-Za-z0-9_-]+", args.folder_id):
         parser.error("--folder-id must be a Drive ID, not a URL")
@@ -108,12 +131,15 @@ def main() -> None:
         service = drive_storage.build_drive_service(
             settings.service_account_file, settings.oauth_client_file, settings.oauth_token_file
         )
-        counts = scan_approved_tables(service, args.folder_id, args.paper_id)
+        counts = scan_approved_tables(service, args.folder_id, args.paper_id, apply=args.apply)
     except (OSError, RuntimeError, HttpError, ValueError) as error:
-        parser.exit(1, f"Drive dry run failed: {error}\n")
-    logger.info("Dry run complete (no Drive writes): %s", dict(sorted(counts.items())))
+        parser.exit(1, f"Approved Drive job failed: {error}\n")
+    mode = "Apply" if args.apply else "Dry run (no Drive writes)"
+    logger.info("%s complete: %s", mode, dict(sorted(counts.items())))
     if counts["failed"]:
         raise SystemExit(1)
+    if args.apply and args.paper_id and not counts["updated"] and not counts["already_has_field"]:
+        parser.exit(1, "Pilot was not eligible for an update; inspect the scan result.\n")
 
 
 if __name__ == "__main__":
