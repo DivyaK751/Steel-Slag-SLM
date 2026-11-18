@@ -189,8 +189,8 @@ CaO 38.96% and Cr 442.30 mg/kg associations remained intact. The conservative re
 budgeter yielded 40 candidate rows from four tables, with two other tables explicitly blocked.
 Docling warned about dense vector separators on page 11 and used its reading-order fallback;
 successful conversion is not an accuracy certificate. Cross-process cache reuse was verified
-after fixing unordered-set serialization in the options fingerprint. Only this one paper has
-been fully captured so far; the other 49 and the retrieval comparison remain pending.
+after fixing unordered-set serialization in the options fingerprint. Three papers have been
+fully captured so far (W4280519327, W4221096775 and W2014482815); 47 conversions remain.
 
 Next, finish the snapshots, derive baseline chunks with the original formatting and compare
 against the same corpus augmented by candidate rows. Keep original tables when rows are blocked.
@@ -228,6 +228,51 @@ and consistent recorded parser versions/settings. It fingerprints each snapshot,
 per-table candidate row indices and explicit renderer issues. Missing snapshots or invalid
 native geometry fail without saving a partial audit. No models are loaded, sources modified,
 or existing reports overwritten. Blocked tables remain in the report rather than disappearing.
+
+## Round 5: paired retrieval evaluation
+
+The **baseline** uses the existing Markdown/text block export and chunker. The **augmented**
+index keeps every baseline chunk and adds one contextual passage per eligible native table
+row. A passage includes the caption or explicit table context, header paths, original values
+and units, linked notes where available, and physical PDF page(s). It does not infer a missing
+mix, curing condition or unit. The report saves exact indexed row text with native table
+references, cell indices and token counts. Blocked or oversized candidates are recorded;
+their Markdown remains searchable. Rows are candidates, not verified extractions.
+
+From the repository root, run the one-paper check (use a new output filename on repeat runs):
+
+```bash
+CUDA_VISIBLE_DEVICES="" OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 \
+uv run evaluate-contextual-tables \
+  --benchmark configs/extraction_benchmark.yaml \
+  --questions configs/retrieval_eval_heldout.yaml \
+  --captures-dir data/interim/table_retrieval/full_documents \
+  --paper-ids W4280519327 \
+  --out data/interim/table_retrieval/one_paper_repeat.json
+```
+
+The first run may download public model weights from Hugging Face; inference is local.
+Add `HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1` after the models are cached to require an
+offline run. Omit `CUDA_VISIBLE_DEVICES=""` to allow a supported CUDA GPU.
+
+For the full evaluation, finish the resumable capture and run the coverage audit above.
+Then run the same evaluation command **without `--paper-ids`** and with a distinct `--out`
+(for example `data/interim/table_retrieval/benchmark_50.json`). This uses the 50
+benchmark papers, not the historical distractor list in the question config. With the
+question file above, 25 questions qualify (19 table and 6 text); selecting
+`configs/retrieval_eval_human50.yaml` instead scores 52 questions (39 table and 13 text).
+Questions requiring figure evidence or evidence from an unselected paper are excluded and
+reported. Both arms use the same filename-derived titles and omit Gemini figure readings.
+Baseline vectors are computed only once. Capture resumes per paper, but retrieval does not
+checkpoint; run the small check before starting the full CPU run.
+
+Compare table and text metrics separately. Evidence@5 checks source/kind and a caption or
+text label. Answer@5 checks for an answer string from an evidence paper. Evidence+value@5
+requires both proxies in the same chunk; it still cannot prove the number belongs to the
+requested row, property, age or unit. Repeated rows from a table can lift the label hit
+rate while crowding out other evidence. Review saved top-five passages for these errors
+before changing production, and do not compare this corpus directly with historical scores
+from the larger distractor corpus.
 
 These are coverage counts over **detected** tables, before token budgeting or manual review.
 They cannot measure how many source tables Docling missed, OCR accuracy, retrieval gains or

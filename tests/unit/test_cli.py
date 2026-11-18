@@ -63,6 +63,40 @@ def test_capture_table_corpus_selects_only_benchmark_inputs(monkeypatch, selecti
     run.assert_called_once_with(expected, Path("pdfs"), Path("out"), "converter")
 
 
+def test_contextual_table_evaluation_writes_new_report_only(monkeypatch, tmp_path) -> None:
+    out = tmp_path / "report.json"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "evaluate-contextual-tables",
+            "--benchmark",
+            "split.yaml",
+            "--questions",
+            "questions.yaml",
+            "--captures-dir",
+            "captures",
+            "--paper-ids",
+            "W123",
+            "--out",
+            str(out),
+        ],
+    )
+    monkeypatch.setattr(cli, "load_benchmark_split", lambda _: MagicMock(dev=["W123"], test=[]))
+    monkeypatch.setattr(cli, "load_retrieval_eval_set", lambda _: "questions")
+    variant = MagicMock(metrics={})
+    report = MagicMock(baseline=variant, augmented=variant, elapsed_seconds=1.0)
+    report.model_dump_json.return_value = "{}"
+    run = MagicMock(return_value=report)
+    monkeypatch.setattr(cli, "evaluate_table_rows", run)
+    cli.evaluate_contextual_tables()
+    assert run.call_args.args[:3] == (["W123"], Path("captures"), "questions")
+    assert out.read_text() == "{}\n"
+    with pytest.raises(FileExistsError, match="already exists"):
+        cli.evaluate_contextual_tables()
+    assert run.call_count == 1
+
+
 def test_capture_table_corpus_rejects_ids_outside_benchmark(monkeypatch) -> None:
     monkeypatch.setattr(
         sys,

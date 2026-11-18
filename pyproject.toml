@@ -47,6 +47,7 @@ render-table-evidence = "steel_slag_slm.cli:render_table_evidence"
 budget-table-evidence = "steel_slag_slm.cli:budget_table_evidence"
 capture-table-corpus = "steel_slag_slm.cli:capture_table_corpus"
 audit-captured-tables = "steel_slag_slm.cli:audit_captured_tables"
+evaluate-contextual-tables = "steel_slag_slm.cli:evaluate_contextual_tables"
 
 [dependency-groups]
 dev = [

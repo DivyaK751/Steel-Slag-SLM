@@ -93,6 +93,7 @@ from steel_slag_slm.pipelines.evaluate_retrieval import (
     run_retrieval_eval,
 )
 from steel_slag_slm.pipelines.evaluate_screening import run_evaluation
+from steel_slag_slm.pipelines.evaluate_table_rows import evaluate_table_rows
 from steel_slag_slm.pipelines.export_parsed import run_export_parsed
 from steel_slag_slm.pipelines.extract_data import load_parsed_paper, run_data_extraction
 from steel_slag_slm.pipelines.extract_figures import collect_pdf_paths, run_figure_extraction
@@ -231,6 +232,54 @@ def audit_captured_tables() -> None:
         f"{len(report.papers)} papers, {sum(p.physical_pages for p in report.papers)} pages, "
         f"{len(tables)} detected tables, "
         f"{sum(bool(t.candidate_row_indices) for t in tables)} with candidate rows; unreviewed"
+    )
+
+
+def evaluate_contextual_tables() -> None:
+    """Compare local baseline retrieval against the same corpus with contextual rows."""
+    parser = argparse.ArgumentParser(description=evaluate_contextual_tables.__doc__)
+    parser.add_argument("--benchmark", type=Path, required=True)
+    parser.add_argument("--questions", type=Path, required=True)
+    parser.add_argument("--captures-dir", type=Path, required=True)
+    parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--paper-ids", nargs="+", help="Explicit pilot subset of the benchmark")
+    parser.add_argument("--query-reserve", type=int, default=64)
+    args = parser.parse_args()
+    _setup_logging()
+    if args.out.exists():
+        raise FileExistsError(f"Evaluation report already exists: {args.out}")
+    split = load_benchmark_split(args.benchmark)
+    paper_ids = split.dev + split.test
+    if args.paper_ids is not None:
+        unknown = set(args.paper_ids) - set(paper_ids)
+        if unknown:
+            parser.error(f"Paper IDs outside benchmark: {sorted(unknown)}")
+        paper_ids = args.paper_ids
+    report = evaluate_table_rows(
+        paper_ids,
+        args.captures_dir,
+        load_retrieval_eval_set(args.questions),
+        load_embedding_settings(),
+        TableTokenBudget(
+            embedding_limit=512,
+            reranker_limit=512,
+            query_reserve=args.query_reserve,
+        ),
+    )
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    with args.out.open("x", encoding="utf-8") as handle:
+        handle.write(report.model_dump_json(indent=2) + "\n")
+    for label, variant in (("baseline", report.baseline), ("augmented", report.augmented)):
+        for group, metrics in variant.metrics.items():
+            print(
+                f"{label} {group} (n={metrics['question_count']:.0f}): "
+                f"evidence@5={metrics['hit_at_5']:.3f}, answer@5={metrics['answer_hit_at_5']:.3f}, "
+                f"evidence+value@5={metrics['evidence_and_value_at_5']:.3f}, "
+                f"MRR={metrics['reciprocal_rank']:.3f}"
+            )
+    print(
+        f"Saved {args.out} ({report.elapsed_seconds:.1f}s; "
+        f"{len(report.excluded_questions)} excluded)"
     )
 
 
