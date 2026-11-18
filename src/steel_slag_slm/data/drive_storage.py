@@ -321,6 +321,37 @@ def find_subfolder_id(service: Any, parent_id: str, name: str) -> str | None:
     return _find_child_id(service, parent_id, name, f" and mimeType = '{FOLDER_MIME_TYPE}'")
 
 
+def verify_named_folder(service: Any, folder_id: str, expected_name: str) -> None:
+    """Reject IDs that do not identify a live Drive folder with the expected name."""
+    metadata = (
+        service.files()
+        .get(fileId=folder_id, fields="id,name,mimeType,trashed", **_ALL_DRIVES)
+        .execute(num_retries=DRIVE_RETRIES)
+    )
+    if (
+        metadata.get("id") != folder_id
+        or metadata.get("name") != expected_name
+        or metadata.get("mimeType") != FOLDER_MIME_TYPE
+        or metadata.get("trashed") is not False
+    ):
+        raise ValueError(f"Drive ID {folder_id!r} is not a live {expected_name!r} folder")
+
+
+def list_subfolders(service: Any, folder_id: str) -> list[dict[str, str]]:
+    """List direct child folders, retaining duplicate names."""
+    return _list_children(service, folder_id, f" and mimeType = '{FOLDER_MIME_TYPE}'")
+
+
+def list_named_file_ids(service: Any, folder_id: str, name: str) -> list[str]:
+    """List IDs of ordinary files with the exact name, retaining duplicates."""
+    escaped = name.replace("\\", "\\\\").replace("'", "\\'")
+    query = (
+        f" and name = '{escaped}' and mimeType != '{FOLDER_MIME_TYPE}'"
+        " and mimeType != 'application/vnd.google-apps.shortcut'"
+    )
+    return [item["id"] for item in _list_children(service, folder_id, query)]
+
+
 def list_file_names(service: Any, folder_id: str) -> dict[str, str]:
     """Map each non-folder file name in the folder to its Drive file ID."""
     return {

@@ -291,6 +291,42 @@ can rerank chunks from five shortlisted papers instead of one, twice. These are
 planning estimates, not measured full-run times; OCR load, chunk count and passage
 length can move them considerably. Prefer CUDA for the full reranking run if available.
 
+## Preview table rows on an approved parse
+
+Download a paper's `parsed.json` from `_parsed_approved` and run:
+
+```bash
+uv run python -m steel_slag_slm.pipelines.preview_approved_tables \
+  /path/to/parsed.json /path/to/approved-with-rows.json
+```
+
+The preview writes a new file and refuses to overwrite an existing one. It adds
+only `contextual_tables` using the saved Markdown and table locations. It does not
+reconstruct native cell spans, download PDFs, call Gemini, or modify Drive.
+Unsupported layouts are reported rather than inferred. Look under
+`images[].reading.columns` and `images[].reading.rows` for saved figure values
+and `contextual_tables[].rows[].text` for the new table passages. Some figures
+have descriptive readings but no data rows. This preview does not rebuild the index.
+
+### Read-only Drive scan
+
+Use **GitHub Actions → Parse trial PDFs → Run workflow** and select
+`exp/approved-table-backfill`. Despite the workflow name, this branch runs only
+the read-only scanner. It uses the repository's `GOOGLE_OAUTH_TOKEN_JSON`
+secret; no local sign-in is needed. Leave `paper_ids` blank for the default
+pilot, `W2618057564`, or enter one OpenAlex ID. After verifying the pilot,
+enter `all` in `paper_ids` to scan all direct OpenAlex paper folders.
+`max_papers` and `follow_up_runs` do not apply to the scanner.
+
+Before listing papers, the scanner checks that Drive returns the configured
+ID as a non-trashed folder named `_parsed_approved`. It downloads only
+`parsed.json`, computes candidate rows in memory, and reports saved figures
+with data rows. It distinguishes complete candidates (`ready`), candidates
+with issues (`partial`), unsupported layouts,
+papers with no tables, and manuscripts that already have `contextual_tables`.
+Missing or duplicate manifests and mismatched paper IDs count as failures.
+There is no apply mode, and the scanner does not use or change the Drive index.
+
 ## GitHub Actions: publish contextual rows to Drive v3
 
 The local benchmark JSON is a report, not a workflow input. In **Actions → Parse trial

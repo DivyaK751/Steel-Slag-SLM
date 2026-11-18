@@ -9,7 +9,7 @@ on:
         default: "1"
         type: string
       paper_ids:
-        description: "OpenAlex IDs to parse, space-separated (e.g. W123 W456); max_papers still applies"
+        description: "Approved branch: one ID (blank = W2618057564) or all. Other branches: PDF IDs."
         required: false
         default: ""
         type: string
@@ -23,11 +23,51 @@ permissions:
   contents: read
 
 concurrency:
-  group: parse-trial-pdfs
+  group: ${{ github.ref == 'refs/heads/exp/approved-table-backfill' && 'scan-approved-tables' || 'parse-trial-pdfs' }}
   cancel-in-progress: false
 
 jobs:
+  scan_approved:
+    if: github.ref == 'refs/heads/exp/approved-table-backfill'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DRIVE_FOLDER_ID: "11779zSN_Fb_ooiaHliXP9vebTo-EXdAt"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Install project dependencies
+        run: uv sync --locked --no-dev
+
+      - name: Configure saved Drive login
+        env:
+          GOOGLE_OAUTH_TOKEN_JSON: ${{ secrets.GOOGLE_OAUTH_TOKEN_JSON }}
+        run: |
+          if [ -z "$GOOGLE_OAUTH_TOKEN_JSON" ]; then
+            echo "::error::GOOGLE_OAUTH_TOKEN_JSON is required for the approved Drive scan."
+            exit 1
+          fi
+          umask 077
+          .github/scripts/write_google_credentials.sh
+
+      - name: Scan approved manifests without writing to Drive
+        env:
+          PAPER_IDS: ${{ inputs.paper_ids }}
+        run: |
+          if [ "$PAPER_IDS" = "all" ]; then
+            selection=(--all)
+          else
+            selection=(--paper-id "${PAPER_IDS:-W2618057564}")
+          fi
+          uv run --locked --no-sync python -m steel_slag_slm.pipelines.scan_approved_tables \
+            --folder-id "$DRIVE_FOLDER_ID" "${selection[@]}"
+
   parse:
+    if: github.ref != 'refs/heads/exp/approved-table-backfill'
     runs-on: ubuntu-latest
     timeout-minutes: 180
     outputs:
@@ -83,7 +123,8 @@ jobs:
   continue:
     needs: parse
     if: >-
-      ${{ !cancelled() && github.run_attempt == 1 && needs.parse.result == 'success'
+      ${{ github.ref != 'refs/heads/exp/approved-table-backfill'
+          && !cancelled() && github.run_attempt == 1 && needs.parse.result == 'success'
           && needs.parse.outputs.follow_up_runs != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
