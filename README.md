@@ -322,8 +322,9 @@ uv run evaluate-retrieval --eval-set configs/retrieval_eval_heldout.yaml \
   any rewrite counts, even without a new parse generation), its title changes, or the chunking
   settings or code change (`CHUNKING_VERSION` in `rag/chunking.py`). Its vectors are recomputed
   only if the chunks actually differ. Papers removed from the parsed folder are dropped.
-- Table rows the parser renders (`contextual_tables`: caption plus "header: value" lines) are
-  indexed as extra table chunks next to the whole table; `embedding.table_rows` turns this off.
+- Table rows the parser renders (`contextual_tables`: caption plus "header: value" lines)
+  can be indexed as extra table chunks next to the whole table with `embedding.table_rows`. It is
+  off: in testing it did not help search (see the comment in `configs/base.yaml`).
 
 - `parse-pdfs` updates the search index of the folder it parsed into once parsing is done, so
   newly parsed and re-parsed papers become searchable without a separate step. Pass

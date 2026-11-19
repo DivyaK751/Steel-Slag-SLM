@@ -531,7 +531,7 @@ def build_chunks(
     max_chars: int,
     table_max_chars: int,
     paper_title: str = "",
-    table_rows: bool = True,
+    table_rows: bool = False,
 ) -> list[Chunk]:
     """Turn one paper into chunks in reading order, each tagged with its section and pages.
 

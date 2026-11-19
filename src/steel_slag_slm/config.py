@@ -98,7 +98,7 @@ class EmbeddingSettings(BaseModel):
     reranker: str  # cross-encoder that orders the passages of the papers search found
     top_papers: int  # papers whose chunks are all reranked
     candidates: int  # chunks each first-stage ranking (embedding, keywords) contributes
-    table_rows: bool = True  # index each rendered table row as its own chunk too
+    table_rows: bool = False  # also index each rendered table row as its own chunk
 
 
 class EvidenceSpan(BaseModel):

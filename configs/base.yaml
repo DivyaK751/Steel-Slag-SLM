@@ -377,8 +377,10 @@ embedding:
   top_papers: 5
   candidates: 100
   # Also index each table row the parser rendered (contextual_tables) as its own chunk, with
-  # its caption and column headers; the whole table stays indexed as well
-  table_rows: true
+  # its caption and column headers. Off: on the fixed test sets (2026-11-18) it left answer@10
+  # and answer@20 unchanged and lowered answer@5 (0.82 -> 0.76), as near-identical rows crowd
+  # out other passages
+  table_rows: false
 
 figure_extraction:
   # Local output for now (git-ignored): one folder per paper with PNGs and figures.json

@@ -505,7 +505,7 @@ def _table_with_rows() -> ParsedPaper:
 
 
 def test_each_table_row_is_also_indexed_after_its_table() -> None:
-    chunks = build_chunks(_table_with_rows(), max_chars=800, table_max_chars=1500)
+    chunks = build_chunks(_table_with_rows(), max_chars=800, table_max_chars=1500, table_rows=True)
     assert [(c.kind, c.section, c.text.splitlines()[1]) for c in chunks] == [
         ("table", "Results", "| CaO | SiO2 |"),
         ("table", "Results", "CaO: 45.2"),
