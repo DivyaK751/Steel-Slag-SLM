@@ -96,3 +96,33 @@ def test_parse_parsed_json_rejects_a_placement_without_a_page_number() -> None:
     bad = dict(BLOCK, placements=[{"bbox": [1, 2, 3, 4]}])
     with pytest.raises(ValueError, match="page number"):
         parse_parsed_json(_record_with_blocks([bad]))
+
+
+TABLE_BLOCK = {**BLOCK, "kind": "table", "label": "table", "text": "Table 1. Oxides\n| CaO |"}
+
+
+def _with_rows(contextual_tables: object) -> bytes:
+    record = json.loads(_record_with_blocks([BLOCK, TABLE_BLOCK]))
+    record["contextual_tables"] = contextual_tables
+    return json.dumps(record).encode()
+
+
+def test_table_rows_attach_to_the_table_block_their_reference_names() -> None:
+    rows = [{"text": "Table 1. Oxides\nCaO: 45.2"}, {"text": "  "}]
+    paper = parse_parsed_json(_with_rows([{"reference": "approved-markdown:1", "rows": rows}]))
+    assert paper.table_rows == {1: ("Table 1. Oxides\nCaO: 45.2",)}
+
+
+def test_table_rows_that_point_to_no_table_are_left_out() -> None:
+    rows = [{"text": "CaO: 45.2"}]
+    tables = [
+        {"reference": "approved-markdown:0", "rows": rows},
+        {"reference": "x:9", "rows": rows},
+    ]
+    paper = parse_parsed_json(_with_rows(tables))
+    assert paper.table_rows == {}
+
+
+def test_malformed_table_rows_do_not_fail_the_paper() -> None:
+    paper = parse_parsed_json(_with_rows("not a list"))
+    assert len(paper.content_blocks) == 2

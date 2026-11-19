@@ -493,3 +493,25 @@ def test_text_that_mentions_a_read_figure_is_linked_to_its_caption_only() -> Non
     chunks = build_chunks(paper, max_chars=800, table_max_chars=1500)
     text_chunk = next(c for c in chunks if c.kind == "text")
     assert text_chunk.figure_captions == ("Fig. 2. FTIR spectra of EAF slags.",)
+
+
+def _table_with_rows() -> ParsedPaper:
+    table = _block(
+        "table", "Table 1. Oxides\n| CaO | SiO2 |\n|---|---|\n| 45.2 | 14.1 |", kind="table"
+    )
+    blocks = (_block("section_header", "Results"), table)
+    rows = {1: ("Table 1. Oxides\nCaO: 45.2\nSiO2: 14.1",)}
+    return ParsedPaper("W1", "", (), content_blocks=blocks, table_rows=rows)
+
+
+def test_each_table_row_is_also_indexed_after_its_table() -> None:
+    chunks = build_chunks(_table_with_rows(), max_chars=800, table_max_chars=1500)
+    assert [(c.kind, c.section, c.text.splitlines()[1]) for c in chunks] == [
+        ("table", "Results", "| CaO | SiO2 |"),
+        ("table", "Results", "CaO: 45.2"),
+    ]
+
+
+def test_table_rows_can_be_left_out_of_the_index() -> None:
+    chunks = build_chunks(_table_with_rows(), max_chars=800, table_max_chars=1500, table_rows=False)
+    assert len(chunks) == 1

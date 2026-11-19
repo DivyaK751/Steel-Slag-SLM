@@ -1,6 +1,7 @@
 """Record types shared across modules."""
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
@@ -93,6 +94,9 @@ class ParsedPaper:
     # Empty for papers parsed before content blocks existed; the Markdown is used then
     content_blocks: tuple[ParsedContentBlock, ...] = ()
     figures: tuple["PaperFigure", ...] = ()  # in the order parsed.json lists them
+    # Rendered rows of each table block (caption plus "header: value" lines), keyed by the
+    # block's index in content_blocks; papers without contextual_tables have none
+    table_rows: Mapping[int, tuple[str, ...]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)

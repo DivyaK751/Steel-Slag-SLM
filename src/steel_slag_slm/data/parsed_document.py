@@ -21,7 +21,7 @@ def parse_parsed_json(content: bytes) -> ParsedPaper:
     """Validate parsed.json bytes and return the paper's text, tables, blocks and figures.
 
     Papers parsed before content blocks or figures existed have none; their Markdown is still
-    returned.
+    returned. Table rows from contextual_tables, when present, are kept by table block.
 
     Raises:
         ValueError: If the content is not JSON or lacks the fields the indexer needs.
@@ -41,13 +41,41 @@ def parse_parsed_json(content: bytes) -> ParsedPaper:
     if not isinstance(tables, list) or not all(isinstance(table, str) for table in tables):
         raise ValueError("parsed.json needs tables to be a list of strings")
 
+    blocks = _parse_content_blocks(record.get("content_blocks", []))
     return ParsedPaper(
         openalex_id=paper_id,
         markdown=markdown,
         tables=tuple(tables),
-        content_blocks=_parse_content_blocks(record.get("content_blocks", [])),
+        content_blocks=blocks,
         figures=_parse_figures(paper_id, record.get("images", [])),
+        table_rows=_parse_table_rows(paper_id, blocks, record.get("contextual_tables", [])),
     )
+
+
+def _parse_table_rows(
+    paper_id: str, blocks: tuple[ParsedContentBlock, ...], raw_tables: Any
+) -> dict[int, tuple[str, ...]]:
+    """Return the rows contextual_tables renders for each table block, by block index.
+
+    Each entry names its table block as "<source>:<block index>". Rows are extra search
+    passages, so an entry that cannot be placed is logged and left out instead of failing
+    the paper.
+    """
+    if not isinstance(raw_tables, list):
+        logger.warning("%s: contextual_tables is not a list; rows left out", paper_id)
+        return {}
+    rows_by_block: dict[int, tuple[str, ...]] = {}
+    for raw in raw_tables:
+        reference = raw.get("reference") if isinstance(raw, dict) else None
+        index_text = reference.rpartition(":")[2] if isinstance(reference, str) else ""
+        index = int(index_text) if index_text.isdigit() else -1
+        if not 0 <= index < len(blocks) or blocks[index].kind != "table":
+            logger.warning("%s: table rows point to no table block (%r)", paper_id, reference)
+            continue
+        raw_rows = raw.get("rows", [])
+        texts = [row.get("text") for row in raw_rows if isinstance(row, dict)]
+        rows_by_block[index] = tuple(t.strip() for t in texts if isinstance(t, str) and t.strip())
+    return rows_by_block
 
 
 def _parse_figures(paper_id: str, raw_figures: Any) -> tuple[PaperFigure, ...]:

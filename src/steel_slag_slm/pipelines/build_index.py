@@ -97,6 +97,7 @@ def run_build_index(
                 settings.chunk_max_chars,
                 settings.table_max_chars,
                 titles.get(paper_id, ""),
+                settings.table_rows,
             )
         ]
         if not chunks:

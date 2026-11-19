@@ -9,7 +9,7 @@ import logging
 import re
 import textwrap
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import replace
 
 from steel_slag_slm.schemas import (
@@ -367,6 +367,7 @@ def _pieces_from_blocks(
     figures: tuple[PaperFigure, ...],
     max_chars: int,
     table_max_chars: int,
+    table_rows: Mapping[int, tuple[str, ...]],
 ) -> list[_Piece]:
     """Chunk a paper from its content blocks, which know their own pages and labels.
 
@@ -379,7 +380,7 @@ def _pieces_from_blocks(
     seen_texts: set[str] = set()
     unplaced = list(figures)
     placed_numbers: set[str] = set()
-    for block in blocks:
+    for index, block in enumerate(blocks):
         if block.label in _SKIPPED_LABELS or not block.text.strip():
             continue
         if block.kind == "table" and _is_toc(block.text):
@@ -430,6 +431,9 @@ def _pieces_from_blocks(
                 ("table", section, table, pages)
                 for table in split_table(block.text, table_max_chars)
             ]
+            # Each rendered row also gets its own chunk, so a value is found next to its
+            # caption and column header even when the whole table reads as a wall of numbers
+            pieces += [("table", section, row, pages) for row in table_rows.get(index, ())]
         else:
             text = _clean_text(block.text)
             if text in seen_texts:
@@ -520,9 +524,15 @@ def _carry_unfinished_sentences(pieces: list[_Piece]) -> list[_Piece]:
 
 
 def build_chunks(
-    paper: ParsedPaper, max_chars: int, table_max_chars: int, paper_title: str = ""
+    paper: ParsedPaper,
+    max_chars: int,
+    table_max_chars: int,
+    paper_title: str = "",
+    table_rows: bool = True,
 ) -> list[Chunk]:
     """Turn one paper into chunks in reading order, each tagged with its section and pages.
+
+    With table_rows, every rendered table row is an extra table chunk after its table.
 
     Raises:
         ValueError: If max_chars or table_max_chars is not positive.
@@ -532,7 +542,11 @@ def build_chunks(
 
     if paper.content_blocks:
         pieces = _pieces_from_blocks(
-            paper.content_blocks, paper.figures, max_chars, table_max_chars
+            paper.content_blocks,
+            paper.figures,
+            max_chars,
+            table_max_chars,
+            paper.table_rows if table_rows else {},
         )
     else:
         pieces = _pieces_from_markdown(paper, max_chars, table_max_chars)

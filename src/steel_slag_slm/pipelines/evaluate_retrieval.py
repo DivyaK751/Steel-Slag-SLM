@@ -54,7 +54,11 @@ def build_corpus_store(
     for paper_id in paper_ids:
         paper = parse_parsed_json((papers_dir / f"{paper_id}.json").read_bytes())
         chunks += build_chunks(
-            paper, settings.chunk_max_chars, settings.table_max_chars, titles.get(paper_id, "")
+            paper,
+            settings.chunk_max_chars,
+            settings.table_max_chars,
+            titles.get(paper_id, ""),
+            settings.table_rows,
         )
     store = VectorStore.empty(encoder.dimension)
     store.add(chunks, encoder.encode([passage_for_embedding(chunk) for chunk in chunks]))

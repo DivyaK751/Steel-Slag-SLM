@@ -376,6 +376,9 @@ embedding:
   reranker: BAAI/bge-reranker-v2-m3
   top_papers: 5
   candidates: 100
+  # Also index each table row the parser rendered (contextual_tables) as its own chunk, with
+  # its caption and column headers; the whole table stays indexed as well
+  table_rows: true
 
 figure_extraction:
   # Local output for now (git-ignored): one folder per paper with PNGs and figures.json
