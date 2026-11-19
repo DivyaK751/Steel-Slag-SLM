@@ -99,7 +99,23 @@ def _list_children(
     service: Any, folder_id: str, extra_query: str = "", file_fields: str = "id, name"
 ) -> list[dict[str, str]]:
     """List every non-trashed item directly inside a folder, following pagination."""
-    query = f"'{folder_id}' in parents and trashed = false{extra_query}"
+    return _list_files(
+        service, f"'{folder_id}' in parents and trashed = false{extra_query}", file_fields
+    )
+
+
+def file_checksums(service: Any, file_name: str) -> dict[str, str]:
+    """Map the ID of every file with this name the account can see to its MD5 checksum.
+
+    One listing covers files in all folders, so it is cheap even for thousands of papers.
+    A file that is rewritten gets a new checksum, whoever rewrote it.
+    """
+    escaped_name = file_name.replace("'", "\\'")
+    items = _list_files(service, f"name = '{escaped_name}' and trashed = false", "id, md5Checksum")
+    return {item["id"]: item.get("md5Checksum", "") for item in items}
+
+
+def _list_files(service: Any, query: str, file_fields: str) -> list[dict[str, str]]:
     items: list[dict[str, str]] = []
     page_token = None
     while True:

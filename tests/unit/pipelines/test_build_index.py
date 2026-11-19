@@ -127,7 +127,6 @@ def test_build_index_replaces_the_chunks_of_a_reparsed_paper(fake_drive, keyword
     assert outcomes["reindexed"] == 1
     store = embedding_store.load_store(None, PARSED_FOLDER, "model-a", keyword_encoder.dimension)
     assert [chunk.text for chunk in store.chunks] == ["Sinter fluxing agent."]
-    assert store.paper_generations == {"W1": "g2"}
 
 
 def test_build_index_skips_a_paper_whose_parse_is_unchanged(fake_drive, keyword_encoder):
@@ -208,3 +207,61 @@ def test_build_index_saves_the_store_in_the_given_index_folder(fake_drive, keywo
     store = embedding_store.load_store(None, "shared", "model-a", keyword_encoder.dimension)
     assert store.paper_ids == {"W1"}
     assert embedding_store.load_store(None, PARSED_FOLDER, "model-a", 4).size == 0
+
+
+def test_build_index_reindexes_a_paper_whose_file_was_rewritten_without_a_new_generation(
+    fake_drive, keyword_encoder
+):
+    _write_index(fake_drive, {"W1": _add_paper(fake_drive, "W1", "## A\n\nFree lime.")})
+    run_build_index(_settings(), _parsing(), None, PARSED_FOLDER, keyword_encoder)
+
+    # Someone rewrites parsed.json in place and leaves index.json as it was
+    _add_paper(fake_drive, "W1", "## A\n\nSinter fluxing agent.")
+    outcomes = run_build_index(_settings(), _parsing(), None, PARSED_FOLDER, keyword_encoder)
+
+    assert outcomes["reindexed"] == 1
+    store = embedding_store.load_store(None, PARSED_FOLDER, "model-a", keyword_encoder.dimension)
+    assert [chunk.text for chunk in store.chunks] == ["Sinter fluxing agent."]
+
+
+def test_build_index_does_not_re_embed_when_a_rewrite_leaves_the_chunks_unchanged(
+    fake_drive, keyword_encoder
+):
+    record = {"openalex_id": "W1", "markdown": "## A\n\nFree lime.", "tables": []}
+    _write_index(fake_drive, {"W1": _add_paper(fake_drive, "W1", "", json.dumps(record).encode())})
+    run_build_index(_settings(), _parsing(), None, PARSED_FOLDER, keyword_encoder)
+    encoded_before = len(keyword_encoder.seen)
+
+    record["notes"] = "a field the index does not read"
+    _add_paper(fake_drive, "W1", "", json.dumps(record).encode())
+    outcomes = run_build_index(_settings(), _parsing(), None, PARSED_FOLDER, keyword_encoder)
+
+    assert outcomes["unchanged"] == 1
+    assert len(keyword_encoder.seen) == encoded_before
+    rerun = run_build_index(_settings(), _parsing(), None, PARSED_FOLDER, keyword_encoder)
+    assert rerun["already_indexed"] == 1
+
+
+def test_build_index_rechunks_every_paper_when_chunking_settings_change(
+    fake_drive, keyword_encoder
+):
+    _write_index(fake_drive, {"W1": _add_paper(fake_drive, "W1", "## A\n\nFree lime.")})
+    run_build_index(_settings(), _parsing(), None, PARSED_FOLDER, keyword_encoder)
+
+    changed = _settings().model_copy(update={"chunk_max_chars": 400})
+    outcomes = run_build_index(changed, _parsing(), None, PARSED_FOLDER, keyword_encoder)
+
+    assert outcomes["unchanged"] == 1  # re-chunked; this short paper splits the same way
+
+
+def test_build_index_drops_papers_removed_from_the_parsed_folder(fake_drive, keyword_encoder):
+    w1 = _add_paper(fake_drive, "W1", "## A\n\nFree lime.")
+    _write_index(fake_drive, {"W1": w1, "W2": _add_paper(fake_drive, "W2", "## B\n\nSinter.")})
+    run_build_index(_settings(), _parsing(), None, PARSED_FOLDER, keyword_encoder)
+
+    _write_index(fake_drive, {"W1": w1})
+    outcomes = run_build_index(_settings(), _parsing(), None, PARSED_FOLDER, keyword_encoder)
+
+    assert outcomes["removed"] == 1
+    store = embedding_store.load_store(None, PARSED_FOLDER, "model-a", keyword_encoder.dimension)
+    assert store.paper_ids == {"W1"}

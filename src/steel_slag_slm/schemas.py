@@ -177,7 +177,8 @@ class Chunk:
     position: int  # order within the paper, so neighbours can be found
     pages: tuple[int, ...] = ()  # PDF pages the text sits on; () when unknown
     figure_captions: tuple[str, ...] = ()  # captions of the figures this text mentions
-    parse_generation: str = ""  # the parse this chunk came from; "" when it was not recorded
+    # Version of the paper this chunk was built from (its parse, chunking and title); "" if unknown
+    parse_generation: str = ""
     paper_title: str = ""  # the paper's title from the registry; "" when it was not looked up
 
 

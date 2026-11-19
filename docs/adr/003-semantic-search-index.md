@@ -69,15 +69,17 @@ machine's local files.
   the machine that runs it (about 130 MB). That cache holds model files, not paper data.
 - The whole index is loaded into memory for each search. A flat index is exact and simple, and
   it is fine at the size of this project.
-- Papers are added incrementally: a run indexes only papers that are not yet in `chunks.json`.
-  A paper whose parse generation changed since it was indexed is re-chunked and re-embedded.
-  `build-index --rebuild` re-chunks and re-embeds every paper. `parse-pdfs` updates the index
+- The index is updated incrementally. Each paper is stored under a version made from its
+  `parsed.json` checksum in Drive, the chunking settings, `CHUNKING_VERSION` and its title; a run
+  re-chunks only papers whose version changed and re-embeds only those whose chunks differ, and
+  drops papers no longer in the parsed folder. A rewrite of `parsed.json` is therefore picked
+  up even when nobody bumps its parse generation. `build-index --rebuild` re-embeds every paper. `parse-pdfs` updates the index
   of the folder it parsed into once parsing is done, on a laptop or in the workflow, so new
   and re-parsed papers are indexed automatically.
 - The reranker scores every chunk of 5 papers (about 400 per question): about 7 seconds per
   question on a T4 GPU, and much slower on a CPU. Where the assistant runs it is still open.
-- An index built before titles were added gives the reranker no titles; run
-  `build-index --rebuild` once.
+- An index built before these versions existed has every paper re-chunked once on the next
+  run (one download per paper); papers whose chunks are unchanged are not re-embedded.
 - Retrieval quality is measured with fixed test sets, each searched over a fixed list of papers
   (its test papers plus 100 random parsed papers) so scores stay comparable as the corpus grows:
   `configs/retrieval_eval_human50.yaml` (68 questions from the human-extracted workbook, used to

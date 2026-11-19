@@ -24,6 +24,9 @@ from steel_slag_slm.schemas import (
 logger = logging.getLogger(__name__)
 
 IMAGE_PLACEHOLDER = "<!-- image -->"
+# Bump when a change here makes papers chunk differently, so the next index build re-chunks
+# every paper and re-embeds the ones whose chunks changed
+CHUNKING_VERSION = "2026-11-18"
 # A line this many times or more is a running header or footer, so every copy is dropped
 RUNNING_LINE_MIN_REPEATS = 3
 RUNNING_LINE_MAX_CHARS = 120

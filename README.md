@@ -306,8 +306,8 @@ those papers, each with its paper's title, and orders them. Tables also carry th
 in the index, since a table on its own is mostly numbers.
 
 ```bash
-uv run build-index                      # add new and re-parsed papers to the index
-uv run build-index --rebuild            # rebuild everything, e.g. after changing how papers are split
+uv run build-index                      # bring the index up to date with the parsed papers
+uv run build-index --rebuild            # re-embed everything from scratch
 uv run search-index "free lime volume stability"
 uv run build-index --parsed-folder _parsed_approved   # use another parsed folder (any command)
 
@@ -318,8 +318,12 @@ uv run evaluate-retrieval --eval-set configs/retrieval_eval_heldout.yaml \
 
 - Each parsed folder has its own index, under `_search_index/<parsed folder name>/`. The parsed
   folder itself is only read, so its owner does not need to share edit access.
-- A paper parsed again since it was indexed (a new parse generation) has its old passages
-  replaced on the next `build-index`.
+- `build-index` re-chunks a paper whenever its `parsed.json` changes in Drive (by checksum, so
+  any rewrite counts, even without a new parse generation), its title changes, or the chunking
+  settings or code change (`CHUNKING_VERSION` in `rag/chunking.py`). Its vectors are recomputed
+  only if the chunks actually differ. Papers removed from the parsed folder are dropped.
+- Table rows the parser renders (`contextual_tables`: caption plus "header: value" lines) are
+  indexed as extra table chunks next to the whole table; `embedding.table_rows` turns this off.
 
 - `parse-pdfs` updates the search index of the folder it parsed into once parsing is done, so
   newly parsed and re-parsed papers become searchable without a separate step. Pass

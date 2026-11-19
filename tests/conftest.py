@@ -1,5 +1,6 @@
 """Shared test helpers: an in-memory stand-in for the Drive folder and a keyword encoder."""
 
+import hashlib
 import itertools
 from collections.abc import Sequence
 from typing import Any
@@ -58,6 +59,14 @@ class FakeDrive:
             if not is_folder
         }
 
+    def file_checksums(self, _service: Any, file_name: str) -> dict[str, str]:
+        return {
+            file_id: hashlib.md5(self.contents[file_id]).hexdigest()
+            for entries in self.children.values()
+            for name, (file_id, is_folder) in entries.items()
+            if name == file_name and not is_folder
+        }
+
     def delete_file(self, _service: Any, file_id: str) -> None:
         self.contents.pop(file_id)
         for entries in self.children.values():
@@ -79,6 +88,7 @@ def fake_drive(monkeypatch: pytest.MonkeyPatch) -> FakeDrive:
         "download_file",
         "list_file_names",
         "delete_file",
+        "file_checksums",
     ):
         monkeypatch.setattr(drive_storage, name, getattr(drive, name))
     return drive

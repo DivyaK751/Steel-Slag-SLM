@@ -1,5 +1,7 @@
 """A FAISS index that keeps the chunk behind each vector, so searches return text and metadata."""
 
+from dataclasses import replace
+
 import faiss
 import numpy as np
 
@@ -47,6 +49,17 @@ class VectorStore:
     def paper_generations(self) -> dict[str, str]:
         """Map each indexed paper to the parse generation its chunks came from."""
         return {chunk.paper_id: chunk.parse_generation for chunk in self._chunks}
+
+    def paper_chunks(self, paper_id: str) -> list[Chunk]:
+        """Return the paper's chunks in the order they were added."""
+        return [chunk for chunk in self._chunks if chunk.paper_id == paper_id]
+
+    def relabel_paper(self, paper_id: str, generation: str) -> None:
+        """Record a new parse generation on a paper's chunks without re-embedding them."""
+        self._chunks = [
+            replace(chunk, parse_generation=generation) if chunk.paper_id == paper_id else chunk
+            for chunk in self._chunks
+        ]
 
     def remove_papers(self, paper_ids: set[str]) -> None:
         """Drop every chunk, and its vector, that belongs to one of the given papers."""
