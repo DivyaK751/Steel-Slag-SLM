@@ -19,7 +19,7 @@ on:
         default: "0"
         type: string
       apply_approved:
-        description: "Approved branch only: update existing parsed.json files (off = dry run)"
+        description: "Approved branch only: rewrite existing parsed.json files (off = dry run)"
         required: false
         default: false
         type: boolean
@@ -35,7 +35,7 @@ jobs:
   scan_approved:
     if: github.ref == 'refs/heads/exp/approved-table-backfill'
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 180  # ~820 papers to rewrite at ~4.4 s each; reruns resume safely
     env:
       DRIVE_FOLDER_ID: "11779zSN_Fb_ooiaHliXP9vebTo-EXdAt"
     steps:
@@ -60,6 +60,7 @@ jobs:
           .github/scripts/write_google_credentials.sh
 
       - name: Preview or apply approved table rows
+        shell: bash  # adds pipefail, so a failed scan still fails the step through tee
         env:
           PAPER_IDS: ${{ inputs.paper_ids }}
           APPLY_APPROVED: ${{ inputs.apply_approved }}
@@ -73,7 +74,16 @@ jobs:
             selection+=(--apply)
           fi
           uv run --locked --no-sync python -m steel_slag_slm.pipelines.scan_approved_tables \
-            --folder-id "$DRIVE_FOLDER_ID" "${selection[@]}"
+            --folder-id "$DRIVE_FOLDER_ID" "${selection[@]}" 2>&1 | tee scan.log
+
+      - name: Summarize table coverage
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### Approved table backfill"
+            grep -E "Table coverage:|complete:" scan.log | sed -E 's/^(INFO|ERROR) //; s/^/- /' || true
+          } >> "$GITHUB_STEP_SUMMARY"
 
   parse:
     if: github.ref != 'refs/heads/exp/approved-table-backfill' && !inputs.apply_approved

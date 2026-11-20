@@ -12,14 +12,47 @@ from googleapiclient.errors import HttpError
 
 from steel_slag_slm.config import load_drive_connection_settings
 from steel_slag_slm.data import drive_storage
-from steel_slag_slm.data.approved_table_text import enrich_approved_json
+from steel_slag_slm.data.approved_table_text import enrich_approved_json, uses_backfill_rows
 from steel_slag_slm.data.parsed_manifest import ParsedManifest
+from steel_slag_slm.data.table_evidence import TableEvidence
 
 logger = logging.getLogger(__name__)
 _APPROVED_FOLDER_NAME = "_parsed_approved"
 
 
-def _scan_paper(service: Any, paper_id: str, folder_id: str, *, apply_root_id: str | None) -> str:
+def _table_stats(tables: list[TableEvidence]) -> Counter[str]:
+    """Count rows, tables with rows, and each reason a table or row was left out."""
+    stats: Counter[str] = Counter(
+        rows=sum(len(table.rows) for table in tables),
+        tables=len(tables),
+        tables_with_rows=sum(bool(table.rows) for table in tables),
+    )
+    for table in tables:
+        for issue in table.issues:
+            kind = "blocked table" if issue.row_index is None else "skipped row"
+            stats[f"{kind}: {issue.reason}"] += 1
+    return stats
+
+
+def _describe(stats: Counter[str]) -> str:
+    reasons = {key: value for key, value in sorted(stats.items()) if ": " in key}
+    return f"{stats['rows']} rows from {stats['tables_with_rows']}/{stats['tables']} tables" + (
+        f"; left out {reasons}" if reasons else ""
+    )
+
+
+def _require_only_tables_changed(source: bytes, updated: bytes) -> None:
+    original_fields = json.loads(source, parse_float=Decimal)
+    updated_fields = json.loads(updated, parse_float=Decimal)
+    original_fields.pop("contextual_tables", None)
+    updated_fields.pop("contextual_tables")
+    if updated_fields != original_fields:
+        raise ValueError("Enrichment would change existing JSON fields")
+
+
+def _scan_paper(
+    service: Any, paper_id: str, folder_id: str, *, apply_root_id: str | None
+) -> tuple[str, Counter[str]]:
     file_ids = drive_storage.list_named_file_ids(service, folder_id, "parsed.json")
     if len(file_ids) != 1:
         raise ValueError(f"Expected one parsed.json, found {len(file_ids)}")
@@ -27,59 +60,44 @@ def _scan_paper(service: Any, paper_id: str, folder_id: str, *, apply_root_id: s
     original = ParsedManifest.model_validate_json(source)
     if original.openalex_id != paper_id:
         raise ValueError("Manifest paper ID does not match the folder name")
-    if "contextual_tables" in original.model_fields_set:
-        logger.info("%s: already has contextual_tables", paper_id)
-        return "already_has_field"
+    if original.contextual_tables is not None and not uses_backfill_rows(
+        original.contextual_tables
+    ):
+        logger.info("%s: contextual_tables come from a native parse; left unchanged", paper_id)
+        return "other_rows", Counter()
 
     updated = enrich_approved_json(source)
-    enriched = ParsedManifest.model_validate_json(updated)
-    tables = enriched.contextual_tables or []
-    issues = [issue for table in tables for issue in table.issues]
-    row_count = sum(len(table.rows) for table in tables)
-    figure_data_count = sum(bool(image.reading and image.reading.rows) for image in enriched.images)
-    for table in tables:
-        for issue in table.issues:
-            logger.warning(
-                "%s %s row %s: %s", paper_id, table.reference, issue.row_index, issue.reason
-            )
-    logger.info(
-        "%s: %d candidate rows across %d table blocks, %d issues, %d figures with data rows",
-        paper_id,
-        row_count,
-        len(tables),
-        len(issues),
-        figure_data_count,
-    )
-    if not tables and original.tables:
-        logger.warning("%s: saved tables have no content blocks with source locations", paper_id)
-        return "unsupported"
+    tables = ParsedManifest.model_validate_json(updated).contextual_tables or []
+    stats = _table_stats(tables)
+    logger.info("%s: %s", paper_id, _describe(stats))
     if not tables:
-        return "no_tables"
-    if not row_count:
-        return "unsupported"
-    if issues:
-        return "partial"
+        return "no_tables", stats
+    if updated == source:
+        return "up_to_date", stats
+    if not stats["rows"] and original.contextual_tables is None:
+        return "unsupported", stats
     if apply_root_id is None:
-        return "ready"
+        return "ready", stats
 
-    updated_fields = json.loads(updated, parse_float=Decimal)
-    updated_fields.pop("contextual_tables")
-    if updated_fields != json.loads(source, parse_float=Decimal):
-        raise ValueError("Enrichment would change existing JSON fields")
+    _require_only_tables_changed(source, updated)
     drive_storage.verify_named_folder(service, apply_root_id, _APPROVED_FOLDER_NAME)
     drive_storage.verify_named_folder(service, folder_id, paper_id, parent_id=apply_root_id)
     if drive_storage.list_named_file_ids(service, folder_id, "parsed.json") != file_ids:
         raise ValueError("parsed.json moved or became ambiguous; refusing to overwrite it")
     logger.info("%s: updating existing parsed.json (Drive ID %s)", paper_id, file_ids[0])
     drive_storage.replace_existing_json(service, file_ids[0], source, updated)
-    logger.info("%s: updated and verified %d rows; original fields unchanged", paper_id, row_count)
-    return "updated"
+    logger.info("%s: updated and verified; other fields unchanged", paper_id)
+    return "updated", stats
 
 
 def scan_approved_tables(
     service: Any, root_folder_id: str, paper_id: str | None = None, *, apply: bool = False
 ) -> Counter[str]:
-    """Scan direct OpenAlex paper folders, updating complete candidates only when requested."""
+    """Scan direct OpenAlex paper folders, rewriting only their existing parsed.json on apply.
+
+    Every table that renders is written, even when other tables in the paper cannot be; rows
+    from an older backfill version are re-rendered. Returns the count of each paper outcome.
+    """
     drive_storage.verify_named_folder(service, root_folder_id, _APPROVED_FOLDER_NAME)
     logger.info("Verified Drive folder %s (%s)", _APPROVED_FOLDER_NAME, root_folder_id)
     folders: defaultdict[str, list[str]] = defaultdict(list)
@@ -91,14 +109,16 @@ def scan_approved_tables(
         raise ValueError(f"No matching approved paper folders found for {paper_id or 'the scan'}")
 
     counts: Counter[str] = Counter()
+    totals: Counter[str] = Counter()
     for name, folder_ids in sorted(folders.items()):
         try:
             if len(folder_ids) != 1:
                 raise ValueError(f"Found {len(folder_ids)} folders with the same paper ID")
-            outcome = _scan_paper(
+            outcome, stats = _scan_paper(
                 service, name, folder_ids[0], apply_root_id=root_folder_id if apply else None
             )
             counts[outcome] += 1
+            totals += stats
         except HttpError as error:
             # Auth, quota and server errors must stop rather than produce a misleading report.
             if apply or error.resp.status != 404:
@@ -108,6 +128,7 @@ def scan_approved_tables(
         except ValueError as error:
             logger.error("%s: %s", name, str(error).splitlines()[0])
             counts["failed"] += 1
+    logger.info("Table coverage: %s", _describe(totals))
     return counts
 
 
@@ -118,7 +139,7 @@ def main() -> None:
     selection = parser.add_mutually_exclusive_group(required=True)
     selection.add_argument("--paper-id", help="Scan one OpenAlex paper folder")
     selection.add_argument("--all", action="store_true", help="Scan every approved paper folder")
-    parser.add_argument("--apply", action="store_true", help="Update complete candidates in Drive")
+    parser.add_argument("--apply", action="store_true", help="Rewrite existing parsed.json files")
     args = parser.parse_args()
     if not fullmatch(r"[A-Za-z0-9_-]+", args.folder_id):
         parser.error("--folder-id must be a Drive ID, not a URL")
@@ -138,7 +159,7 @@ def main() -> None:
     logger.info("%s complete: %s", mode, dict(sorted(counts.items())))
     if counts["failed"]:
         raise SystemExit(1)
-    if args.apply and args.paper_id and not counts["updated"] and not counts["already_has_field"]:
+    if args.apply and args.paper_id and not counts["updated"] and not counts["up_to_date"]:
         parser.exit(1, "Pilot was not eligible for an update; inspect the scan result.\n")
 
 

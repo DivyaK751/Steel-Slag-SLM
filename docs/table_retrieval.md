@@ -300,13 +300,51 @@ uv run python -m steel_slag_slm.pipelines.preview_approved_tables \
   /path/to/parsed.json /path/to/approved-with-rows.json
 ```
 
-The preview writes a new file and refuses to overwrite an existing one. It adds
-only `contextual_tables` using the saved Markdown and table locations. It does not
+The preview writes a new file and refuses to overwrite an existing one. It adds or
+re-renders only `contextual_tables`, using the saved Markdown and table locations. It does not
 reconstruct native cell spans, download PDFs, call Gemini, or modify Drive.
 Unsupported layouts are reported rather than inferred. Look under
 `images[].reading.columns` and `images[].reading.rows` for saved figure values
 and `contextual_tables[].rows[].text` for the new table passages. Some figures
 have descriptive readings but no data rows. This preview does not rebuild the index.
+
+### How rows are rendered from saved Markdown
+
+The output format is unchanged: one `contextual_tables` entry per table block,
+referenced as `approved-markdown:<content block index>`, with `rows[].text`
+passages and `issues`. Each table is now judged on its own, so one unreadable
+table no longer blocks the rest of its paper. The
+first version wrote only papers whose tables all rendered: 232 of 963.
+588 papers were skipped even though they already held 15,552 rendered rows.
+
+Each row passage is the table context, an optional group label, then one
+`header: value` line per non-blank cell. Original strings are kept.
+
+- **Context:** the linked caption (`Table 1`, `TABLE 1`, `Table-1.`, `TABLA 1`,
+  `Tab. 1`, roman numerals). Otherwise a "Table N" text block up to three blocks
+  above, then the nearest section heading, then `Table on page N`. Unnumbered
+  caption blocks are ignored because they often belong to a figure.
+- **Next-page continuations:** an uncaptioned table straight after a same-width
+  table on an earlier page, with no prose between, reuses that table's context
+  and header. Its first line is read as data unless it repeats the header.
+- **Headers:** columns blank throughout are dropped. A full-width title row, or
+  a caption Docling merged into every header cell, becomes context. A blank
+  header row takes the label row below it. A blank label continues the spanning
+  label on its left, and a label row under repeated labels completes their
+  paths (`UCS (MPa) - 28 d`). Labels still repeated get an ordinal (`Base [2]`).
+- **Rows:** blank cells are left out instead of dropping the row. A row whose
+  label spans it (alone in the first cell, or repeated in every cell as Docling
+  copies spans) becomes a `Group: <label>` line on the rows below it. A blank row label is reported
+  (`Blank row label`), not copied from the row above, because merged cells are
+  ambiguous in Markdown.
+- **Blocked tables** stay listed under `issues`: tables of contents
+  (`document_index` blocks or dot leaders), and uncaptioned reference lists or
+  grids with under 30% short measurements. Their Markdown stays searchable.
+
+On 11 skipped sample papers (140 tables), v1 wrote 0 rows and its rules would
+have rendered 509 per table. The current rules render 971 rows from 123 tables. Inferred
+captions can be wrong when Docling mislinks captions, and rows remain
+`unreviewed`.
 
 ### Approved Drive scan and backfill
 
@@ -320,23 +358,32 @@ secret; no local sign-in is needed.
 2. Pause other edits to `_parsed_approved` while applying. Rerun the same pilot
    with `apply_approved` checked. Look for `updated and verified` in the logs and
    inspect the existing `parsed.json` on Drive.
-3. Use `paper_ids=all` with `apply_approved` unchecked to review coverage. Then
-   use `paper_ids=all` with `apply_approved` checked to update ready papers.
+3. Use `paper_ids=all` with `apply_approved` unchecked to review coverage
+   (`ready`). Then use `paper_ids=all` with `apply_approved` checked.
 
-`max_papers` and `follow_up_runs` do not apply to the scanner.
+`max_papers` and `follow_up_runs` do not apply to the scanner. The run's
+**Summary** page shows the outcome counts and table coverage.
 
 Before listing papers, the scanner checks that Drive returns the configured
-ID as a non-trashed folder named `_parsed_approved`. It downloads only
-`parsed.json`, computes candidate rows in memory, and reports saved figures
-with data rows. It distinguishes complete candidates (`ready`), candidates
-with issues (`partial`), unsupported layouts,
-papers with no tables, and manifests that already have `contextual_tables`.
-Missing or duplicate manifests and mismatched paper IDs count as failures.
-Apply skips partial, unsupported, table-free, and already-enriched manifests.
-It rechecks the folder, file ID, and original contents before updating, and
-reads the same file back to verify the upload. Drive does not hold a lock
-between the check and upload, so do not edit those manifests concurrently.
-Updates are per paper: if a batch stops, prior verified updates remain saved.
+ID as a non-trashed folder named `_parsed_approved`. It downloads only each
+paper folder's existing `parsed.json` and renders rows in memory. It never
+creates, copies, moves or deletes Drive files. Outcomes per paper:
+
+- `updated`, or `ready` in a dry run: rows to add, or earlier backfill rows that
+  re-render differently. Papers with some blocked tables are included. A full
+  apply takes about an hour (job timeout 180 minutes).
+- `up_to_date`: re-rendering gives identical bytes, so reruns are safe.
+- `unsupported`: has tables, but none rendered and there were no earlier rows.
+- `no_tables`: no table blocks.
+- `other_rows`: `contextual_tables` came from a native parse; left unchanged.
+- `failed`: missing or duplicate manifests or folders, or mismatched paper IDs.
+
+Each log line lists rows, tables with rows and every reason something was left
+out. Apply checks that only `contextual_tables` changes. It rechecks the
+folders, file ID and original contents, updates that file's contents by ID,
+and reads it back. Drive does not hold a lock between the check and upload,
+so do not edit those manifests concurrently. Updates are per paper: if a
+batch stops, prior verified updates remain saved and a rerun skips them.
 The job does not change the Drive index or rebuild embeddings.
 
 ## GitHub Actions: publish contextual rows to Drive v3
