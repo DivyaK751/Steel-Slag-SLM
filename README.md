@@ -334,6 +334,25 @@ uv run evaluate-retrieval --eval-set configs/retrieval_eval_heldout.yaml \
 - Settings are in the `embedding:` section of `configs/base.yaml`. Design notes are in
   [docs/adr/003-semantic-search-index.md](docs/adr/003-semantic-search-index.md).
 
+## Asking a question
+
+A small open model reads each message into a form (what it asks for, which table columns, which
+filters, whether it is about the user's slag); fixed rules then run the similar-slags tool, the
+lookup tool and paper search as needed, and package their results as cited evidence for the
+answer model.
+
+```bash
+ollama pull qwen2.5:3b          # once; the reader model, served by Ollama on localhost:11434
+uv run ask "What 28-day strength do concretes with 20% BOF slag reach?"
+uv run ask "How reactive is my slag?" --profile my_slag.json
+```
+
+`my_slag.json` holds the user's slag, e.g.
+`{"steel_slag_type": "EAF", "oxides": {"cao_pct": 38, "sio2_pct": 16}, "mineral_phases": ["belite"]}`.
+The command prints the form, the tools it ran and the evidence. Settings are in the
+`question_routing:` section of `configs/base.yaml`; design notes are in
+[docs/adr/004-question-routing.md](docs/adr/004-question-routing.md).
+
 ## Figure extraction (local)
 
 `extract-figures` pulls the figures (plots, charts, process diagrams, micrographs) out of PDFs on
