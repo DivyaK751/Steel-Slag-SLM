@@ -4,7 +4,7 @@ import json
 from hashlib import sha256
 from importlib.metadata import version
 from pathlib import PurePosixPath
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -16,6 +16,8 @@ PIPELINE_REVISION = "unified_pdf_v1"
 PositiveInt = Annotated[int, Field(gt=0, strict=True)]
 Digest = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
 Generation = Annotated[str, Field(pattern=r"^[0-9a-f]{32}$")]
+# Written by the retired per-row table experiment; table descriptions replace it
+RETIRED_FIELDS = frozenset({"contextual_tables"})
 
 
 class Placement(BaseModel):
@@ -118,6 +120,14 @@ class ParsedManifest(BaseModel):
     content_blocks: list[ContentBlock]
     images: list[FigureReference]
 
+    @model_validator(mode="before")
+    @classmethod
+    def drop_retired_fields(cls, data: Any) -> Any:
+        """Read manifests the retired row backfill wrote, without keeping its rows."""
+        if isinstance(data, dict) and not RETIRED_FIELDS.isdisjoint(data):
+            return {key: value for key, value in data.items() if key not in RETIRED_FIELDS}
+        return data
+
     @model_validator(mode="after")
     def validate_locations(self) -> "ParsedManifest":
         placements = [placement for block in self.content_blocks for placement in block.placements]
@@ -142,6 +152,12 @@ class ParsedManifest(BaseModel):
                 raise ValueError("Figure filename must identify its parse generation")
 
         return self
+
+
+def has_retired_fields(content: bytes) -> bool:
+    """Return whether a parsed.json still holds fields that a rewrite should remove."""
+    record = json.loads(content)
+    return isinstance(record, dict) and not RETIRED_FIELDS.isdisjoint(record)
 
 
 def parser_revision(settings: FigureExtractionSettings) -> str:
