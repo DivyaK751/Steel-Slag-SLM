@@ -348,11 +348,12 @@ uv run describe-tables --check                     # every table described? (no 
 uv run build-index --rebuild                       # then rebuild the index to use them
 ```
 
-- On GitHub, run **Actions → Describe parsed tables**. It checks one paper by default; clear
-  `max_papers` for all of them. It stops after 150 minutes or at the budget and saves what it
-  described, so run it again until "still without a description" is gone from the summary,
-  then once with `check_only` ticked: it passes only when every table is described. It never
-  runs while the parsing workflow does, since both rewrite `parsed.json`.
+- On GitHub, run **Actions → Describe parsed tables** with no inputs filled to describe every
+  parsed paper (fill `paper_ids` to try a few first). Each run describes for up to 320 minutes
+  or `max_gemini_usd`, then checks every paper; while tables are left it starts the next run
+  itself, up to `runs_left` more, and stops early if a run describes nothing. The last run
+  passes only when every table is described. `check_only` just checks. It never runs while
+  the parsing workflow does, since both rewrite `parsed.json`.
 - The workflow bills Gemini to the Google Cloud project of the member picked in `billed_to`,
   never the team's: it reads that member's `GOOGLE_CLOUD_PROJECT_<NAME>` and
   `GCP_SERVICE_ACCOUNT_JSON_<NAME>` secrets and stops if either is missing, if the project is

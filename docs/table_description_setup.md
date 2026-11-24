@@ -99,5 +99,7 @@ you; they don't stop spending. The workflow's `max_gemini_usd` stops it at its o
 ## Each run
 
 **Actions → Describe parsed tables → Run workflow** on `main`, with `billed_to` set to the
-paying member. The job summary's first line says whose project paid. After the first run,
-check **Billing → Reports** filtered to your project: a Vertex AI charge appears within a day.
+paying member. Left blank, `paper_ids` and `max_papers` mean every parsed paper, and the
+workflow keeps starting new runs (up to `runs_left`) until every table is described. The job
+summary's first line says whose project paid. After the first run, check **Billing →
+Reports** filtered to your project: a Vertex AI charge appears within a day.

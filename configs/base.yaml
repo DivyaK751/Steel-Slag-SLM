@@ -445,8 +445,9 @@ table_description:
   model: null  # null = use llm.model
   # Describing a table is reading, not reasoning; low thinking keeps each call cheap
   thinking_level: low
-  # Gemini calls in flight at once; raise slowly, Vertex quotas are per minute
-  max_concurrency: 4
+  # Gemini calls in flight at once; raise slowly, Vertex quotas are per minute. 8, as for
+  # screening: a pilot call took about 20 s, so 4 would need several runs for the corpus
+  max_concurrency: 8
   # A call taking longer is skipped and reported; the next run retries that table
   call_timeout_s: 120
   # describe-tables stops calling Gemini once a run's estimated cost reaches this (US$); a

@@ -1,8 +1,9 @@
 name: Describe parsed tables
 
 # Started by hand: Gemini describes the tables of papers that are already parsed and stores
-# each description in that paper's parsed.json. No PDF is parsed again. A rerun continues
-# with the tables that are still undescribed, so run it again until the summary shows none.
+# each description in that paper's parsed.json. No PDF is parsed again. Each run then checks
+# every paper; while tables are left, it starts the next run itself (at most runs_left more),
+# so one click describes the whole folder.
 on:
   workflow_dispatch:
     inputs:
@@ -14,12 +15,12 @@ on:
       max_papers:
         description: "Check at most this many papers, in ID order; blank means all"
         required: false
-        default: "1"
+        default: ""
         type: string
       max_gemini_usd:
-        description: "Stop calling Gemini at this estimated cost (US$); blank means the configured cap"
+        description: "Stop calling Gemini in this run at this estimated cost (US$)"
         required: false
-        default: "20"
+        default: "100"
         type: string
       parsed_folder:
         description: "Parsed Drive folder; blank means the configured one (_parsed_approved)"
@@ -37,9 +38,15 @@ on:
         default: KANE
         type: choice
         options: [YASSINE, DIVYA, LAKSHYA, ANISHA, KANE]
+      runs_left:
+        description: "If tables are left, start up to this many more runs automatically (0: just this one)"
+        required: false
+        default: "5"
+        type: string
 
 permissions:
   contents: read
+  actions: write  # to start the next run while tables are left
 
 # The parsing workflow's group: both rewrite parsed.json, so they must never run at once
 concurrency:
@@ -57,11 +64,18 @@ env:
   GOOGLE_CLOUD_LOCATION: global
   GCP_SERVICE_ACCOUNT_JSON: ${{ secrets[format('GCP_SERVICE_ACCOUNT_JSON_{0}', inputs.billed_to)] }}
   TEAM_GCP_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+  PAPER_IDS: ${{ inputs.paper_ids }}
+  MAX_PAPERS: ${{ inputs.max_papers }}
+  MAX_GEMINI_USD: ${{ inputs.max_gemini_usd }}
+  PARSED_FOLDER: ${{ inputs.parsed_folder }}
+  CHECK_ONLY: ${{ inputs.check_only }}
+  RUNS_LEFT: ${{ inputs.runs_left }}
 
 jobs:
   describe:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    # GitHub stops a job at 6 hours: describing stops at 320 minutes, leaving time to check
+    timeout-minutes: 355
     steps:
       - uses: actions/checkout@v4
         with:
@@ -102,35 +116,11 @@ jobs:
           echo "$message"
           echo "$message" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Write Google credentials
-        run: .github/scripts/write_google_credentials.sh
-
-      - name: Install project dependencies
-        run: uv sync --locked --no-dev
-
-      - name: Describe tables
-        shell: bash  # adds pipefail, so a failed run still fails the step through tee
-        env:
-          PAPER_IDS: ${{ inputs.paper_ids }}
-          MAX_PAPERS: ${{ inputs.max_papers }}
-          MAX_GEMINI_USD: ${{ inputs.max_gemini_usd }}
-          PARSED_FOLDER: ${{ inputs.parsed_folder }}
-          CHECK_ONLY: ${{ inputs.check_only }}
+      - name: Read the inputs
+        shell: bash
         run: |
-          # Stop sending tables after 150 minutes, so the run saves its work before the timeout
-          args=(--max-minutes 150)
-          if [[ -n "$MAX_GEMINI_USD" ]]; then
-            args+=(--max-gemini-usd "$MAX_GEMINI_USD")
-          fi
-          if [[ -n "$MAX_PAPERS" ]]; then
-            args+=(--max-papers "$MAX_PAPERS")
-          fi
-          if [[ -n "$PARSED_FOLDER" ]]; then
-            args+=(--parsed-folder "$PARSED_FOLDER")
-          fi
-          if [[ "$CHECK_ONLY" == "true" ]]; then
-            args+=(--check)
-          fi
+          # The papers to work on, one argument per line, shared by the describe and check steps
+          scope=()
           if [[ -n "$PAPER_IDS" ]]; then
             read -r -a ids <<< "$PAPER_IDS"
             for id in "${ids[@]}"; do
@@ -139,16 +129,97 @@ jobs:
                 exit 1
               fi
             done
-            args+=(--paper-ids "${ids[@]}")
+            scope+=(--paper-ids "${ids[@]}")
           fi
-          uv run --locked --no-sync describe-tables "${args[@]}" 2>&1 | tee describe.log
+          if [[ -n "$MAX_PAPERS" ]]; then
+            scope+=(--max-papers "$MAX_PAPERS")
+          fi
+          if [[ -n "$PARSED_FOLDER" ]]; then
+            scope+=(--parsed-folder "$PARSED_FOLDER")
+          fi
+          if [[ ! "$RUNS_LEFT" =~ ^[0-9]+$ ]]; then
+            echo "::error::runs_left must be a whole number, not '$RUNS_LEFT'"
+            exit 1
+          fi
+          # An empty list must leave the file empty: printf would still write one blank line
+          : > "$RUNNER_TEMP/scope_args"
+          if [ ${#scope[@]} -gt 0 ]; then
+            printf '%s\n' "${scope[@]}" > "$RUNNER_TEMP/scope_args"
+          fi
+
+      - name: Write Google credentials
+        run: .github/scripts/write_google_credentials.sh
+
+      - name: Install project dependencies
+        run: uv sync --locked --no-dev
+
+      - name: Describe tables
+        if: ${{ !inputs.check_only }}
+        shell: bash
+        run: |
+          mapfile -t scope < "$RUNNER_TEMP/scope_args"
+          args=(--max-minutes 320)
+          if [[ -n "$MAX_GEMINI_USD" ]]; then
+            args+=(--max-gemini-usd "$MAX_GEMINI_USD")
+          fi
+          # A failed paper doesn't stop the job: the check below decides what happens next
+          set +e
+          uv run --locked --no-sync describe-tables "${args[@]}" "${scope[@]}" 2>&1 | tee describe.log
+          echo "describe-tables exited with ${PIPESTATUS[0]}"
+          exit 0
+
+      - name: Check every table
+        id: check
+        shell: bash
+        run: |
+          mapfile -t scope < "$RUNNER_TEMP/scope_args"
+          set +e
+          uv run --locked --no-sync describe-tables --check "${scope[@]}" 2>&1 | tee check.log
+          if [ "${PIPESTATUS[0]}" = 0 ]; then complete=true; else complete=false; fi
+          echo "complete=$complete" >> "$GITHUB_OUTPUT"
+          exit 0
 
       - name: Summarize the run
         if: always()
         shell: bash
         run: |
           {
-            echo '```'
-            sed -n '/^Table descriptions (Drive folder/,$p' describe.log 2>/dev/null || true
-            echo '```'
+            for log in describe.log check.log; do
+              [ -f "$log" ] || continue
+              echo '```'
+              sed -n '/^Table descriptions (Drive folder/,$p' "$log"
+              echo '```'
+            done
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Finish, or start the next run
+        shell: bash
+        env:
+          COMPLETE: ${{ steps.check.outputs.complete }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          note() { echo "$1"; echo "$1" >> "$GITHUB_STEP_SUMMARY"; }
+          if [ "$COMPLETE" = true ]; then
+            note "Every table of the papers checked has a description."
+            exit 0
+          fi
+          if [ "$CHECK_ONLY" = true ]; then
+            echo "::error::Some tables still have no description (see the check above)."
+            exit 1
+          fi
+          described=$(awk '/described in this run/ { print $1; exit }' describe.log 2>/dev/null || true)
+          # No table described and no early stop: the tables left fail every time, so stop here
+          if [ "${described:-0}" = 0 ] && ! grep -q '^Stopped early' describe.log 2>/dev/null; then
+            { grep 'Could not describe' describe.log 2>/dev/null || true; } \
+              | sed 's/.*Could not describe //' | head -50
+            echo "::error::This run described no table; see the lines above, or the describe step's log."
+            exit 1
+          fi
+          if [ "$RUNS_LEFT" -le 0 ]; then
+            echo "::error::Tables are left and no automatic runs remain; start the workflow again."
+            exit 1
+          fi
+          gh workflow run describe_tables.yml --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME" \
+            -f "paper_ids=$PAPER_IDS" -f "max_papers=$MAX_PAPERS" -f "max_gemini_usd=$MAX_GEMINI_USD" \
+            -f "parsed_folder=$PARSED_FOLDER" -f "billed_to=$BILLED_TO" -f "runs_left=$((RUNS_LEFT - 1))"
+          note "Tables are left: started the next run ($((RUNS_LEFT - 1)) more allowed after it)."
