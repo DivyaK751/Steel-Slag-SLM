@@ -1,0 +1,94 @@
+# Typical composition and mineral phases of each steel slag type, as given by Keith (CNS).
+# Used to judge similarity (same type, oxides within range, shared phases) and to flag values
+# outside the typical range. All oxide values are wt%.
+#
+# Oxide keys are slag-catalogue columns. total_fe2o3_pct is all iron as Fe2O3
+# (Fe2O3 + FeO x 1.11); Keith gives iron as one combined "FeO / Fe2O3" range.
+# avg_min / avg_max are the typical average where Keith gave one (equal for a single value).
+
+slag_types:
+  EAF:
+    label: EAF slag
+    process: Primary scrap melting; oxidizing
+    oxides:
+      cao_pct: {min: 22, max: 60, avg_min: 35, avg_max: 40}
+      total_fe2o3_pct: {min: 10, max: 40, avg_min: 25, avg_max: 30}
+      sio2_pct: {min: 6, max: 34, avg_min: 15, avg_max: 15}
+      mgo_pct: {min: 3, max: 13}
+      al2o3_pct: {min: 3, max: 14}
+      mno_pct: {min: 2, max: 8}
+      cr2o3_pct: {min: 0, max: 3, note: "trace to 3%"}
+      p2o5_pct: {min: 0, max: 3, note: "trace to 3%"}
+    mineral_phases:
+      - Wüstite
+      - Dicalcium silicate
+      - Brownmillerite
+      - Gehlenite
+      - Åkermanite
+      - Spinel
+      - Merwinite
+      - Periclase
+
+  BOF:
+    label: BOF slag
+    process: Primary hot metal refining; strongly oxidizing
+    oxides:
+      cao_pct: {min: 40, max: 60}
+      total_fe2o3_pct: {min: 15, max: 35}
+      sio2_pct: {min: 8, max: 20}
+      mgo_pct: {min: 3, max: 10}
+      mno_pct: {min: 2, max: 8}
+      al2o3_pct: {min: 1, max: 5}
+      p2o5_pct: {min: 1, max: 3}
+    mineral_phases:
+      - Dicalcium silicate
+      - Alite
+      - Wüstite
+      - Srebrodolskite
+      - Brownmillerite
+      - Free lime
+      - Portlandite
+      - Periclase
+
+  # Our extraction vocabulary calls LMF slag "Ladle"
+  Ladle:
+    label: LMF (ladle) slag
+    process: Secondary refining; deoxidation and desulfurization
+    oxides:
+      cao_pct: {min: 45, max: 60}
+      al2o3_pct: {min: 15, max: 35, note: "Al-killed steel"}
+      sio2_pct: {min: 3, max: 25, note: "higher in Si-killed steel"}
+      mgo_pct: {min: 5, max: 12}
+      total_fe2o3_pct: {min: 0, max: 3, note: "less than 2-3%"}
+      mno_pct: {min: 0, max: 2, note: "less than 1-2%"}
+      caf2_and_s_pct: {min: 1, max: 5, note: "CaF2 and S together"}
+    mineral_phases:
+      - Mayenite
+      - Tricalcium aluminate
+      - Dicalcium silicate
+      - Periclase
+      - Merwinite
+      - Gehlenite
+      - Oldhamite
+      - Fluorite
+
+# Every name a paper may use for each phase, mapped to one standard name. Matching ignores case.
+# Bare oxide formulas (FeO, MgO, CaO, CaF2) are left out on purpose: in notes they usually
+# describe chemistry, not a crystalline phase.
+phase_names:
+  Dicalcium silicate: [dicalcium silicate, larnite, belite, C2S, β-C2S, γ-C2S, beta-C2S, gamma-C2S, Ca2SiO4, calcio-olivine]
+  Alite: [alite, C3S, Ca3SiO5, tricalcium silicate, hatrurite]
+  Wüstite: [wüstite, wustite, wuestite, magnesiowüstite, magnesiowustite, RO phase, RO-phase, (Fe,Mg)O]
+  Brownmillerite: [brownmillerite, C4AF, Ca2(Al,Fe)2O5, Ca2(Fe,Al)2O5, tetracalcium aluminoferrite]
+  Srebrodolskite: [srebrodolskite, C2F, Ca2Fe2O5, dicalcium ferrite]
+  Free lime: [free lime, f-CaO, free CaO, fCaO]
+  Portlandite: [portlandite, Ca(OH)2, calcium hydroxide]
+  Periclase: [periclase, free MgO, f-MgO]
+  Gehlenite: [gehlenite, Ca2Al2SiO7, C2AS]
+  Åkermanite: [åkermanite, akermanite, Ca2MgSi2O7]
+  Spinel: [spinel, MgAl2O4, magnesiochromite, MgCr2O4, magnetite, Fe3O4]
+  Merwinite: [merwinite, Ca3Mg(SiO4)2, C3MS2]
+  Mayenite: [mayenite, C12A7, Ca12Al14O33]
+  Tricalcium aluminate: [tricalcium aluminate, C3A, Ca3Al2O6]
+  Oldhamite: [oldhamite, CaS]
+  Fluorite: [fluorite]
