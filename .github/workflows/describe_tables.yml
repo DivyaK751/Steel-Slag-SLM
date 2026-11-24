@@ -26,6 +26,11 @@ on:
         required: false
         default: ""
         type: string
+      check_only:
+        description: "Only check that every table has a description (no Gemini, no writes)"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -82,6 +87,7 @@ jobs:
           MAX_PAPERS: ${{ inputs.max_papers }}
           MAX_GEMINI_USD: ${{ inputs.max_gemini_usd }}
           PARSED_FOLDER: ${{ inputs.parsed_folder }}
+          CHECK_ONLY: ${{ inputs.check_only }}
         run: |
           # Stop sending tables after 150 minutes, so the run saves its work before the timeout
           args=(--max-minutes 150)
@@ -93,6 +99,9 @@ jobs:
           fi
           if [[ -n "$PARSED_FOLDER" ]]; then
             args+=(--parsed-folder "$PARSED_FOLDER")
+          fi
+          if [[ "$CHECK_ONLY" == "true" ]]; then
+            args+=(--check)
           fi
           if [[ -n "$PAPER_IDS" ]]; then
             read -r -a ids <<< "$PAPER_IDS"

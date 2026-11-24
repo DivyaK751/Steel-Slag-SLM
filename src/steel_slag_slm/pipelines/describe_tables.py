@@ -25,7 +25,7 @@ from steel_slag_slm.data.parsed_manifest import (
     has_retired_fields,
 )
 from steel_slag_slm.data.parsed_publication import publish_table_descriptions
-from steel_slag_slm.data.table_context import tables_to_describe
+from steel_slag_slm.data.table_context import is_describable, tables_to_describe
 from steel_slag_slm.exceptions import AgentOutputError
 from steel_slag_slm.llm.costs import estimate_cost_usd
 from steel_slag_slm.llm.prompts import PromptTemplate
@@ -59,6 +59,7 @@ class _Run:
         max_run_usd: float | None,
         deadline: float | None,
         titles: Mapping[str, str],
+        check_only: bool,
     ) -> None:
         self.service = service
         self.runner = runner
@@ -67,6 +68,7 @@ class _Run:
         self.max_run_usd = max_run_usd
         self.deadline = deadline
         self.titles = titles
+        self.check_only = check_only
         self.calls = asyncio.Semaphore(settings.max_concurrency)
         self.drive = asyncio.Lock()  # the Drive client is not thread-safe: one call at a time
         self.report = TableDescriptionReport()
@@ -100,6 +102,7 @@ def run_table_description(
     max_run_usd: float | None = None,
     max_seconds: float | None = None,
     titles: Mapping[str, str] | None = None,
+    check_only: bool = False,
 ) -> TableDescriptionReport:
     """Describe every undescribed table of the parsed folder's papers, or only of paper_ids.
 
@@ -108,6 +111,8 @@ def run_table_description(
     parsed.json changed while its tables were described is left for the next run. Stops
     sending tables once max_run_usd is spent, max_seconds have passed, or Gemini keeps failing.
     titles maps paper IDs to the titles Gemini is told, so it knows what each study is about.
+    With check_only, only count the tables still without a description and the papers still
+    holding retired table rows; Gemini is not called and nothing is written.
 
     Raises:
         ValueError: If max_papers is not positive or a requested paper is not in the index.
@@ -120,7 +125,7 @@ def run_table_description(
     if max_papers is not None:
         papers = papers[:max_papers]
     deadline = time.monotonic() + max_seconds if max_seconds is not None else None
-    run = _Run(service, runner, prompt, settings, max_run_usd, deadline, titles or {})
+    run = _Run(service, runner, prompt, settings, max_run_usd, deadline, titles or {}, check_only)
     logger.info("Checking the tables of %d parsed papers", len(papers))
     results = asyncio.run(
         gather_bounded(papers, lambda paper: _describe_paper(run, *paper), PAPERS_IN_FLIGHT)
@@ -166,19 +171,33 @@ async def _describe_paper(run: _Run, paper_id: str, entry: dict[str, Any]) -> st
     tables = tables_to_describe(
         manifest, run.prompt.version, run.settings.context_max_chars, run.titles.get(paper_id, "")
     )
+    outcomes = run.report.outcomes
+    _add(outcomes, tables_total=sum(is_describable(block) for block in manifest.content_blocks))
+    if run.check_only:
+        _add(outcomes, tables_missing=len(tables), retired_rows_left=has_retired_fields(content))
+        return "incomplete" if tables else "complete"
+
     described = await asyncio.gather(*(_describe_one(run, table) for table in tables))
     new = [stored for stored in described if stored is not None]
     if not new and not has_retired_fields(content):
+        _add(outcomes, tables_missing=len(tables))
         return "up_to_date" if not tables else "not_described"
 
     # Optimistic check: another job (e.g. figure reading) may have rewritten the file meanwhile
     current = await run.drive_call(drive_storage.download_file, entry["json_file_id"])
     if current != content:
         logger.warning("%s: parsed.json changed during the run; next run retries it", paper_id)
+        _add(outcomes, tables_missing=len(tables))
         return "changed_during_run"
     await run.drive_call(publish_table_descriptions, entry["paper_folder_id"], manifest, new)
+    _add(outcomes, tables_missing=len(tables) - len(new))
     logger.info("%s: described %d of %d tables", paper_id, len(new), len(tables))
     return "described" if new else "cleaned"
+
+
+def _add(outcomes: Counter[str], **counts: int) -> None:
+    """Add the nonzero counts, so the report lists only what happened."""
+    outcomes.update({key: count for key, count in counts.items() if count})
 
 
 async def _describe_one(run: _Run, table: TableToDescribe) -> StoredTableDescription | None:
@@ -215,6 +234,9 @@ async def _describe_one(run: _Run, table: TableToDescribe) -> StoredTableDescrip
 
 
 _PAPER_OUTCOMES = (
+    ("complete", "every table described"),
+    ("incomplete", "some tables not described yet"),
+    ("retired_rows_left", "still holding retired table rows"),
     ("described", "described"),
     ("cleaned", "retired table rows removed"),
     ("up_to_date", "already up to date"),
@@ -224,9 +246,11 @@ _PAPER_OUTCOMES = (
     ("failed", "failed"),
 )
 _TABLE_OUTCOMES = (
-    ("tables_described", "described"),
+    ("tables_total", "in the papers checked"),
+    ("tables_described", "described in this run"),
     ("tables_failed", "failed (retried next run)"),
     ("tables_not_started", "not started (run stopped early)"),
+    ("tables_missing", "still without a description"),
 )
 
 
