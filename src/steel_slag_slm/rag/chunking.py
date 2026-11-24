@@ -225,7 +225,7 @@ def table_texts(
     lines = compact_markdown_table(table).splitlines()
     first_row = next((i for i, line in enumerate(lines) if is_table_row(line)), len(lines))
     caption = [line for line in lines[:first_row] if line.strip()]
-    rows = lines[first_row:]
+    rows = [line for line in lines[first_row:] if line.strip()]
     described = _description_lines(
         description, _table_fits(max_chars, tokens, MAX_DESCRIPTION_SHARE)
     )
