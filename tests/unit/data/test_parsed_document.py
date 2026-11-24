@@ -1,8 +1,11 @@
 import json
+from typing import Any
 
 import pytest
 
 from steel_slag_slm.data.parsed_document import parse_parsed_json
+from steel_slag_slm.data.parsed_manifest import table_text_sha256
+from steel_slag_slm.schemas import TableDescription
 
 
 def _record(**overrides: object) -> bytes:
@@ -96,3 +99,39 @@ def test_parse_parsed_json_rejects_a_placement_without_a_page_number() -> None:
     bad = dict(BLOCK, placements=[{"bbox": [1, 2, 3, 4]}])
     with pytest.raises(ValueError, match="page number"):
         parse_parsed_json(_record_with_blocks([bad]))
+
+
+def _described(record: dict[str, Any], **overrides: object) -> bytes:
+    stored = {
+        "block_index": 1,
+        "table_sha256": table_text_sha256(record["content_blocks"][1]["text"]),
+        "prompt_version": 1,
+        "description": {"summary": "Oxides of the steel slag."},
+        **overrides,
+    }
+    return json.dumps({**record, "table_descriptions": [stored]}).encode()
+
+
+def test_parse_parsed_json_reads_each_table_description_by_block(
+    manifest_record: dict[str, Any],
+) -> None:
+    paper = parse_parsed_json(_described(manifest_record))
+
+    assert paper.table_descriptions == {1: TableDescription(summary="Oxides of the steel slag.")}
+
+
+def test_parse_parsed_json_has_no_descriptions_for_papers_never_described() -> None:
+    assert parse_parsed_json(_record()).table_descriptions == {}
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [{"table_sha256": "f" * 64}, {"block_index": 0}, {"description": {"columns": "bad"}}],
+)
+def test_parse_parsed_json_skips_a_stale_or_unreadable_description(
+    manifest_record: dict[str, Any], overrides: dict[str, object]
+) -> None:
+    paper = parse_parsed_json(_described(manifest_record, **overrides))
+
+    assert paper.table_descriptions == {}
+    assert len(paper.content_blocks) == 2  # the paper itself is still indexed

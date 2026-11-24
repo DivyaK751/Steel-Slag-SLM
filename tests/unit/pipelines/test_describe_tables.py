@@ -1,4 +1,5 @@
 import json
+from collections import Counter
 from typing import Any
 
 import pytest
@@ -161,3 +162,22 @@ def test_skipped_papers_are_not_checked(
 
     assert _run().outcomes == {}
     assert described == []
+
+
+def test_summary_lists_nonzero_outcomes_cost_and_why_the_run_stopped() -> None:
+    report = describe_tables.TableDescriptionReport(
+        outcomes=Counter(described=3, failed=1, tables_described=20),
+        spent_usd=0.0412,
+        stop_reason="reached the time limit for this run",
+    )
+
+    assert describe_tables.format_description_summary(report, "_parsed_approved") == (
+        "Table descriptions (Drive folder _parsed_approved/)\n"
+        "Papers:\n"
+        "      3  described\n"
+        "      1  failed\n"
+        "Tables:\n"
+        "     20  described\n"
+        "Gemini cost: about $0.04\n"
+        "Stopped early: reached the time limit for this run; rerun to continue"
+    )

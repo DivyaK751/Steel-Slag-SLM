@@ -21,6 +21,7 @@ from steel_slag_slm.agents.extraction_judge import build_adjudicator_agent, buil
 from steel_slag_slm.agents.figure_reader import build_figure_reader_agent
 from steel_slag_slm.agents.relevance_screener import build_screener_agent
 from steel_slag_slm.agents.runner import build_runner
+from steel_slag_slm.agents.table_describer import build_table_describer_agent
 from steel_slag_slm.config import (
     RETRIEVAL_EVAL_PATH,
     DataExtractionSettings,
@@ -43,6 +44,7 @@ from steel_slag_slm.config import (
     load_settings,
     load_slag_catalogue_settings,
     load_slag_reference,
+    load_table_description_settings,
 )
 from steel_slag_slm.data import parsed_index
 from steel_slag_slm.data.drive_storage import (
@@ -85,6 +87,10 @@ from steel_slag_slm.pipelines.background_figure_reader import BackgroundFigureRe
 from steel_slag_slm.pipelines.build_index import run_build_index
 from steel_slag_slm.pipelines.build_slag_catalogue import run_catalogue_build
 from steel_slag_slm.pipelines.compare_extraction import compare_runs
+from steel_slag_slm.pipelines.describe_tables import (
+    format_description_summary,
+    run_table_description,
+)
 from steel_slag_slm.pipelines.evaluate_retrieval import (
     format_retrieval_report,
     run_corpus_eval,
@@ -453,6 +459,84 @@ def parse_pdfs() -> None:
         raise SystemExit(
             f"{unindexed} parsed paper(s) could not be indexed; see the warnings above"
         )
+
+
+def describe_tables() -> None:
+    """Describe the tables of parsed papers with Gemini and store them in each parsed.json."""
+    parser = argparse.ArgumentParser(description=describe_tables.__doc__)
+    parser.add_argument(
+        "--parsed-folder",
+        default=None,
+        help="parsed Drive folder whose papers to describe (default: the configured one)",
+    )
+    parser.add_argument(
+        "--paper-ids",
+        nargs="+",
+        default=None,
+        help="describe only these papers' tables (default: every parsed paper)",
+    )
+    parser.add_argument(
+        "--max-papers",
+        type=int,
+        default=None,
+        help="check at most this many papers, in ID order (default: all)",
+    )
+    parser.add_argument(
+        "--max-gemini-usd",
+        type=float,
+        default=None,
+        help=(
+            "stop calling Gemini once this run's estimated cost reaches this "
+            "(default: table_description.max_run_usd in configs/base.yaml)"
+        ),
+    )
+    parser.add_argument(
+        "--max-minutes",
+        type=float,
+        default=None,
+        help="stop sending tables after this many minutes, so a CI job ends cleanly",
+    )
+    args = parser.parse_args()
+    if args.max_papers is not None and args.max_papers <= 0:
+        parser.error("--max-papers must be greater than zero")
+    for flag, value in (
+        ("--max-gemini-usd", args.max_gemini_usd),
+        ("--max-minutes", args.max_minutes),
+    ):
+        if value is not None and value <= 0:
+            parser.error(f"{flag} must be greater than zero")
+    _setup_logging()
+    _quiet_gemini_logs()
+
+    gcp = load_gcp_settings()
+    settings = load_table_description_settings()
+    folder_name = args.parsed_folder or load_pdf_parsing_settings().output_folder_name
+    drive_service, parsed_folder_id = _connect_to_parsed_folder(folder_name)
+    if gcp.credentials_file:
+        # Set only after Drive signs in, as in extract-data: Gemini uses ADC
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(gcp.credentials_file)
+    prompt = load_prompt(settings.prompt_name)
+    runner = build_runner(build_table_describer_agent(settings, prompt))
+    try:
+        report = run_table_description(
+            drive_service,
+            parsed_folder_id,
+            load_pdf_parsing_settings().index_file_name,
+            runner,
+            prompt,
+            settings,
+            paper_ids=args.paper_ids,
+            max_papers=args.max_papers,
+            max_run_usd=(
+                args.max_gemini_usd if args.max_gemini_usd is not None else settings.max_run_usd
+            ),
+            max_seconds=args.max_minutes * 60 if args.max_minutes is not None else None,
+        )
+    except ValueError as error:
+        parser.error(str(error))
+    print(format_description_summary(report, folder_name))
+    if report.outcomes["failed"]:
+        raise SystemExit(f"{report.outcomes['failed']} paper(s) failed; rerun to retry them")
 
 
 def export_parsed() -> None:
