@@ -116,6 +116,7 @@ from steel_slag_slm.pipelines.search_index import run_search
 from steel_slag_slm.pipelines.sync_registry import run_registry_sync
 from steel_slag_slm.rag.embeddings import Embedder
 from steel_slag_slm.rag.retrieval import CrossEncoderScorer, TwoStageRetriever
+from steel_slag_slm.rag.token_budget import load_token_budget
 from steel_slag_slm.schemas import ChunkKind, ExtractionRun
 
 logger = logging.getLogger(__name__)
@@ -964,6 +965,7 @@ def _index_parsed_folder(
         rebuild,
         titles,
         _index_folder_id(drive_service, parsed_folder_name),
+        load_token_budget(settings.reranker, settings.table_max_tokens),
     )
     print("Index summary:", dict(outcomes))
     # Papers the parser skipped on purpose are expected; anything else missing counts
@@ -1043,7 +1045,13 @@ def evaluate_retrieval() -> None:
     if args.papers_dir is not None:
         titles = json.loads(args.titles.read_text(encoding="utf-8")) if args.titles else {}
         eval_set, report = run_corpus_eval(
-            args.eval_set, args.papers_dir, titles, settings, encoder, scorer
+            args.eval_set,
+            args.papers_dir,
+            titles,
+            settings,
+            encoder,
+            scorer,
+            load_token_budget(settings.reranker, settings.table_max_tokens),
         )
     else:
         eval_set = load_retrieval_eval_set(args.eval_set)

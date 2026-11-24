@@ -23,6 +23,7 @@ from steel_slag_slm.rag.chunking import build_chunks, passage_for_embedding
 from steel_slag_slm.rag.embeddings import TextEncoder
 from steel_slag_slm.rag.retrieval import PassageScorer, TwoStageRetriever
 from steel_slag_slm.rag.search import SearchHit
+from steel_slag_slm.rag.token_budget import TokenBudget
 from steel_slag_slm.rag.vector_store import VectorStore
 from steel_slag_slm.schemas import Chunk
 
@@ -48,13 +49,18 @@ def build_corpus_store(
     titles: Mapping[str, str],
     settings: EmbeddingSettings,
     encoder: TextEncoder,
+    table_tokens: TokenBudget | None = None,
 ) -> VectorStore:
     """Chunk and embed the given papers from local <paper id>.json files into a new store."""
     chunks: list[Chunk] = []
     for paper_id in paper_ids:
         paper = parse_parsed_json((papers_dir / f"{paper_id}.json").read_bytes())
         chunks += build_chunks(
-            paper, settings.chunk_max_chars, settings.table_max_chars, titles.get(paper_id, "")
+            paper,
+            settings.chunk_max_chars,
+            settings.table_max_chars,
+            titles.get(paper_id, ""),
+            table_tokens,
         )
     store = VectorStore.empty(encoder.dimension)
     store.add(chunks, encoder.encode([passage_for_embedding(chunk) for chunk in chunks]))
@@ -85,6 +91,7 @@ def run_corpus_eval(
     settings: EmbeddingSettings,
     encoder: TextEncoder,
     scorer: PassageScorer,
+    table_tokens: TokenBudget | None = None,
 ) -> tuple[RetrievalEvalSet, RetrievalEvalReport]:
     """Score the two-stage retriever on a test set over the papers its corpus file lists.
 
@@ -95,7 +102,7 @@ def run_corpus_eval(
     if eval_set.corpus is None:
         raise ValueError(f"{eval_path.name} names no corpus file to search")
     paper_ids = (eval_path.parent / eval_set.corpus).read_text(encoding="utf-8").split()
-    store = build_corpus_store(paper_ids, papers_dir, titles, settings, encoder)
+    store = build_corpus_store(paper_ids, papers_dir, titles, settings, encoder, table_tokens)
     retriever = TwoStageRetriever(
         store,
         encoder,

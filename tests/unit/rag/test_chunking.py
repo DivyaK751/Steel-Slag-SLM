@@ -9,6 +9,7 @@ from steel_slag_slm.rag.chunking import (
     passage_for_reranking,
     table_texts,
 )
+from steel_slag_slm.rag.token_budget import TokenBudget
 from steel_slag_slm.schemas import (
     Chunk,
     ContentPlacement,
@@ -154,6 +155,33 @@ def test_table_texts_repeat_caption_description_and_header_in_every_piece() -> N
     for piece in pieces:
         assert piece.startswith("Table 9. Long\nLong values.\n| A | B |\n| row")
     assert "row 9" in pieces[-1]
+
+
+WORDS = TokenBudget(count=lambda text: len(text.split()), max_tokens=16)
+
+
+def test_table_texts_split_a_table_that_passes_the_token_budget() -> None:
+    rows = "\n".join(f"| m{i} | {i} |" for i in range(4))
+    table = f"Table 3. Mixes\n| Mix | UCS |\n{rows}"
+
+    pieces = table_texts(table, None, max_chars=1500, tokens=WORDS)
+
+    assert all(WORDS.fits(piece) for piece in pieces)
+    assert pieces == [
+        "Table 3. Mixes\n| Mix | UCS |\n| m0 | 0 |",
+        "Table 3. Mixes\n| Mix | UCS |\n| m1 | 1 |",
+        "Table 3. Mixes\n| Mix | UCS |\n| m2 | 2 |",
+        "Table 3. Mixes\n| Mix | UCS |\n| m3 | 3 |",
+    ]
+
+
+def test_build_chunks_keeps_table_chunks_within_the_token_budget() -> None:
+    long_table = TABLE + "".join(f"\n| row{i} | {i} |" for i in range(6))
+    paper = _block_paper([_block("table", long_table, kind="table")])
+
+    chunks = build_chunks(paper, 800, 1500, table_tokens=WORDS)
+
+    assert len(chunks) > 1 and all(WORDS.fits(chunk.text) for chunk in chunks)
 
 
 def test_table_texts_keep_the_summary_but_drop_description_lines_past_half_the_budget() -> None:

@@ -19,6 +19,7 @@ SETTINGS = EmbeddingSettings(
     query_prefix="",
     chunk_max_chars=800,
     table_max_chars=1500,
+    table_max_tokens=384,
     papers_per_save=10,
     top_k=3,
     index_folder_name="_search_index",
