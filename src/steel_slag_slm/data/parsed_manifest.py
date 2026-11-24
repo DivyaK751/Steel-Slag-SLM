@@ -1,4 +1,4 @@
-"""Validate the version-four parsing manifest shared by publishers and figure readers."""
+"""Validate the version-four parsing manifest shared by publishers, figure and table readers."""
 
 import json
 from hashlib import sha256
@@ -9,7 +9,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from steel_slag_slm.config import FigureExtractionSettings
-from steel_slag_slm.schemas import FigureReading
+from steel_slag_slm.schemas import FigureReading, TableDescription
 
 CONTENT_SCHEMA_VERSION = 4
 PIPELINE_REVISION = "unified_pdf_v1"
@@ -101,6 +101,17 @@ class FigureReference(BaseModel):
         return self
 
 
+class StoredTableDescription(BaseModel):
+    """A table's description, tied to the exact table text and prompt it was made from."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    block_index: Annotated[int, Field(ge=0, strict=True)]  # position in content_blocks
+    table_sha256: Digest  # of the table block's text, so a reparsed table is never mislabelled
+    prompt_version: PositiveInt
+    description: TableDescription
+
+
 class ParsedManifest(BaseModel):
     """Validate a complete unified parse before publication or figure consumption."""
 
@@ -119,6 +130,8 @@ class ParsedManifest(BaseModel):
     tables: list[str]
     content_blocks: list[ContentBlock]
     images: list[FigureReference]
+    # Gemini's descriptions of the table blocks, one per described table
+    table_descriptions: list[StoredTableDescription] = Field(default_factory=list)
 
     @model_validator(mode="before")
     @classmethod
@@ -152,6 +165,24 @@ class ParsedManifest(BaseModel):
                 raise ValueError("Figure filename must identify its parse generation")
 
         return self
+
+    @model_validator(mode="after")
+    def validate_table_descriptions(self) -> "ParsedManifest":
+        indices = [stored.block_index for stored in self.table_descriptions]
+        if len(set(indices)) != len(indices):
+            raise ValueError("A table can have only one description")
+        for stored in self.table_descriptions:
+            if stored.block_index >= len(self.content_blocks):
+                raise ValueError("Table description points past the content blocks")
+            block = self.content_blocks[stored.block_index]
+            if block.kind != "table" or table_text_sha256(block.text) != stored.table_sha256:
+                raise ValueError("Table description does not match its table block")
+        return self
+
+
+def table_text_sha256(text: str) -> str:
+    """Fingerprint a table block's text, to tell whether a description still belongs to it."""
+    return sha256(text.encode("utf-8")).hexdigest()
 
 
 def has_retired_fields(content: bytes) -> bool:
