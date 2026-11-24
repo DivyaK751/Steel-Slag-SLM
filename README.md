@@ -353,6 +353,11 @@ uv run build-index --rebuild                       # then rebuild the index to u
   described, so run it again until "still without a description" is gone from the summary,
   then once with `check_only` ticked: it passes only when every table is described. It never
   runs while the parsing workflow does, since both rewrite `parsed.json`.
+- The workflow bills Gemini to the Google Cloud project of the member picked in `billed_to`,
+  never the team's: it reads that member's `GOOGLE_CLOUD_PROJECT_<NAME>` and
+  `GCP_SERVICE_ACCOUNT_JSON_<NAME>` secrets and stops if either is missing, if the project is
+  the team's or if the key is from another project. Setup:
+  [docs/table_description_setup.md](docs/table_description_setup.md).
 - Gemini reads the table, the paper's title and section, the caption and header of the table
   an uncaptioned one continues, and the paper's paragraphs that explain it (notes, the
   paragraph before it, sentences citing it, definitions of its codes).
