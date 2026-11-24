@@ -1,9 +1,11 @@
 from pathlib import Path
+from typing import get_args
 
 import pytest
 import yaml
 
 from steel_slag_slm import config
+from steel_slag_slm.schemas import SteelSlagType
 
 
 @pytest.fixture(autouse=True)
@@ -150,3 +152,61 @@ def test_evaluation_prices_skip_models_without_both_prices(tmp_path: Path) -> No
     path.write_text(yaml.safe_dump(raw))
     settings = config.load_evaluation_settings("p.d.papers", path)
     assert set(settings.prices) == {"priced"}
+
+
+def test_slag_reference_file_covers_each_cns_slag_type() -> None:
+    reference = config.load_slag_reference()
+    assert set(reference.slag_types) == {"EAF", "BOF", "Ladle"}
+    assert set(reference.slag_types) <= set(get_args(SteelSlagType))
+    eaf_cao = reference.slag_types["EAF"].oxides["cao_pct"]
+    assert (eaf_cao.min, eaf_cao.max, eaf_cao.avg_min, eaf_cao.avg_max) == (22, 60, 35, 40)
+    assert reference.slag_types["BOF"].oxides["cao_pct"].avg_min is None
+
+
+def _write_slag_reference(tmp_path: Path, raw: dict[str, object]) -> Path:
+    path = tmp_path / "slag_reference.yaml"
+    path.write_text(yaml.safe_dump(raw, allow_unicode=True))
+    return path
+
+
+def _slag_reference(oxide: dict[str, object], phases: list[str]) -> dict[str, object]:
+    return {
+        "slag_types": {
+            "EAF": {
+                "label": "EAF slag",
+                "process": "Scrap melting",
+                "oxides": {"cao_pct": oxide},
+                "mineral_phases": phases,
+            }
+        },
+        "phase_names": {"Alite": ["alite", "C3S"], "Spinel": ["spinel"]},
+    }
+
+
+@pytest.mark.parametrize(
+    "oxide",
+    [
+        {"min": 60, "max": 22},
+        {"min": 22, "max": 60, "avg_min": 35},
+        {"min": 22, "max": 60, "avg_min": 50, "avg_max": 70},
+    ],
+)
+def test_slag_reference_rejects_inconsistent_oxide_ranges(
+    tmp_path: Path, oxide: dict[str, object]
+) -> None:
+    path = _write_slag_reference(tmp_path, _slag_reference(oxide, ["Alite"]))
+    with pytest.raises(ValueError):
+        config.load_slag_reference(path)
+
+
+def test_slag_reference_rejects_a_phase_without_names(tmp_path: Path) -> None:
+    raw = _slag_reference({"min": 22, "max": 60}, ["Mayenite"])
+    with pytest.raises(ValueError, match="missing from phase_names"):
+        config.load_slag_reference(_write_slag_reference(tmp_path, raw))
+
+
+def test_slag_reference_rejects_a_name_under_two_phases(tmp_path: Path) -> None:
+    raw = _slag_reference({"min": 22, "max": 60}, ["Alite"])
+    raw["phase_names"] = {"Alite": ["alite", "C3S"], "Spinel": ["spinel", "c3s"]}
+    with pytest.raises(ValueError, match="listed under Alite and Spinel"):
+        config.load_slag_reference(_write_slag_reference(tmp_path, raw))

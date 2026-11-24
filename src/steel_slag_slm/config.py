@@ -12,6 +12,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CONFIGS_DIR = PROJECT_ROOT / "configs"
 BASE_CONFIG_PATH = CONFIGS_DIR / "base.yaml"
 RETRIEVAL_EVAL_PATH = CONFIGS_DIR / "retrieval_eval.yaml"
+SLAG_REFERENCE_PATH = CONFIGS_DIR / "slag_reference.yaml"
 # Kept outside the repo so a personal Google login can never be committed
 DEFAULT_GOOGLE_TOKEN_PATH = Path.home() / ".config" / "steel_slag_slm" / "google_token.json"
 
@@ -253,6 +254,64 @@ class BenchmarkSplit(BaseModel):
         return self.dev if split == "dev" else self.test
 
 
+class OxideRange(BaseModel):
+    """Typical wt% range of one oxide in one slag type, with its typical average if known."""
+
+    min: float
+    max: float
+    avg_min: float | None = None  # equal to avg_max when a single average is given
+    avg_max: float | None = None
+    note: str | None = None
+
+    @model_validator(mode="after")
+    def _check_bounds(self) -> "OxideRange":
+        if self.min > self.max:
+            raise ValueError(f"min {self.min} is above max {self.max}")
+        if (self.avg_min is None) != (self.avg_max is None):
+            raise ValueError("give both avg_min and avg_max, or neither")
+        if (
+            self.avg_min is not None
+            and self.avg_max is not None
+            and not self.min <= self.avg_min <= self.avg_max <= self.max
+        ):
+            raise ValueError(
+                f"average {self.avg_min}-{self.avg_max} is outside range {self.min}-{self.max}"
+            )
+        return self
+
+
+class SlagTypeReference(BaseModel):
+    """What a typical slag of one type looks like: its oxide ranges and major phases."""
+
+    label: str
+    process: str
+    oxides: dict[str, OxideRange]  # keyed by slag-catalogue column, e.g. cao_pct
+    mineral_phases: list[str]  # standard names from SlagReference.phase_names
+
+
+class SlagReference(BaseModel):
+    """Typical slag compositions from CNS, and the names papers use for each mineral phase."""
+
+    slag_types: dict[str, SlagTypeReference]  # keyed by steel_slag_type, e.g. EAF
+    phase_names: dict[str, list[str]]  # standard phase name -> every name to match
+
+    @model_validator(mode="after")
+    def _check_phases(self) -> "SlagReference":
+        for slag_type, reference in self.slag_types.items():
+            unknown = set(reference.mineral_phases) - set(self.phase_names)
+            if unknown:
+                raise ValueError(f"{slag_type}: phases missing from phase_names: {unknown}")
+        # One name must point to one phase, or matching notes would be ambiguous
+        owners: dict[str, str] = {}
+        for phase, names in self.phase_names.items():
+            for name in names:
+                key = name.casefold()
+                if key in owners and owners[key] != phase:
+                    raise ValueError(f"'{name}' is listed under {owners[key]} and {phase}")
+                owners[key] = phase
+        return self
+
+
 class ModelPrice(BaseModel):
     """Gemini list price in USD per 1 million tokens."""
 
@@ -492,3 +551,9 @@ def load_retrieval_eval_set(path: Path = RETRIEVAL_EVAL_PATH) -> RetrievalEvalSe
     """Read the fixed retrieval test set from configs/retrieval_eval.yaml."""
     raw: dict[str, Any] = yaml.safe_load(path.read_text(encoding="utf-8"))
     return RetrievalEvalSet(**raw)
+
+
+def load_slag_reference(path: Path = SLAG_REFERENCE_PATH) -> SlagReference:
+    """Read the typical slag ranges and phase names from configs/slag_reference.yaml."""
+    raw: dict[str, Any] = yaml.safe_load(path.read_text(encoding="utf-8"))
+    return SlagReference(**raw)
