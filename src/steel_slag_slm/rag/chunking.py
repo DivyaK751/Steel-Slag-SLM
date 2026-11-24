@@ -12,6 +12,7 @@ from collections import Counter
 from collections.abc import Iterable
 from dataclasses import replace
 
+from steel_slag_slm.data.table_text import is_contents_list, is_table_row
 from steel_slag_slm.schemas import (
     Chunk,
     ChunkKind,
@@ -86,17 +87,12 @@ Paragraph = tuple[str, tuple[int, ...]]
 _Piece = tuple[ChunkKind, str, str, tuple[int, ...]]
 
 
-def is_table_line(line: str) -> bool:
-    """Return True for a line of a Markdown table."""
-    return line.lstrip().startswith("|")
-
-
 def _is_repeatable(line: str) -> bool:
     """Return True for a plain short line; headings and table rows are never running lines."""
     stripped = line.strip()
     return (
         bool(stripped)
-        and not is_table_line(line)
+        and not is_table_row(line)
         and _HEADING.match(stripped) is None
         and len(stripped) <= RUNNING_LINE_MAX_CHARS
     )
@@ -129,7 +125,7 @@ def scan_sections(lines: Iterable[str]) -> list[tuple[str, list[_Block]]]:
 
     for line in lines:
         stripped = line.strip()
-        if is_table_line(line):
+        if is_table_row(line):
             if not in_table:
                 flush_paragraph()
                 sections[-1][1].append(("table", table_index))
@@ -198,7 +194,7 @@ def split_table(table: str, max_chars: int) -> list[str]:
         return [table]
 
     lines = table.splitlines()
-    first_row = next((i for i, line in enumerate(lines) if is_table_line(line)), len(lines))
+    first_row = next((i for i, line in enumerate(lines) if is_table_row(line)), len(lines))
     caption, rows = lines[:first_row], lines[first_row:]
     # The header is the first row, plus its separator line when Markdown has one
     header_size = 2 if len(rows) > 1 and _TABLE_SEPARATOR.match(rows[1]) else 1
@@ -382,10 +378,12 @@ def _pieces_from_blocks(
     for block in blocks:
         if block.label in _SKIPPED_LABELS or not block.text.strip():
             continue
-        if block.kind == "table" and _is_toc(block.text):
+        if block.kind == "table" and is_contents_list(block.text):
             continue  # a contents list the parser read as a table
         if block.kind == "text" and (
-            _BOILERPLATE.search(block.text) or _is_toc(block.text) or _is_front_matter(block)
+            _BOILERPLATE.search(block.text)
+            or is_contents_list(block.text)
+            or _is_front_matter(block)
         ):
             continue
         # A header that is not a real section (a title or declaration on the cover page) is
@@ -582,13 +580,7 @@ FRONT_MATTER_MAX_CHARS = 300
 FRONT_MATTER_MAX_PAGE = 2
 
 
-_TOC_LEADER = re.compile(r"\.{8,}|\bkazalo vsebine\b|\btable of contents\b", re.IGNORECASE)
 _FIGURE_REFERENCE = re.compile(r"\b(?:Fig\.?|Figure|Slika|Abb\.?|Figura)\s*(\d+)", re.IGNORECASE)
-
-
-def _is_toc(text: str) -> bool:
-    """True for a table of contents: dotted leader lines or a contents heading."""
-    return _TOC_LEADER.search(text) is not None
 
 
 def _drop_repeated(pieces: list[_Piece]) -> list[_Piece]:
