@@ -4,6 +4,7 @@ from steel_slag_slm.data.table_text import (
     compact_markdown_table,
     is_contents_list,
     table_label,
+    table_rows,
 )
 
 
@@ -48,3 +49,9 @@ def test_is_contents_list_finds_dot_leaders_and_contents_headings() -> None:
     assert is_contents_list("| 1 Introduction ........ 3 |")
     assert is_contents_list("Table of contents")
     assert not is_contents_list("Table 1. Oxide composition")
+
+
+def test_table_rows_returns_cells_without_caption_or_separator() -> None:
+    table = "Table 1. Oxides\n\n| Oxide | SS |\n|---|---|\n| CaO | 38.9 |"
+
+    assert table_rows(table) == [["Oxide", "SS"], ["CaO", "38.9"]]

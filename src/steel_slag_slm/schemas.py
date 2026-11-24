@@ -296,6 +296,18 @@ class FigureReading(BaseModel):
     flows: list[ProcessFlow] = Field(default_factory=list)
 
 
+@dataclass(frozen=True, slots=True)
+class TableToDescribe:
+    """One table block of a parsed paper, with the paper's text that explains it."""
+
+    paper_id: str
+    block_index: int  # position in the manifest's content_blocks
+    label: str | None  # "Table 3" from its caption; None when the table has no caption
+    table: str  # compact Markdown, caption included
+    context: str  # the paper's paragraphs that cite, introduce or define the table; "" if none
+    table_sha256: str  # of the block's original text, stored with the description
+
+
 class DescribedColumn(BaseModel):
     """One column header of a table, copied as printed, with what it measures."""
 
