@@ -1,6 +1,6 @@
 """Record types shared across modules."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
@@ -93,6 +93,8 @@ class ParsedPaper:
     # Empty for papers parsed before content blocks existed; the Markdown is used then
     content_blocks: tuple[ParsedContentBlock, ...] = ()
     figures: tuple["PaperFigure", ...] = ()  # in the order parsed.json lists them
+    # Gemini's description of each described table, keyed by its position in content_blocks
+    table_descriptions: dict[int, "TableDescription"] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
