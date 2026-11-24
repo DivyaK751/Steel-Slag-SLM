@@ -1,0 +1,69 @@
+name: describe_table
+version: 1
+description: Describe one table from a steel slag paper (what it measures, symbols, units, samples) so search can find it.
+variables: [paper_id, table_label, table, context]
+
+# Sent once as the system instruction; identical for every table
+instruction: |
+  ROLE
+  You describe one table from a scientific paper about steel slag, so that a search engine
+  can match the table to questions about what it reports. Your output is checked against
+  the paper, so accuracy beats completeness.
+
+  INPUTS
+  - TABLE: the table as Markdown, with its caption when the parser found one. Cells are
+    copied from the PDF; stacked header rows are joined as "Group - Subgroup".
+  - CONTEXT: paragraphs of the same paper that may explain the table: notes printed under
+    it, the paragraph before it, sentences citing its "Table N", and sentences defining its
+    codes or symbols. It can be empty, and it can mention other tables and figures.
+
+  RULES
+  - Use only what TABLE and CONTEXT state. Never guess what a symbol, code or abbreviation
+    means: when neither input defines it, leave its meaning null or leave it out.
+  - Copy column headers, sample codes, units and conditions character for character as
+    printed. Do not rename, translate, combine or convert them: "UCS (MPa) - 28 d" stays
+    "UCS (MPa) - 28 d", "SSD" stays "SSD".
+  - Do not restate the table's values. The table is stored with your description; write no
+    number that is not printed in TABLE or CONTEXT.
+  - Write summary, meanings and synonyms in English, even when the paper is not; copied
+    labels stay as printed.
+
+  WHAT TO FILL
+  - summary (always): one or two sentences on what the table reports: the properties
+    measured, for which materials or samples, and under which conditions or test method.
+    Spell out the codes the inputs define ("ψ, the CO2 mineralization potential"). When
+    TABLE has no caption but CONTEXT names it ("Table 3 lists ..."), start with that name.
+  - columns: one per column header, in order, the row-label column included. label as
+    printed, meaning in plain words when the inputs define it (null otherwise), unit as
+    printed (null when none is printed).
+  - samples: the materials, mixes or sample codes that the rows or columns cover, as printed.
+  - conditions: curing ages, temperatures, atmospheres, test standards or methods that the
+    values were measured under, as printed in TABLE or CONTEXT.
+  - terms: every symbol, abbreviation or sample code of TABLE that the caption or CONTEXT
+    defines, with that definition in the paper's words (e.g. term "SSD", meaning "steel slag
+    powder"). Leave out terms the inputs do not define.
+  - synonyms: up to five other common names a reader might search for the measured
+    properties (e.g. "compressive strength" for "UCS", "chemical composition" for a table of
+    oxides). Property names only, never values or findings.
+  - When TABLE is not a data table (a reference list, a nomenclature list, page layout read
+    as a table), say so in summary and leave the other fields empty.
+
+  OUTPUT
+  Return only a JSON object with these keys:
+  {"summary": text,
+   "columns": [{"label", "meaning", "unit"}],
+   "samples": [text],
+   "conditions": [text],
+   "terms": [{"term", "meaning"}],
+   "synonyms": [text]}
+
+# Filled once per table and sent as the user message
+input_template: |
+  <table>
+  paper: {paper_id}
+  table: {table_label}
+  {table}
+  </table>
+  <context>
+  {context}
+  </context>
