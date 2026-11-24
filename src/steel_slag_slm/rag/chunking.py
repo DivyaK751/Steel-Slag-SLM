@@ -13,6 +13,11 @@ from collections import Counter
 from collections.abc import Callable, Iterable
 from dataclasses import replace
 
+from steel_slag_slm.data.section_headings import (
+    MAX_SECTION_CHARS,
+    STANDARD_HEADINGS,
+    is_section_heading,
+)
 from steel_slag_slm.data.table_text import compact_markdown_table, is_contents_list, is_table_row
 from steel_slag_slm.rag.token_budget import TokenBudget
 from steel_slag_slm.schemas import (
@@ -45,36 +50,6 @@ _BOILERPLATE = re.compile(
 # A sentence up to this long is kept whole, even past the chunk size, so it is never cut.
 # Limit set by the embedding model (512 tokens is roughly 2,000 characters)
 MAX_WHOLE_SENTENCE_CHARS = 1500
-# A section title longer than this is a running header merged into the heading; cut it short
-MAX_SECTION_CHARS = 150
-# A real section starts with its number ("3.2 Utilization…") or is one of these standard names
-_NUMBERED_HEADING = re.compile(r"^\d+(\.\d+)*\.?\s+\S")
-_STANDARD_HEADINGS = frozenset(
-    {
-        "abstract",
-        "introduction",
-        "background",
-        "literature review",
-        "materials and methods",
-        "materials and method",
-        "methods",
-        "methodology",
-        "experimental",
-        "experimental procedure",
-        "results",
-        "results and discussion",
-        "discussion",
-        "conclusion",
-        "conclusions",
-        "summary",
-        "references",
-        "bibliography",
-        "acknowledgements",
-        "acknowledgments",
-        "appendix",
-    }
-)
-
 _HEADING = re.compile(r"^#{1,6}\s+(?P<title>\S.*?)\s*$")
 _CAPTION = re.compile(r"^(Fig\.?|Figure|Slika|Abb\.?|Figura)\s*\d+", re.IGNORECASE)
 # A sentence ends with terminal punctuation, optionally followed by a closing bracket or quote
@@ -225,7 +200,7 @@ def table_texts(
     lines = compact_markdown_table(table).splitlines()
     first_row = next((i for i, line in enumerate(lines) if is_table_row(line)), len(lines))
     caption = [line for line in lines[:first_row] if line.strip()]
-    rows = lines[first_row:]
+    rows = [line for line in lines[first_row:] if line.strip()]
     described = _description_lines(
         description, _table_fits(max_chars, tokens, MAX_DESCRIPTION_SHARE)
     )
@@ -376,7 +351,7 @@ def _with_section(
 
 _NUMBERED_HEADING_START = re.compile(
     r"^(\d+(?:\.\d+)*\.?)\s+("
-    + "|".join(sorted((re.escape(name) for name in _STANDARD_HEADINGS), key=len, reverse=True))
+    + "|".join(sorted((re.escape(name) for name in STANDARD_HEADINGS), key=len, reverse=True))
     + r")\b(.*)$",
     re.IGNORECASE,
 )
@@ -389,14 +364,6 @@ def _is_front_matter(block: ParsedContentBlock) -> bool:
         and _AFFILIATION.search(block.text) is not None
         and all(p.page_number <= FRONT_MATTER_MAX_PAGE for p in block.placements)
     )
-
-
-def _is_section_heading(text: str) -> bool:
-    """Return True for a real section heading: numbered, or a standard name such as Results."""
-    cleaned = " ".join(text.split())
-    if _NUMBERED_HEADING.match(cleaned):
-        return True
-    return cleaned.strip(" .:").lower() in _STANDARD_HEADINGS
 
 
 def _clean_text(text: str) -> str:
@@ -437,7 +404,7 @@ def _pieces_from_blocks(
             continue
         # A header that is not a real section (a title or declaration on the cover page) is
         # body text: attaching it as a section would label the text that follows it wrongly
-        if block.label == "section_header" and _is_section_heading(block.text):
+        if block.label == "section_header" and is_section_heading(block.text):
             pieces += _with_section(
                 section, _text_passages(paragraphs, max_chars, detect_captions=False)
             )

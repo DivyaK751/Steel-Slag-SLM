@@ -50,6 +50,17 @@ def _cells(row: str) -> list[str]:
     return [part.strip() for part in parts]
 
 
+def table_caption(text: str) -> str:
+    """Return the caption lines a table block starts with, before its first row; "" if none."""
+    lines: list[str] = []
+    for line in text.splitlines():
+        if is_table_row(line):
+            break
+        if line.strip():
+            lines.append(line.strip())
+    return "\n".join(lines)
+
+
 def table_label(text: str) -> str | None:
     """Return "Table N" from the caption a table block starts with, or None without one."""
     first_line = next((line for line in text.splitlines() if line.strip()), "")

@@ -130,6 +130,14 @@ def test_table_texts_compact_a_short_table_into_one_piece() -> None:
     assert table_texts(TABLE, None, max_chars=1000) == [COMPACT_TABLE]
 
 
+def test_table_texts_drop_blank_lines_between_rows_and_notes() -> None:
+    table = "Table 1. Oxides\n\n| Oxide | SS |\n|---|---|\n| CaO | 38.9 |\n\na XRF results."
+
+    assert table_texts(table, None, max_chars=1000) == [
+        "Table 1. Oxides\n| Oxide | SS |\n| CaO | 38.9 |\na XRF results."
+    ]
+
+
 def test_table_texts_put_the_description_between_caption_and_rows() -> None:
     (piece,) = table_texts(TABLE, DESCRIPTION, max_chars=1000)
 

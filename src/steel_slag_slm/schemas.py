@@ -308,6 +308,10 @@ class TableToDescribe:
     table: str  # compact Markdown, caption included
     context: str  # the paper's paragraphs that cite, introduce or define the table; "" if none
     table_sha256: str  # of the block's original text, stored with the description
+    paper_title: str = ""  # "" when the registry has no title for the paper
+    section: str = ""  # heading of the section the table sits in; "" before the first one
+    # Caption and header of the table this uncaptioned one continues onto a new page; "" if none
+    previous_table: str = ""
 
 
 class DescribedColumn(BaseModel):

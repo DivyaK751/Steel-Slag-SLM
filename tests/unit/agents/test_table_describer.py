@@ -14,9 +14,13 @@ PROMPT = PromptTemplate(
     1,
     "d",
     "instruction",
-    "{paper_id}|{table_label}|{table}|{context}",
-    ("paper_id", "table_label", "table", "context"),
-)
+    "{paper_id}|{paper_title}|{section}|{table_label}|{table}|{previous_table}|{context}"
+    "|{correction}",
+    (
+        "paper_id", "paper_title", "section", "table_label", "table", "previous_table",
+        "context", "correction",
+    ),
+)  # fmt: skip
 TABLE = TableToDescribe(
     paper_id="W1",
     block_index=4,
@@ -24,16 +28,22 @@ TABLE = TableToDescribe(
     table="Table 2. CO2 uptake\n\n| Binder | ψ (%) |\n| SSD | 12.1 |",
     context="ψ is the CO2 mineralization potential after 28 d.",
     table_sha256="0" * 64,
+    paper_title="CO2 uptake of slag binders",
+    section="3. Results",
 )
 USAGE = TokenUsage(input_tokens=200, output_tokens=40)
 
 
-def _answer_with(description: TableDescription, monkeypatch: pytest.MonkeyPatch) -> list[str]:
+def _answer_with(
+    description: TableDescription, monkeypatch: pytest.MonkeyPatch, *later: TableDescription
+) -> list[str]:
+    """Answer with description, then with each of later in turn; return the messages sent."""
     sent: list[str] = []
+    answers = [description, *later]
 
     async def fake_run(_runner: object, message: str, _schema: object) -> Any:
         sent.append(message)
-        return StructuredAnswer(description, USAGE)
+        return StructuredAnswer(answers[min(len(sent), len(answers)) - 1], USAGE)
 
     monkeypatch.setattr(table_describer, "run_structured_with_usage", fake_run)
     return sent
@@ -50,7 +60,10 @@ def test_describe_table_sends_the_table_and_its_context(monkeypatch: pytest.Monk
         table_describer.describe_table(object(), PROMPT, TABLE)  # type: ignore[arg-type]
     )
 
-    assert sent == [f"W1|Table 2|{TABLE.table}|{TABLE.context}"]
+    assert sent == [
+        f"W1|CO2 uptake of slag binders|3. Results|Table 2|{TABLE.table}|(none)|{TABLE.context}"
+        "|(none)"
+    ]
     assert (result, usage) == (description, USAGE)
 
 
@@ -60,19 +73,52 @@ def test_describe_table_marks_a_missing_label_and_context(monkeypatch: pytest.Mo
 
     asyncio.run(table_describer.describe_table(object(), PROMPT, bare))  # type: ignore[arg-type]
 
-    assert sent == ["W1|(none)|| Oxide | SSD ||(none)"]
+    assert sent == ["W1|(none)|(none)|(none)|| Oxide | SSD ||(none)|(none)|(none)"]
 
 
-def test_describe_table_rejects_a_number_the_table_does_not_print(
+INVENTED = TableDescription(summary="SSD reaches 15.3% after 28 d.")
+
+
+def test_describe_table_asks_again_naming_the_invented_numbers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _answer_with(TableDescription(summary="SSD reaches 15.3% after 28 d."), monkeypatch)
+    grounded = TableDescription(summary="ψ of SSD after 28 d.")
+    sent = _answer_with(INVENTED, monkeypatch, grounded)
+
+    result, usage = asyncio.run(
+        table_describer.describe_table(object(), PROMPT, TABLE)  # type: ignore[arg-type]
+    )
+
+    assert result == grounded
+    assert [message.rsplit("|", 1)[1] for message in sent] == ["(none)", "15.3"]
+    assert usage == USAGE + USAGE  # both calls are billed
+
+
+def test_describe_table_rejects_numbers_still_invented_after_the_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sent = _answer_with(INVENTED, monkeypatch)
 
     with pytest.raises(AgentOutputError, match="15.3") as error:
         asyncio.run(
             table_describer.describe_table(object(), PROMPT, TABLE)  # type: ignore[arg-type]
         )
-    assert error.value.usage == USAGE  # the failed call was still billed
+    assert len(sent) == table_describer.MAX_ATTEMPTS
+    assert error.value.usage == USAGE + USAGE  # the failed calls were still billed
+
+
+def test_describe_table_allows_numbers_printed_in_the_title_or_previous_table(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _answer_with(
+        TableDescription(summary="Continuation of Table 7 for the 2021 study."), monkeypatch
+    )
+    continued = TableToDescribe(
+        "W1", 9, None, "| SSD | 12.1 |", "", "0" * 64, "Slag binders in 2021", "",
+        "Table 7. CO2 uptake\n| Binder | ψ (%) |",
+    )  # fmt: skip
+
+    asyncio.run(table_describer.describe_table(object(), PROMPT, continued))  # type: ignore[arg-type]
 
 
 def test_ungrounded_numbers_ignores_formula_digits_and_decimal_commas() -> None:
@@ -91,5 +137,8 @@ def test_table_name_names_uncaptioned_tables_by_block() -> None:
 def test_describe_table_prompt_loads() -> None:
     prompt = load_prompt("describe_table")
 
-    assert set(prompt.variables) == {"paper_id", "table_label", "table", "context"}
-    assert "<context>" in prompt.input_template
+    assert set(prompt.variables) == {
+        "paper_id", "paper_title", "section", "table_label", "table", "previous_table",
+        "context", "correction",
+    }  # fmt: skip
+    assert "<previous_table>" in prompt.input_template
