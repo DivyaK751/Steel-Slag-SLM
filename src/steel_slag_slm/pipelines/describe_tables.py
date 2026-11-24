@@ -206,3 +206,35 @@ async def _describe_one(run: _Run, table: TableToDescribe) -> StoredTableDescrip
         prompt_version=run.prompt.version,
         description=description,
     )
+
+
+_PAPER_OUTCOMES = (
+    ("described", "described"),
+    ("cleaned", "retired table rows removed"),
+    ("up_to_date", "already up to date"),
+    ("not_described", "no table described (retried next run)"),
+    ("changed_during_run", "changed during the run (retried next run)"),
+    ("not_started", "not started (run stopped early)"),
+    ("failed", "failed"),
+)
+_TABLE_OUTCOMES = (
+    ("tables_described", "described"),
+    ("tables_failed", "failed (retried next run)"),
+    ("tables_not_started", "not started (run stopped early)"),
+)
+
+
+def format_description_summary(report: TableDescriptionReport, folder_name: str) -> str:
+    """Summarize a run for the terminal and the Actions page; zero counts are left out."""
+    lines = [f"Table descriptions (Drive folder {folder_name}/)", "Papers:"]
+    lines += _count_lines(report.outcomes, _PAPER_OUTCOMES)
+    lines += ["Tables:", *_count_lines(report.outcomes, _TABLE_OUTCOMES)]
+    lines.append(f"Gemini cost: about ${report.spent_usd:.2f}")
+    if report.stop_reason is not None:
+        lines.append(f"Stopped early: {report.stop_reason}; rerun to continue")
+    return "\n".join(lines)
+
+
+def _count_lines(outcomes: Counter[str], labels: Sequence[tuple[str, str]]) -> list[str]:
+    counted = [f"  {outcomes[key]:>5}  {label}" for key, label in labels if outcomes[key]]
+    return counted or ["      0"]
