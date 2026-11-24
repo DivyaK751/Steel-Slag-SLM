@@ -12,7 +12,6 @@ from steel_slag_slm.data.parsed_manifest import ContentBlock, ParsedManifest, ta
 from steel_slag_slm.data.section_headings import MAX_SECTION_CHARS, is_section_heading
 from steel_slag_slm.data.table_text import (
     compact_markdown_table,
-    is_contents_list,
     table_caption,
     table_label,
     table_rows,
@@ -37,9 +36,10 @@ def tables_to_describe(
 ) -> list[TableToDescribe]:
     """Return the paper's tables that lack a description from this prompt version.
 
-    Contents lists that the parser read as tables are left out, as the search index leaves
-    them out. Each table carries the paper's title, its section heading, up to
-    context_max_chars of the paper's explaining text, and the table it continues, if any.
+    Every table block with text is included, even a contents list the parser read as a
+    table, so each table of the paper ends up with a description. Each carries the paper's
+    title, its section heading, up to context_max_chars of the paper's explaining text, and
+    the table it continues, if any.
     """
     current = {
         stored.block_index
@@ -60,11 +60,13 @@ def tables_to_describe(
             previous_table=_continued_table(blocks, index),
         )
         for index, block in enumerate(blocks)
-        if block.kind == "table"
-        and block.text.strip()
-        and not is_contents_list(block.text)
-        and index not in current
+        if is_describable(block) and index not in current
     ]
+
+
+def is_describable(block: ContentBlock) -> bool:
+    """Return whether a block is a table with text, so it should have a description."""
+    return block.kind == "table" and bool(block.text.strip())
 
 
 def table_context(blocks: Sequence[ContentBlock], index: int, max_chars: int) -> str:

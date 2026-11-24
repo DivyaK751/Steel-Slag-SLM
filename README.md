@@ -344,17 +344,27 @@ reading only that file: no PDF is downloaded or parsed again.
 ```bash
 uv run describe-tables --paper-ids W2618057564     # try one paper first
 uv run describe-tables --max-gemini-usd 20         # every parsed paper; rerun to continue
+uv run describe-tables --check                     # every table described? (no Gemini, no writes)
 uv run build-index --rebuild                       # then rebuild the index to use them
 ```
 
 - On GitHub, run **Actions → Describe parsed tables**. It checks one paper by default; clear
   `max_papers` for all of them. It stops after 150 minutes or at the budget and saves what it
-  described, so run it again until the summary shows no papers described. It never runs while
-  the parsing workflow does, since both rewrite `parsed.json`.
+  described, so run it again until "still without a description" is gone from the summary,
+  then once with `check_only` ticked: it passes only when every table is described. It never
+  runs while the parsing workflow does, since both rewrite `parsed.json`.
+- The workflow bills Gemini to the Google Cloud project of the member picked in `billed_to`,
+  never the team's: it reads that member's `GOOGLE_CLOUD_PROJECT_<NAME>` and
+  `GCP_SERVICE_ACCOUNT_JSON_<NAME>` secrets and stops if either is missing, if the project is
+  the team's or if the key is from another project. Setup:
+  [docs/table_description_setup.md](docs/table_description_setup.md).
+- Gemini reads the table, the paper's title and section, the caption and header of the table
+  an uncaptioned one continues, and the paper's paragraphs that explain it (notes, the
+  paragraph before it, sentences citing it, definitions of its codes).
 - Only tables without a description from the current prompt version are sent. Bump
   `version` in `prompts/describe_table.yaml` to describe every table again.
-- A description stating a number the table and its paragraphs never print is rejected, and its
-  table is retried on the next run. Settings are in `table_description:` in
+- A description stating a number none of its inputs print is asked again once, naming those
+  numbers; if it still invents, the table is retried on the next run. Settings are in `table_description:` in
   `configs/base.yaml`; design notes in
   [docs/adr/004-table-descriptions.md](docs/adr/004-table-descriptions.md).
 

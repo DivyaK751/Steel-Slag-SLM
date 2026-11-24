@@ -196,6 +196,26 @@ def test_describe_tables_fails_when_a_paper_failed(monkeypatch) -> None:
         cli.describe_tables()
 
 
+@pytest.mark.parametrize(
+    ("outcomes", "complete"),
+    [({"complete": 3}, True), ({"incomplete": 1, "tables_missing": 2}, False)],
+)
+def test_describe_tables_check_fails_until_every_table_is_described(
+    monkeypatch, outcomes, complete
+) -> None:
+    calls: dict[str, object] = {"outcomes": outcomes}
+    _fake_describe_tables_clients(monkeypatch, calls)
+    monkeypatch.setattr(sys, "argv", ["describe-tables", "--check"])
+    monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", "unused")
+
+    if complete:
+        cli.describe_tables()
+    else:
+        with pytest.raises(SystemExit, match="2 table\\(s\\) still without a description"):
+            cli.describe_tables()
+    assert calls["check_only"] is True
+
+
 def test_describe_tables_rejects_a_nonpositive_time_limit(monkeypatch) -> None:
     monkeypatch.setattr(sys, "argv", ["describe-tables", "--max-minutes", "0"])
 

@@ -24,19 +24,22 @@ Gemini's figure readings, by contrast, raised figure retrieval markedly.
 
 - Gemini describes each table once, as it reads each figure. The `describe_table` prompt
   keeps `read_figure`'s rules (copy labels as printed, never guess) and changes only the
-  objective. It reads the table's compact Markdown plus the paper's paragraphs that explain
-  it: notes under the table, the paragraph before it, sentences citing its "Table N", and
-  sentences defining its codes. It returns a summary, column meanings and units, samples,
-  conditions, defined terms and search synonyms. An answer stating a number that neither the
-  table nor its context prints is rejected.
+  objective. It reads the table's compact Markdown, the paper's title and section heading,
+  the caption and header of the table an uncaptioned one continues across a page, and the
+  paper's paragraphs that explain it: notes under the table, the paragraph before it,
+  sentences citing its "Table N", and sentences defining its codes. It returns a summary,
+  column meanings and units, samples, conditions, defined terms and search synonyms. An
+  answer stating a number that no input prints is asked again once, naming those numbers,
+  then rejected.
 - Descriptions are stored in `parsed.json` under `table_descriptions`, each tied to its
   content block, the SHA-256 of that table's text and the prompt version. A description that no
   longer matches its table is rejected when written and skipped when indexed. Bumping the
   prompt version makes `describe-tables` describe every table again.
-- `describe-tables` (and the "Describe parsed tables" workflow) fills them in for papers
+- Every table block with text gets a description, contents lists included.
+  `describe-tables` (and the "Describe parsed tables" workflow) fills them in for papers
   parsed earlier, from their `parsed.json` alone: no PDF is downloaded or parsed again. Runs
   resume, stop at a budget or time limit, and never overwrite a `parsed.json` that changed
-  during the run.
+  during the run. `describe-tables --check` confirms that no table is left without one.
 - A table chunk is its caption, its description, then its compact rows. Long tables split into
   row groups that repeat caption, description and header, so a table yields about as many
   chunks as before, not one per row. Each piece is kept within 384 reranker tokens, so no row

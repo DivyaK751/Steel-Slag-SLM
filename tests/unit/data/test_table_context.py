@@ -58,10 +58,10 @@ def test_context_keeps_whole_paragraphs_within_the_limit(manifest: ParsedManifes
     ]
 
 
-def test_tables_to_describe_skips_contents_lists_and_compacts_the_table(
-    manifest: ParsedManifest,
-) -> None:
-    [table] = tables_to_describe(manifest, prompt_version=1, context_max_chars=2000)
+def test_tables_to_describe_lists_every_table_and_compacts_it(manifest: ParsedManifest) -> None:
+    table, contents = tables_to_describe(manifest, prompt_version=1, context_max_chars=2000)
+
+    assert contents.block_index == 10  # a contents list still gets a description
 
     assert (table.paper_id, table.block_index, table.label) == ("W1", 5, "Table 2")
     assert table.table.endswith("| Binder | ψ (%) |\n| SSD | 12.1 |\n| SSW | 9.8 |")
@@ -161,5 +161,6 @@ def test_tables_to_describe_skips_tables_described_by_the_same_prompt_version(
         {**manifest.model_dump(), "table_descriptions": [stored]}
     )
 
-    assert tables_to_describe(described, prompt_version=1, context_max_chars=2000) == []
-    assert len(tables_to_describe(described, prompt_version=2, context_max_chars=2000)) == 1
+    [contents] = tables_to_describe(described, prompt_version=1, context_max_chars=2000)
+    assert contents.block_index == 10
+    assert len(tables_to_describe(described, prompt_version=2, context_max_chars=2000)) == 2

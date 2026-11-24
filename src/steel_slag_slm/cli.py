@@ -497,6 +497,11 @@ def describe_tables() -> None:
         default=None,
         help="stop sending tables after this many minutes, so a CI job ends cleanly",
     )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="only count the tables still without a description; no Gemini calls, no writes",
+    )
     args = parser.parse_args()
     if args.max_papers is not None and args.max_papers <= 0:
         parser.error("--max-papers must be greater than zero")
@@ -535,12 +540,16 @@ def describe_tables() -> None:
             ),
             max_seconds=args.max_minutes * 60 if args.max_minutes is not None else None,
             titles=titles,
+            check_only=args.check,
         )
     except ValueError as error:
         parser.error(str(error))
     print(format_description_summary(report, folder_name))
     if report.outcomes["failed"]:
         raise SystemExit(f"{report.outcomes['failed']} paper(s) failed; rerun to retry them")
+    missing = report.outcomes["tables_missing"]
+    if args.check and (missing or report.outcomes["retired_rows_left"]):
+        raise SystemExit(f"Not complete: {missing} table(s) still without a description")
 
 
 def export_parsed() -> None:
