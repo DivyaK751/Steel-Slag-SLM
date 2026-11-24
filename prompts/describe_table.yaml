@@ -1,7 +1,7 @@
 name: describe_table
 version: 1
 description: Describe one table from a steel slag paper (what it measures, symbols, units, samples) so search can find it.
-variables: [paper_id, table_label, table, context]
+variables: [paper_id, paper_title, section, table_label, table, previous_table, context]
 
 # Sent once as the system instruction; identical for every table
 instruction: |
@@ -11,20 +11,25 @@ instruction: |
   the paper, so accuracy beats completeness.
 
   INPUTS
+  - PAPER: the paper's title and the heading of the section the table sits in, when known.
+    They say what the study is about; they are not a source of values.
   - TABLE: the table as Markdown, with its caption when the parser found one. Cells are
     copied from the PDF; stacked header rows are joined as "Group - Subgroup".
+  - PREVIOUS_TABLE: given only when TABLE has no caption and directly follows a table with
+    the same number of columns, which it most likely continues onto the next page: that
+    table's caption and header row. Its first row may also be TABLE's first row repeated.
   - CONTEXT: paragraphs of the same paper that may explain the table: notes printed under
     it, the paragraph before it, sentences citing its "Table N", and sentences defining its
     codes or symbols. It can be empty, and it can mention other tables and figures.
 
   RULES
-  - Use only what TABLE and CONTEXT state. Never guess what a symbol, code or abbreviation
-    means: when neither input defines it, leave its meaning null or leave it out.
+  - Use only what the inputs state. Never guess what a symbol, code or abbreviation means:
+    when no input defines it, leave its meaning null or leave it out.
   - Copy column headers, sample codes, units and conditions character for character as
     printed. Do not rename, translate, combine or convert them: "UCS (MPa) - 28 d" stays
     "UCS (MPa) - 28 d", "SSD" stays "SSD".
   - Do not restate the table's values. The table is stored with your description; write no
-    number that is not printed in TABLE or CONTEXT.
+    number that the inputs do not print.
   - Write summary, meanings and synonyms in English, even when the paper is not; copied
     labels stay as printed.
 
@@ -32,7 +37,9 @@ instruction: |
   - summary (always): one or two sentences on what the table reports: the properties
     measured, for which materials or samples, and under which conditions or test method.
     Spell out the codes the inputs define ("ψ, the CO2 mineralization potential"). When
-    TABLE has no caption but CONTEXT names it ("Table 3 lists ..."), start with that name.
+    TABLE has no caption, start with its name: "Continuation of Table 2" when it continues
+    PREVIOUS_TABLE (use that caption and header to read its columns), or the name CONTEXT
+    gives it ("Table 3 lists ...").
   - columns: one per column header, in order, the row-label column included. label as
     printed, meaning in plain words when the inputs define it (null otherwise), unit as
     printed (null when none is printed).
@@ -59,11 +66,18 @@ instruction: |
 
 # Filled once per table and sent as the user message
 input_template: |
+  <paper>
+  id: {paper_id}
+  title: {paper_title}
+  section: {section}
+  </paper>
   <table>
-  paper: {paper_id}
-  table: {table_label}
+  label: {table_label}
   {table}
   </table>
+  <previous_table>
+  {previous_table}
+  </previous_table>
   <context>
   {context}
   </context>

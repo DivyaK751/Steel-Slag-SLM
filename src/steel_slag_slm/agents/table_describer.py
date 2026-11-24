@@ -30,10 +30,16 @@ def table_name(table: TableToDescribe) -> str:
 
 
 def ungrounded_numbers(description: TableDescription, source: str) -> list[str]:
-    """Return the numbers of the description that its table and context never print."""
+    """Return the numbers of the description that the source text never prints."""
     printed = {_normalize(number) for number in _NUMBER.findall(source)}
     written = _NUMBER.findall(description.model_dump_json())
     return sorted({number for number in written if _normalize(number) not in printed})
+
+
+def _printed_text(table: TableToDescribe) -> str:
+    """Everything the describer was shown, so any number it repeats from there is allowed."""
+    parts = [table.paper_title, table.section, table.table, table.previous_table, table.context]
+    return "\n".join(parts)
 
 
 def _normalize(number: str) -> str:
@@ -46,20 +52,23 @@ async def describe_table(
     """Ask the agent what the table reports, and how many tokens that took.
 
     Raises:
-        AgentOutputError: If the answer is missing or malformed, or states a number that the
-            table and its context do not print (a sign of an invented value).
+        AgentOutputError: If the answer is missing or malformed, or states a number that none
+            of its inputs print (a sign of an invented value).
     """
     message = prompt.render_input(
         paper_id=table.paper_id,
+        paper_title=table.paper_title or MISSING_FIELD,
+        section=table.section or MISSING_FIELD,
         table_label=table.label or MISSING_FIELD,
         table=table.table,
+        previous_table=table.previous_table or MISSING_FIELD,
         context=table.context or MISSING_FIELD,
     )
     answer = await run_structured_with_usage(runner, message, TableDescription)
-    invented = ungrounded_numbers(answer.result, f"{table.table}\n{table.context}")
+    invented = ungrounded_numbers(answer.result, _printed_text(table))
     if invented:
         raise AgentOutputError(
-            f"Description states numbers the table does not print: {', '.join(invented)}",
+            f"Description states numbers its inputs never print: {', '.join(invented)}",
             answer.result.model_dump_json(),
             usage=answer.usage,
         )

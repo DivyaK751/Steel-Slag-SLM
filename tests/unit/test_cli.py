@@ -151,6 +151,10 @@ def _fake_describe_tables_clients(monkeypatch, calls: dict[str, object]) -> None
         lambda: MagicMock(output_folder_name="_parsed_approved", index_file_name="index.json"),
     )
     monkeypatch.setattr(cli, "_connect_to_parsed_folder", lambda name: ("drive", f"id-{name}"))
+    monkeypatch.setattr(
+        cli, "load_drive_connection_settings", lambda: MagicMock(folder_id="source-folder")
+    )
+    monkeypatch.setattr(cli, "list_paper_titles", lambda _service, _folder: {"W1": "A title"})
     monkeypatch.setattr(cli, "load_prompt", lambda _name: "prompt")
     monkeypatch.setattr(cli, "build_table_describer_agent", lambda *_: "agent")
     monkeypatch.setattr(cli, "build_runner", lambda _agent: "runner")
@@ -178,6 +182,7 @@ def test_describe_tables_runs_on_the_configured_folder(
 
     assert calls["folder_id"] == "id-_parsed_approved" and calls["index_name"] == "index.json"
     assert calls["max_run_usd"] == budget and calls["max_seconds"] == seconds
+    assert calls["titles"] == {"W1": "A title"}
     assert cli.os.environ["GOOGLE_APPLICATION_CREDENTIALS"] == "/tmp/gcp.json"
     assert "2  described" in capsys.readouterr().out
 

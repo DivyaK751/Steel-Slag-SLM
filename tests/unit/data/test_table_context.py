@@ -69,6 +69,85 @@ def test_tables_to_describe_skips_contents_lists_and_compacts_the_table(
     assert "mineralization potential" in table.context
 
 
+def test_tables_to_describe_gives_the_title_and_the_section_the_table_sits_in(
+    manifest_record: dict[str, Any],
+) -> None:
+    blocks = [
+        _block("text", "section_header", "3. Results and discussion"),
+        _block("text", "section_header", "ACCEPTED MANUSCRIPT"),  # a running header, not a section
+        _block("text", "text", "Strength is listed below."),
+        _block("table", "table", TABLE),
+    ]
+    manifest = ParsedManifest.model_validate(
+        {**manifest_record, "content_blocks": blocks, "tables": [TABLE]}
+    )
+
+    [table] = tables_to_describe(manifest, 1, 2000, paper_title="Slag binders")
+
+    assert (table.paper_title, table.section) == ("Slag binders", "3. Results and discussion")
+    assert table.previous_table == ""
+
+
+def _continuation_manifest(record: dict[str, Any], second_width: int) -> ParsedManifest:
+    later = "| SSE | 7.0 |" if second_width == 2 else "| SSE | 7.0 | 1 |"
+    blocks = [
+        _block("table", "table", TABLE, page=2),
+        _block("text", "page_footer", "Page 2", page=2),
+        _block("table", "table", later, page=3),
+        _block("text", "page_header", "Journal of Slag", page=4),
+        _block("table", "table", "| SSF | 6.1 |", page=4),
+    ]
+    return ParsedManifest.model_validate(
+        {
+            **record,
+            "page_count": 4,
+            "content_blocks": blocks,
+            "tables": [TABLE, later, "| SSF | 6.1 |"],
+        }
+    )
+
+
+def test_an_uncaptioned_table_of_the_same_width_gets_the_caption_it_continues(
+    manifest_record: dict[str, Any],
+) -> None:
+    first, second, third = tables_to_describe(_continuation_manifest(manifest_record, 2), 1, 2000)
+
+    expected = "Table 2. Carbonation of the binders.\n| Binder | ψ (%) |"
+    assert (first.previous_table, second.previous_table) == ("", expected)
+    assert third.previous_table == expected  # followed back over two page breaks
+    assert [table.label for table in (first, second, third)] == ["Table 2"] * 3
+
+
+def test_an_uncaptioned_table_of_another_width_continues_nothing(
+    manifest_record: dict[str, Any],
+) -> None:
+    tables = tables_to_describe(_continuation_manifest(manifest_record, 3), 1, 2000)
+
+    assert [table.previous_table for table in tables] == ["", "", ""]
+
+
+def test_a_caption_left_above_the_table_names_it_and_explains_it(
+    manifest_record: dict[str, Any],
+) -> None:
+    bare = "| Fly ash | Zn (mg/kg) |\n|---|---|\n| FA2 | 8160 |"
+    blocks = [
+        _block("text", "text", "Heavy metals are listed in Table 3 for each fly ash."),
+        _block("text", "section_header", "Table 3. Heavy metal contents of the fly ashes."),
+        _block("table", "table", bare),
+    ]
+    manifest = ParsedManifest.model_validate(
+        {**manifest_record, "content_blocks": blocks, "tables": [bare]}
+    )
+
+    [table] = tables_to_describe(manifest, 1, 2000)
+
+    assert table.label == "Table 3"
+    assert table.context.split("\n\n") == [
+        "Table 3. Heavy metal contents of the fly ashes.",
+        "Heavy metals are listed in Table 3 for each fly ash.",
+    ]
+
+
 def test_tables_to_describe_skips_tables_described_by_the_same_prompt_version(
     manifest: ParsedManifest,
 ) -> None:

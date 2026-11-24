@@ -513,6 +513,8 @@ def describe_tables() -> None:
     settings = load_table_description_settings()
     folder_name = args.parsed_folder or load_pdf_parsing_settings().output_folder_name
     drive_service, parsed_folder_id = _connect_to_parsed_folder(folder_name)
+    # Titles come from the PDFs' Drive descriptions, as for the search index
+    titles = list_paper_titles(drive_service, load_drive_connection_settings().folder_id)
     if gcp.credentials_file:
         # Set only after Drive signs in, as in extract-data: Gemini uses ADC
         os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(gcp.credentials_file)
@@ -532,6 +534,7 @@ def describe_tables() -> None:
                 args.max_gemini_usd if args.max_gemini_usd is not None else settings.max_run_usd
             ),
             max_seconds=args.max_minutes * 60 if args.max_minutes is not None else None,
+            titles=titles,
         )
     except ValueError as error:
         parser.error(str(error))
