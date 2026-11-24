@@ -15,6 +15,9 @@ AGENT_NAME = "table_describer"
 MISSING_FIELD = "(none)"
 # A number standing on its own: "28" in "28 d", but not the "2" of "CO2" or "Al2O3"
 _NUMBER = re.compile(r"(?<![\w.])\d+(?:[.,]\d+)?")
+# An answer with invented numbers is asked again once, naming them; the answers are
+# deterministic, so asking without saying what was wrong would repeat it
+MAX_ATTEMPTS = 2
 
 
 def build_table_describer_agent(
@@ -49,13 +52,35 @@ def _normalize(number: str) -> str:
 async def describe_table(
     runner: Runner, prompt: PromptTemplate, table: TableToDescribe
 ) -> tuple[TableDescription, TokenUsage]:
-    """Ask the agent what the table reports, and how many tokens that took.
+    """Ask the agent what the table reports, and how many tokens that took (all attempts).
+
+    An answer stating a number that none of the inputs print (a sign of an invented value)
+    is asked again once, naming those numbers.
 
     Raises:
-        AgentOutputError: If the answer is missing or malformed, or states a number that none
-            of its inputs print (a sign of an invented value).
+        AgentOutputError: If an answer is missing or malformed, or every attempt states
+            numbers that none of the inputs print.
     """
-    message = prompt.render_input(
+    usage = TokenUsage()
+    correction = MISSING_FIELD
+    for _ in range(MAX_ATTEMPTS):
+        answer = await run_structured_with_usage(
+            runner, _render(prompt, table, correction), TableDescription
+        )
+        usage += answer.usage
+        invented = ungrounded_numbers(answer.result, _printed_text(table))
+        if not invented:
+            return answer.result, usage
+        correction = ", ".join(invented)
+    raise AgentOutputError(
+        f"Description states numbers its inputs never print: {correction}",
+        answer.result.model_dump_json(),
+        usage=usage,
+    )
+
+
+def _render(prompt: PromptTemplate, table: TableToDescribe, correction: str) -> str:
+    return prompt.render_input(
         paper_id=table.paper_id,
         paper_title=table.paper_title or MISSING_FIELD,
         section=table.section or MISSING_FIELD,
@@ -63,13 +88,5 @@ async def describe_table(
         table=table.table,
         previous_table=table.previous_table or MISSING_FIELD,
         context=table.context or MISSING_FIELD,
+        correction=correction,
     )
-    answer = await run_structured_with_usage(runner, message, TableDescription)
-    invented = ungrounded_numbers(answer.result, _printed_text(table))
-    if invented:
-        raise AgentOutputError(
-            f"Description states numbers its inputs never print: {', '.join(invented)}",
-            answer.result.model_dump_json(),
-            usage=answer.usage,
-        )
-    return answer.result, answer.usage

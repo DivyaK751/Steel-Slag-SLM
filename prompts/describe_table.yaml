@@ -1,7 +1,7 @@
 name: describe_table
 version: 1
 description: Describe one table from a steel slag paper (what it measures, symbols, units, samples) so search can find it.
-variables: [paper_id, paper_title, section, table_label, table, previous_table, context]
+variables: [paper_id, paper_title, section, table_label, table, previous_table, context, correction]
 
 # Sent once as the system instruction; identical for every table
 instruction: |
@@ -21,6 +21,8 @@ instruction: |
   - CONTEXT: paragraphs of the same paper that may explain the table: notes printed under
     it, the paragraph before it, sentences citing its "Table N", and sentences defining its
     codes or symbols. It can be empty, and it can mention other tables and figures.
+  - CORRECTION: normally "(none)". Otherwise the numbers that an earlier answer stated but no
+    input prints; answer again, leaving those numbers out.
 
   RULES
   - Use only what the inputs state. Never guess what a symbol, code or abbreviation means:
@@ -81,3 +83,6 @@ input_template: |
   <context>
   {context}
   </context>
+  <correction>
+  {correction}
+  </correction>
