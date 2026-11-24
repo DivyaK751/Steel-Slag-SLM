@@ -210,3 +210,11 @@ def test_slag_reference_rejects_a_name_under_two_phases(tmp_path: Path) -> None:
     raw["phase_names"] = {"Alite": ["alite", "C3S"], "Spinel": ["spinel", "c3s"]}
     with pytest.raises(ValueError, match="listed under Alite and Spinel"):
         config.load_slag_reference(_write_slag_reference(tmp_path, raw))
+
+
+def test_slag_catalogue_settings_sit_in_the_extraction_dataset() -> None:
+    settings = config.load_slag_catalogue_settings()
+    raw = yaml.safe_load(config.BASE_CONFIG_PATH.read_text())
+    assert settings.dataset == raw["data_extraction"]["dataset"]
+    assert settings.table == "slag_catalogue"
+    assert settings.heavy_metal_limits == {"cr2o3_pct": 0.5, "v2o5_pct": 0.5}

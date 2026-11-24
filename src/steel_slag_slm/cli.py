@@ -41,6 +41,8 @@ from steel_slag_slm.config import (
     load_retrieval_eval_set,
     load_screening_settings,
     load_settings,
+    load_slag_catalogue_settings,
+    load_slag_reference,
 )
 from steel_slag_slm.data import parsed_index
 from steel_slag_slm.data.drive_storage import (
@@ -81,6 +83,7 @@ from steel_slag_slm.exceptions import PapersNotFoundError, PromotionError
 from steel_slag_slm.llm.prompts import PromptTemplate, load_prompt
 from steel_slag_slm.pipelines.background_figure_reader import BackgroundFigureReader
 from steel_slag_slm.pipelines.build_index import run_build_index
+from steel_slag_slm.pipelines.build_slag_catalogue import run_catalogue_build
 from steel_slag_slm.pipelines.compare_extraction import compare_runs
 from steel_slag_slm.pipelines.evaluate_retrieval import (
     format_retrieval_report,
@@ -733,9 +736,10 @@ def promote_extraction() -> None:
     test_ids = load_benchmark_split(settings.benchmark_file).test
     judge = (settings.model, load_prompt(settings.prompt_name).version)
     production_dataset_id = f"{gcp.project}.{load_data_extraction_settings().dataset}"
+    client = build_bigquery_client(gcp.project, gcp.credentials_file)
     try:
         promotion = run_promotion(
-            build_bigquery_client(gcp.project, gcp.credentials_file),
+            client,
             f"{gcp.project}.{settings.runs_dataset}",
             production_dataset_id,
             args.run_id,
@@ -750,8 +754,32 @@ def promote_extraction() -> None:
         print(f"Last promoted {promotion.champion_id}: F1 {_percent(promotion.champion_f1)}")
     if promotion.promoted:
         print(f"Promoted: its rows replaced those papers' rows in {production_dataset_id}")
+        # The catalogue is built from the production chemistry rows, so it must follow them
+        _rebuild_slag_catalogue(client)
     else:
         print("Not promoted: F1 is not higher (use --force to promote anyway)")
+
+
+def build_slag_catalogue() -> None:
+    """Rebuild the slag catalogue table from the feedstock-chemistry sheet."""
+    argparse.ArgumentParser(description=build_slag_catalogue.__doc__).parse_args()
+    _setup_logging()
+    gcp = load_gcp_settings()
+    _rebuild_slag_catalogue(build_bigquery_client(gcp.project, gcp.credentials_file))
+
+
+def _rebuild_slag_catalogue(client: bigquery.Client) -> None:
+    """Rebuild the slag catalogue and print how many slags it holds and can compare."""
+    settings = load_slag_catalogue_settings()
+    entries = run_catalogue_build(client, settings, load_slag_reference())
+    comparable = sum(entry.is_comparable for entry in entries)
+    with_phases = sum(bool(entry.mineral_phases) for entry in entries)
+    flagged = sum(bool(entry.flags) for entry in entries)
+    print(
+        f"Slag catalogue {client.project}.{settings.dataset}.{settings.table}: "
+        f"{len(entries)} slags, {comparable} comparable, {with_phases} with phases, "
+        f"{flagged} flagged"
+    )
 
 
 def compare_extraction() -> None:

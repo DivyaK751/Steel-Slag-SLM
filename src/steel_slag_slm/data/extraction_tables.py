@@ -90,6 +90,7 @@ SHEET_TABLES = (
 
 TABLES_BY_NAME = {sheet_table.table: sheet_table for sheet_table in SHEET_TABLES}
 LITERATURE_TABLE = SHEET_TABLES[0].table
+CHEMISTRY_TABLE = SHEET_TABLES[1].table
 PROVENANCE_TABLE = SHEET_TABLES[-1].table
 # Filled by the pipeline from the paper and its material list, never by the model directly
 KEY_HEADERS = ("Source_ID", "Material_ID", "Experiment_ID", "Mix_ID", "Steel_Slag_Type")
