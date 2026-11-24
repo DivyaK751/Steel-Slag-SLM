@@ -209,6 +209,19 @@ class FigureReadingSettings(AgentSettings):
     max_run_usd: float | None = None
 
 
+class TableDescriptionSettings(AgentSettings):
+    """How the table-describing agent explains parsed tables and what its tokens cost."""
+
+    prompt_name: str
+    max_concurrency: int
+    call_timeout_s: float
+    prices: ModelPrices
+    # Characters of the paper's own text sent with each table to explain its codes and symbols
+    context_max_chars: int = Field(gt=0)
+    # describe-tables stops calling Gemini once a run's estimated cost reaches this; None = no cap
+    max_run_usd: float | None = None
+
+
 class TokenPrices(BaseModel):
     """List prices of one Gemini model, in US$ per million tokens."""
 
@@ -558,6 +571,14 @@ def load_figure_reading_settings(
     raw_config = _read_base_config(config_path)
     section = _agent_section(raw_config, "figure_reading")
     return FigureReadingSettings(**section)
+
+
+def load_table_description_settings(
+    config_path: Path = BASE_CONFIG_PATH,
+) -> TableDescriptionSettings:
+    """Build the table-describing agent's settings; needs no OpenAlex, Drive or BigQuery secrets."""
+    raw_config = _read_base_config(config_path)
+    return TableDescriptionSettings(**_agent_section(raw_config, "table_description"))
 
 
 def load_embedding_settings(config_path: Path = BASE_CONFIG_PATH) -> EmbeddingSettings:

@@ -436,6 +436,25 @@ figure_reading:
     input_usd_per_million: 0.75
     output_usd_per_million: 3.75
 
+table_description:
+  prompt_name: describe_table
+  model: null  # null = use llm.model
+  # Describing a table is reading, not reasoning; low thinking keeps each call cheap
+  thinking_level: low
+  # Gemini calls in flight at once; raise slowly, Vertex quotas are per minute
+  max_concurrency: 4
+  # A call taking longer is skipped and reported; the next run retries that table
+  call_timeout_s: 120
+  # describe-tables stops calling Gemini once a run's estimated cost reaches this (US$); a
+  # rerun picks up the tables still undescribed. Override with --max-gemini-usd
+  max_run_usd: 20
+  # The paper's own paragraphs sent with each table (notes, citing and defining sentences)
+  context_max_chars: 4000
+  # Vertex AI price of llm.model per million tokens, as for figure_reading; re-check it
+  prices:
+    input_usd_per_million: 0.75
+    output_usd_per_million: 3.75
+
 # USD per 1 million tokens, standard on-demand text pricing, used only to estimate run costs.
 # Copy from https://cloud.google.com/vertex-ai/generative-ai/pricing (thinking tokens are billed
 # as output). Leave null when unknown and the report shows tokens without a cost.

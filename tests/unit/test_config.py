@@ -140,6 +140,13 @@ def test_figure_reading_settings_use_llm_defaults() -> None:
     assert settings.prices.output_usd_per_million > settings.prices.input_usd_per_million
 
 
+def test_table_description_settings_use_llm_defaults() -> None:
+    settings = config.load_table_description_settings()
+    assert settings.model  # falls back to llm.model
+    assert settings.prompt_name == "describe_table"
+    assert settings.context_max_chars > 0
+
+
 def test_evaluation_prices_skip_models_without_both_prices(tmp_path: Path) -> None:
     path = tmp_path / "base.yaml"
     raw = {

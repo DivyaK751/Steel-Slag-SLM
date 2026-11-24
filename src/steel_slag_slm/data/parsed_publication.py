@@ -1,4 +1,4 @@
-"""Publish figure assets and a single current paper manifest to Drive."""
+"""Publish figure assets and a single current paper manifest to Drive, and update it later."""
 
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
@@ -7,7 +7,11 @@ from typing import Any
 from uuid import uuid4
 
 from steel_slag_slm.data import drive_storage
-from steel_slag_slm.data.parsed_manifest import CONTENT_SCHEMA_VERSION, ParsedManifest
+from steel_slag_slm.data.parsed_manifest import (
+    CONTENT_SCHEMA_VERSION,
+    ParsedManifest,
+    StoredTableDescription,
+)
 from steel_slag_slm.data.pdf_parsing_source import PdfSource
 from steel_slag_slm.schemas import FigureReading, ParsedDocument
 
@@ -149,9 +153,32 @@ def publish_readings(
         image.model_copy(update={"reading": readings[position]}) if position in readings else image
         for position, image in enumerate(manifest.images)
     ]
-    updated = ParsedManifest.model_validate(
-        manifest.model_copy(update={"images": images}).model_dump()
-    )
+    return _replace_manifest(service, paper_folder_id, manifest, {"images": images})
+
+
+def publish_table_descriptions(
+    service: Any,
+    paper_folder_id: str,
+    manifest: ParsedManifest,
+    descriptions: Sequence[StoredTableDescription],
+) -> ParsedManifest:
+    """Store new table descriptions in the paper's parsed.json, replacing older ones.
+
+    A new description replaces any earlier one of the same table block. The file is replaced
+    in place, so its Drive ID and the index entry stay the same; fields the manifest no
+    longer reads, such as retired table rows, are left out of the new file.
+    """
+    replaced = {description.block_index for description in descriptions}
+    kept = [old for old in manifest.table_descriptions if old.block_index not in replaced]
+    merged = sorted([*kept, *descriptions], key=lambda description: description.block_index)
+    return _replace_manifest(service, paper_folder_id, manifest, {"table_descriptions": merged})
+
+
+def _replace_manifest(
+    service: Any, paper_folder_id: str, manifest: ParsedManifest, update: dict[str, Any]
+) -> ParsedManifest:
+    """Validate the manifest with the update applied, then overwrite the paper's parsed.json."""
+    updated = ParsedManifest.model_validate(manifest.model_copy(update=update).model_dump())
     drive_storage.write_file(
         service,
         paper_folder_id,
