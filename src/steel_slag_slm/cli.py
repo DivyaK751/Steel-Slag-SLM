@@ -19,6 +19,7 @@ from steel_slag_slm.agents.abstract_extractor import build_extractor_agent
 from steel_slag_slm.agents.data_extractor import build_data_extractor_agent
 from steel_slag_slm.agents.extraction_judge import build_adjudicator_agent, build_judge_agent
 from steel_slag_slm.agents.figure_reader import build_figure_reader_agent
+from steel_slag_slm.agents.question_form import form_columns
 from steel_slag_slm.agents.relevance_screener import build_screener_agent
 from steel_slag_slm.agents.runner import build_runner
 from steel_slag_slm.config import (
@@ -38,9 +39,11 @@ from steel_slag_slm.config import (
     load_figure_reading_settings,
     load_gcp_settings,
     load_pdf_parsing_settings,
+    load_question_routing_settings,
     load_retrieval_eval_set,
     load_screening_settings,
     load_settings,
+    load_similar_slag_settings,
     load_slag_catalogue_settings,
     load_slag_reference,
 )
@@ -80,6 +83,7 @@ from steel_slag_slm.evaluation.extraction_report import (
 from steel_slag_slm.evaluation.figure_checks import total_checks
 from steel_slag_slm.evaluation.value_metrics import count_values
 from steel_slag_slm.exceptions import PapersNotFoundError, PromotionError
+from steel_slag_slm.llm.local_model import OllamaJsonModel
 from steel_slag_slm.llm.prompts import PromptTemplate, load_prompt
 from steel_slag_slm.pipelines.background_figure_reader import BackgroundFigureReader
 from steel_slag_slm.pipelines.build_index import run_build_index
@@ -99,6 +103,7 @@ from steel_slag_slm.pipelines.fill_abstracts import run_fill_abstracts
 from steel_slag_slm.pipelines.judge_extraction import adjudicate_run, judge_run
 from steel_slag_slm.pipelines.paper_selection import select_papers
 from steel_slag_slm.pipelines.parse_pdfs import format_parse_summary, run_pdf_parsing
+from steel_slag_slm.pipelines.prepare_evidence import build_route_tools, prepare_evidence
 from steel_slag_slm.pipelines.promote_extraction import run_promotion
 from steel_slag_slm.pipelines.read_figures import (
     list_paper_dirs,
@@ -110,6 +115,7 @@ from steel_slag_slm.pipelines.search_index import run_search
 from steel_slag_slm.pipelines.sync_registry import run_registry_sync
 from steel_slag_slm.rag.embeddings import Embedder
 from steel_slag_slm.rag.retrieval import CrossEncoderScorer, TwoStageRetriever
+from steel_slag_slm.rag.similar_slags import SlagProfile
 from steel_slag_slm.schemas import ChunkKind, ExtractionRun
 
 logger = logging.getLogger(__name__)
@@ -1073,3 +1079,59 @@ def read_figures() -> None:
         f"{checks.rows_malformed} rows with missing cells"
     )
     print(f"Each reading is saved beside its source image under {args.figures_dir}")
+
+
+def ask() -> None:
+    """Read a question, run the tools it needs and print the evidence the answer model gets."""
+    parser = argparse.ArgumentParser(description=ask.__doc__)
+    parser.add_argument("question", help="the user's message, in plain language")
+    parser.add_argument(
+        "--profile", type=Path, help="JSON file with the user's slag (type, oxides, phases)"
+    )
+    _add_parsed_folder_argument(parser)
+    args = parser.parse_args()
+
+    _setup_logging()
+    routing = load_question_routing_settings()
+    embedding = load_embedding_settings()
+    profile = (
+        SlagProfile.model_validate_json(args.profile.read_text(encoding="utf-8"))
+        if args.profile
+        else None
+    )
+    drive_service, _ = _connect_to_parsed_folder(args.parsed_folder)
+    encoder = Embedder(embedding.model)
+    store = load_store(
+        drive_service,
+        _index_folder_id(drive_service, args.parsed_folder),
+        embedding.model,
+        encoder.dimension,
+    )
+    retriever = TwoStageRetriever(
+        store,
+        encoder,
+        CrossEncoderScorer(embedding.reranker),
+        embedding.query_prefix,
+        embedding.top_papers,
+        embedding.candidates,
+    )
+    gcp = load_gcp_settings()
+    tools = build_route_tools(
+        build_bigquery_client(gcp.project, gcp.credentials_file),
+        load_slag_catalogue_settings(),
+        load_similar_slag_settings(),
+        load_slag_reference(),
+        lambda query, top_k: retriever.search(query, top_k),
+    )
+    prepared = prepare_evidence(
+        args.question,
+        OllamaJsonModel(routing.reader_url, routing.reader_model, routing.reader_timeout_s),
+        load_prompt(routing.prompt_name),
+        form_columns(),
+        tools,
+        routing,
+        profile,
+    )
+    print("FORM\n" + prepared.form.model_dump_json(indent=2))
+    print("TOOLS: " + (", ".join(call.tool for call in prepared.plan.calls) or "none"))
+    print("\nEVIDENCE\n" + prepared.evidence)
