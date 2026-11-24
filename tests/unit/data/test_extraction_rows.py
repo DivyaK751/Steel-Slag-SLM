@@ -149,3 +149,14 @@ def test_build_rows_adds_the_page_and_lowers_confidence_of_converted_values() ->
     assert sio2["confidence"] == "Medium"
     assert "confidence lowered" in sio2["provenance_notes"]
     assert (result.confidence_lowered, result.without_page) == (1, 1)
+
+
+def test_check_fact_accepts_an_ordered_list_of_processing_steps() -> None:
+    def processing(value: str) -> ExtractedFact:
+        return _fact(sheet="sheet_03_processing", field="Processing_Method", value=value)
+
+    assert check_fact(processing("Milling; Sieving; Carbonation"), {"MAT-0001"}) is None
+    assert check_fact(processing("Milling; Crushing"), {"MAT-0001"}) is not None
+    # Only Processing_Method takes a list
+    dry_or_wet = _fact(sheet="sheet_03_processing", field="Dry_or_Wet", value="Dry; Wet")
+    assert check_fact(dry_or_wet, {"MAT-0001"}) is not None

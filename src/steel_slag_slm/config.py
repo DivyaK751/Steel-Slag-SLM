@@ -264,6 +264,15 @@ class SlagCatalogueSettings(BaseModel):
     heavy_metal_limits: dict[str, float]  # catalogue column -> wt% above which it is flagged
 
 
+class SimilarSlagSettings(BaseModel):
+    """How the similar-slags tool decides which catalogue slags match the user's slag."""
+
+    top_k: int
+    max_oxides_out_of_range_cross_type: int
+    min_shared_phases_cross_type: int
+    min_shared_oxides: int
+
+
 class OxideRange(BaseModel):
     """Typical wt% range of one oxide in one slag type, with its typical average if known."""
 
@@ -569,6 +578,11 @@ def load_slag_catalogue_settings(config_path: Path = BASE_CONFIG_PATH) -> SlagCa
     return SlagCatalogueSettings(
         dataset=raw_config["data_extraction"]["dataset"], **raw_config["slag_catalogue"]
     )
+
+
+def load_similar_slag_settings(config_path: Path = BASE_CONFIG_PATH) -> SimilarSlagSettings:
+    """Build the similar-slags tool's matching rules from the YAML config."""
+    return SimilarSlagSettings(**_read_base_config(config_path)["similar_slags"])
 
 
 def load_slag_reference(path: Path = SLAG_REFERENCE_PATH) -> SlagReference:

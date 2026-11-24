@@ -307,6 +307,17 @@ slag_catalogue:
     cr2o3_pct: 0.5
     v2o5_pct: 0.5
 
+similar_slags:
+  # How many similar slags the tool returns
+  top_k: 5
+  # CNS: a slag of another group (EAF, BOF, Ladle, Other) matches only if its oxides are all
+  # within the user's type ranges and it shares this many phases; it always ranks below
+  # same-group slags. Same-group slags always stay in; out-of-range ones carry a flag
+  max_oxides_out_of_range_cross_type: 0
+  min_shared_phases_cross_type: 3
+  # Oxides both slags must report before their distance is computed
+  min_shared_oxides: 3
+
 extraction_judge:
   # Scores benchmark runs of extract-data against the hand-extracted reference workbook
   prompt_name: judge_extraction
@@ -333,7 +344,7 @@ extraction_judge:
 pdf_parsing:
   source_table: capstone-project-511200.steel_slag.papers
   relevant_labels: ["Yes"]  # papers the relevance screening approved
-  output_folder_name: _parsed
+  output_folder_name: _parsed_approved
   index_file_name: index.json
   torch_threads_per_worker: 2  # used with --workers above 1; 2 was fastest on an M4 Pro
 

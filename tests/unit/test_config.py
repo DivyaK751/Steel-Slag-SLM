@@ -154,6 +154,21 @@ def test_evaluation_prices_skip_models_without_both_prices(tmp_path: Path) -> No
     assert set(settings.prices) == {"priced"}
 
 
+def test_benchmark_split_is_dev_then_test_without_overlap() -> None:
+    settings = config.load_extraction_judge_settings()
+    split = config.load_benchmark_split(settings.benchmark_file)
+    assert split.papers("dev") == split.dev and split.papers("test") == split.test
+    assert not set(split.dev) & set(split.test)
+    assert settings.reference_workbook.is_file()
+
+
+def test_benchmark_split_rejects_a_paper_in_both_splits(tmp_path: Path) -> None:
+    path = tmp_path / "split.yaml"
+    path.write_text(yaml.safe_dump({"dev": ["W1"], "test": ["W1", "W2"]}))
+    with pytest.raises(ValueError, match="both dev and test"):
+        config.load_benchmark_split(path)
+
+
 def test_slag_reference_file_covers_each_cns_slag_type() -> None:
     reference = config.load_slag_reference()
     assert set(reference.slag_types) == {"EAF", "BOF", "Ladle"}
@@ -218,3 +233,9 @@ def test_slag_catalogue_settings_sit_in_the_extraction_dataset() -> None:
     assert settings.dataset == raw["data_extraction"]["dataset"]
     assert settings.table == "slag_catalogue"
     assert settings.heavy_metal_limits == {"cr2o3_pct": 0.5, "v2o5_pct": 0.5}
+
+
+def test_similar_slag_settings_load_from_base_config() -> None:
+    settings = config.load_similar_slag_settings()
+    assert settings.top_k == 5
+    assert settings.min_shared_phases_cross_type == 3
