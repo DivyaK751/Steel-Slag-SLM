@@ -1,4 +1,4 @@
-"""Read parsed tables as text: their "Table N" label, a compact form, and contents lists."""
+"""Read parsed tables as text: their "Table N" label, rows, a compact form and contents lists."""
 
 import re
 
@@ -29,6 +29,15 @@ def compact_markdown_table(text: str) -> str:
         elif not _SEPARATOR_ROW.match(line):
             lines.append(f"| {' | '.join(_cells(line))} |")
     return "\n".join(lines).strip()
+
+
+def table_rows(text: str) -> list[list[str]]:
+    """Return the cells of each table row, header first, without separator rows or captions."""
+    return [
+        _cells(line)
+        for line in text.splitlines()
+        if is_table_row(line) and not _SEPARATOR_ROW.match(line)
+    ]
 
 
 def _cells(row: str) -> list[str]:
