@@ -254,6 +254,16 @@ class BenchmarkSplit(BaseModel):
         return self.dev if split == "dev" else self.test
 
 
+class SlagCatalogueSettings(BaseModel):
+    """Where the cleaned slag catalogue lives and the rules used to build it."""
+
+    dataset: str  # data_extraction.dataset, next to the sheet it is built from
+    table: str
+    min_coverage_pct: float
+    max_range_width: float  # widest range, in wt% points, still read as its midpoint
+    heavy_metal_limits: dict[str, float]  # catalogue column -> wt% above which it is flagged
+
+
 class OxideRange(BaseModel):
     """Typical wt% range of one oxide in one slag type, with its typical average if known."""
 
@@ -551,6 +561,14 @@ def load_retrieval_eval_set(path: Path = RETRIEVAL_EVAL_PATH) -> RetrievalEvalSe
     """Read the fixed retrieval test set from configs/retrieval_eval.yaml."""
     raw: dict[str, Any] = yaml.safe_load(path.read_text(encoding="utf-8"))
     return RetrievalEvalSet(**raw)
+
+
+def load_slag_catalogue_settings(config_path: Path = BASE_CONFIG_PATH) -> SlagCatalogueSettings:
+    """Build the slag catalogue's settings; its dataset is the extraction tables' dataset."""
+    raw_config = _read_base_config(config_path)
+    return SlagCatalogueSettings(
+        dataset=raw_config["data_extraction"]["dataset"], **raw_config["slag_catalogue"]
+    )
 
 
 def load_slag_reference(path: Path = SLAG_REFERENCE_PATH) -> SlagReference:

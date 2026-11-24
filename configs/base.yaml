@@ -294,6 +294,19 @@ data_extraction:
   # BigQuery on-demand query price; the load jobs that write the rows are free
   bigquery_usd_per_tib: 6.25
 
+slag_catalogue:
+  # One cleaned row per slag of sheet_02_feedstock_chemistry, in data_extraction.dataset;
+  # rebuilt by build-slag-catalogue and after every promote-extraction
+  table: slag_catalogue
+  # Keith (CNS): 3-4 major oxides are enough if together they cover ~90% of the total
+  min_coverage_pct: 90
+  # A range like "0.42-0.705" becomes its midpoint; wider ranges ("20-50") are left empty
+  max_range_width: 2
+  # wt% above which Cr2O3 or V2O5 is flagged: leaching risk, and worth extracting
+  heavy_metal_limits:
+    cr2o3_pct: 0.5
+    v2o5_pct: 0.5
+
 extraction_judge:
   # Scores benchmark runs of extract-data against the hand-extracted reference workbook
   prompt_name: judge_extraction
