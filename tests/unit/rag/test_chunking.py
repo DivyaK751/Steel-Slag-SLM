@@ -7,7 +7,7 @@ from steel_slag_slm.rag.chunking import (
     pack_paragraphs,
     passage_for_embedding,
     passage_for_reranking,
-    split_table,
+    table_texts,
 )
 from steel_slag_slm.schemas import (
     Chunk,
@@ -19,6 +19,8 @@ from steel_slag_slm.schemas import (
     ProcessFlow,
     ProcessStep,
     TableColumn,
+    TableDescription,
+    TableTerm,
 )
 
 MARKDOWN = """Journal header line
@@ -44,6 +46,7 @@ Journal header line
 """
 
 TABLE = "Table 1. Composition\n| Oxide | CaO |\n|-------|-----|\n| BOFS | 50 |"
+COMPACT_TABLE = "Table 1. Composition\n| Oxide | CaO |\n| BOFS | 50 |"
 
 
 def _paper(markdown: str = MARKDOWN, tables: tuple[str, ...] = (TABLE,)) -> ParsedPaper:
@@ -75,7 +78,7 @@ def test_build_chunks_tags_each_chunk_with_its_section() -> None:
 def test_build_chunks_keeps_tables_whole_and_in_their_section() -> None:
     chunks = build_chunks(_paper(), max_chars=800, table_max_chars=1500)
     (table,) = [chunk for chunk in chunks if chunk.kind == "table"]
-    assert table.text == TABLE
+    assert table.text == COMPACT_TABLE
     assert table.section == "Results"
 
 
@@ -114,20 +117,53 @@ def test_pack_paragraphs_gives_a_passage_the_union_of_its_pages() -> None:
     assert packed == [("aaa bbb", (2, 3))]
 
 
-def test_split_table_repeats_caption_and_header_in_every_piece() -> None:
-    rows = "\n".join(f"| row {i} | {'x' * 40} |" for i in range(10))
-    table = f"Table 9. Long\n| A | B |\n|---|---|\n{rows}"
+DESCRIPTION = TableDescription(
+    summary="Oxide composition of BOF slag (BOFS) measured by XRF.",
+    columns=[{"label": "CaO", "meaning": "calcium oxide content", "unit": "wt.%"}],
+    terms=[TableTerm(term="BOFS", meaning="basic oxygen furnace slag")],
+    synonyms=["chemical composition"],
+)
 
-    pieces = split_table(table, max_chars=200)
+
+def test_table_texts_compact_a_short_table_into_one_piece() -> None:
+    assert table_texts(TABLE, None, max_chars=1000) == [COMPACT_TABLE]
+
+
+def test_table_texts_put_the_description_between_caption_and_rows() -> None:
+    (piece,) = table_texts(TABLE, DESCRIPTION, max_chars=1000)
+
+    assert piece == (
+        "Table 1. Composition\n"
+        "Oxide composition of BOF slag (BOFS) measured by XRF.\n"
+        "Columns: CaO: calcium oxide content [wt.%]\n"
+        "Terms: BOFS: basic oxygen furnace slag\n"
+        "Also called: chemical composition\n"
+        "| Oxide | CaO |\n"
+        "| BOFS | 50 |"
+    )
+
+
+def test_table_texts_repeat_caption_description_and_header_in_every_piece() -> None:
+    rows = "\n".join(f"| row {i} | {'x' * 40} |" for i in range(10))
+    table = f"Table 9. Long\n\n|  A | B |\n|---|---|\n{rows}"
+    summary = TableDescription(summary="Long values.")
+
+    pieces = table_texts(table, summary, max_chars=200)
 
     assert len(pieces) > 1
     for piece in pieces:
-        assert piece.startswith("Table 9. Long\n| A | B |\n|---|---|")
+        assert piece.startswith("Table 9. Long\nLong values.\n| A | B |\n| row")
     assert "row 9" in pieces[-1]
 
 
-def test_split_table_returns_short_tables_unchanged() -> None:
-    assert split_table(TABLE, max_chars=1000) == [TABLE]
+def test_table_texts_keep_the_summary_but_drop_description_lines_past_half_the_budget() -> None:
+    wordy = DESCRIPTION.model_copy(update={"samples": ["sample " * 30]})
+
+    (piece,) = table_texts(TABLE, wordy, max_chars=400)
+
+    assert "Oxide composition of BOF slag" in piece
+    assert "Samples:" not in piece
+    assert "Also called: chemical composition" in piece  # a shorter later line still fits
 
 
 def test_tables_carry_the_paper_title_for_search_and_every_chunk_does_for_reranking() -> None:
@@ -195,7 +231,30 @@ def test_block_tables_keep_their_section_and_pages() -> None:
     ]
     chunks = build_chunks(_block_paper(blocks), max_chars=800, table_max_chars=1500)
     (table,) = [c for c in chunks if c.kind == "table"]
-    assert (table.text, table.section, table.pages) == (TABLE, "Results", (5,))
+    assert (table.text, table.section, table.pages) == (COMPACT_TABLE, "Results", (5,))
+
+
+def test_block_tables_lead_with_the_description_of_their_own_block() -> None:
+    other = "Table 2. Strength\n| Mix | UCS |\n|---|---|\n| M1 | 40 |"
+    blocks = [
+        _block("table", TABLE, kind="table"),
+        _block("text", "Body text."),
+        _block("table", other, kind="table"),
+    ]
+    paper = ParsedPaper(
+        openalex_id="W1",
+        markdown="",
+        tables=(),
+        content_blocks=tuple(blocks),
+        table_descriptions={2: TableDescription(summary="Strength of the mixes.")},
+    )
+
+    tables = [c.text for c in build_chunks(paper, 800, 1500) if c.kind == "table"]
+
+    assert tables == [
+        COMPACT_TABLE,
+        "Table 2. Strength\nStrength of the mixes.\n| Mix | UCS |\n| M1 | 40 |",
+    ]
 
 
 def test_a_caption_block_without_a_parsed_figure_is_a_caption_only_figure_chunk() -> None:
