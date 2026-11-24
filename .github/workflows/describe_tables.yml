@@ -1,0 +1,117 @@
+name: Describe parsed tables
+
+# Started by hand: Gemini describes the tables of papers that are already parsed and stores
+# each description in that paper's parsed.json. No PDF is parsed again. A rerun continues
+# with the tables that are still undescribed, so run it again until the summary shows none.
+on:
+  workflow_dispatch:
+    inputs:
+      paper_ids:
+        description: "OpenAlex IDs, space-separated (e.g. W123 W456); blank means every parsed paper"
+        required: false
+        default: ""
+        type: string
+      max_papers:
+        description: "Check at most this many papers, in ID order; blank means all"
+        required: false
+        default: "1"
+        type: string
+      max_gemini_usd:
+        description: "Stop calling Gemini at this estimated cost (US$); blank means the configured cap"
+        required: false
+        default: "20"
+        type: string
+      parsed_folder:
+        description: "Parsed Drive folder; blank means the configured one (_parsed_approved)"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+# The parsing workflow's group: both rewrite parsed.json, so they must never run at once
+concurrency:
+  group: parse-trial-pdfs
+  cancel-in-progress: false
+
+env:
+  DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+  GOOGLE_OAUTH_TOKEN_JSON: ${{ secrets.GOOGLE_OAUTH_TOKEN_JSON }}
+  GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+  GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+  GOOGLE_CLOUD_LOCATION: global
+  GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
+
+jobs:
+  describe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Check required secrets
+        run: |
+          if [ -z "$DRIVE_FOLDER_ID" ]; then
+            echo "DRIVE_FOLDER_ID secret is required."
+            exit 1
+          fi
+          if [ -z "$GOOGLE_OAUTH_TOKEN_JSON" ] && [ -z "$GOOGLE_SERVICE_ACCOUNT_JSON" ]; then
+            echo "Configure GOOGLE_OAUTH_TOKEN_JSON or GOOGLE_SERVICE_ACCOUNT_JSON for Drive."
+            exit 1
+          fi
+          if [ -z "$GOOGLE_CLOUD_PROJECT" ] || [ -z "$GCP_SERVICE_ACCOUNT_JSON" ]; then
+            echo "GOOGLE_CLOUD_PROJECT and GCP_SERVICE_ACCOUNT_JSON are required for Gemini."
+            exit 1
+          fi
+
+      - name: Write Google credentials
+        run: .github/scripts/write_google_credentials.sh
+
+      - name: Install project dependencies
+        run: uv sync --locked --no-dev
+
+      - name: Describe tables
+        shell: bash  # adds pipefail, so a failed run still fails the step through tee
+        env:
+          PAPER_IDS: ${{ inputs.paper_ids }}
+          MAX_PAPERS: ${{ inputs.max_papers }}
+          MAX_GEMINI_USD: ${{ inputs.max_gemini_usd }}
+          PARSED_FOLDER: ${{ inputs.parsed_folder }}
+        run: |
+          # Stop sending tables after 150 minutes, so the run saves its work before the timeout
+          args=(--max-minutes 150)
+          if [[ -n "$MAX_GEMINI_USD" ]]; then
+            args+=(--max-gemini-usd "$MAX_GEMINI_USD")
+          fi
+          if [[ -n "$MAX_PAPERS" ]]; then
+            args+=(--max-papers "$MAX_PAPERS")
+          fi
+          if [[ -n "$PARSED_FOLDER" ]]; then
+            args+=(--parsed-folder "$PARSED_FOLDER")
+          fi
+          if [[ -n "$PAPER_IDS" ]]; then
+            read -r -a ids <<< "$PAPER_IDS"
+            for id in "${ids[@]}"; do
+              if [[ ! "$id" =~ ^W[0-9]+$ ]]; then
+                echo "::error::Not an OpenAlex ID: '$id'"
+                exit 1
+              fi
+            done
+            args+=(--paper-ids "${ids[@]}")
+          fi
+          uv run --locked --no-sync describe-tables "${args[@]}" 2>&1 | tee describe.log
+
+      - name: Summarize the run
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '```'
+            sed -n '/^Table descriptions (Drive folder/,$p' describe.log 2>/dev/null || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
