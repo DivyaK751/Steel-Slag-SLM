@@ -334,6 +334,30 @@ uv run evaluate-retrieval --eval-set configs/retrieval_eval_heldout.yaml \
 - Settings are in the `embedding:` section of `configs/base.yaml`. Design notes are in
   [docs/adr/003-semantic-search-index.md](docs/adr/003-semantic-search-index.md).
 
+### Table descriptions
+
+A table passage starts with its caption and Gemini's description of the table (what it
+measures, column meanings and units, samples, conditions and the codes the paper defines),
+then its rows. `describe-tables` writes those descriptions into each paper's `parsed.json`,
+reading only that file: no PDF is downloaded or parsed again.
+
+```bash
+uv run describe-tables --paper-ids W2618057564     # try one paper first
+uv run describe-tables --max-gemini-usd 20         # every parsed paper; rerun to continue
+uv run build-index --rebuild                       # then rebuild the index to use them
+```
+
+- On GitHub, run **Actions → Describe parsed tables**. It checks one paper by default; clear
+  `max_papers` for all of them. It stops after 150 minutes or at the budget and saves what it
+  described, so run it again until the summary shows no papers described. It never runs while
+  the parsing workflow does, since both rewrite `parsed.json`.
+- Only tables without a description from the current prompt version are sent. Bump
+  `version` in `prompts/describe_table.yaml` to describe every table again.
+- A description stating a number the table and its paragraphs never print is rejected, and its
+  table is retried on the next run. Settings are in `table_description:` in
+  `configs/base.yaml`; design notes in
+  [docs/adr/004-table-descriptions.md](docs/adr/004-table-descriptions.md).
+
 ## Figure extraction (local)
 
 `extract-figures` pulls the figures (plots, charts, process diagrams, micrographs) out of PDFs on

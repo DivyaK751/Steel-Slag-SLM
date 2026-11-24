@@ -91,6 +91,7 @@ class EmbeddingSettings(BaseModel):
     query_prefix: str
     chunk_max_chars: int
     table_max_chars: int
+    table_max_tokens: int = Field(gt=0)  # reranker tokens a table chunk's text may hold
     papers_per_save: int
     top_k: int
     # Folder in the shared Drive folder that holds one search index per parsed folder, so
