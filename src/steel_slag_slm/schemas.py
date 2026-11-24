@@ -296,6 +296,36 @@ class FigureReading(BaseModel):
     flows: list[ProcessFlow] = Field(default_factory=list)
 
 
+class DescribedColumn(BaseModel):
+    """One column header of a table, copied as printed, with what it measures."""
+
+    label: str  # e.g. "ψ" or "UCS (MPa) - 28 d"
+    meaning: str | None = None  # in plain words; None when the paper does not say
+    unit: str | None = None
+
+
+class TableTerm(BaseModel):
+    """A symbol, abbreviation or sample code of a table, defined as the paper defines it."""
+
+    term: str
+    meaning: str
+
+
+class TableDescription(BaseModel):
+    """Gemini's description of one table, in the words a question about it would use.
+
+    Only the paper's own wording is kept; the table's values stay in the table itself.
+    """
+
+    summary: str
+    columns: list[DescribedColumn] = Field(default_factory=list)
+    samples: list[str] = Field(default_factory=list)  # materials or mixes the rows cover
+    conditions: list[str] = Field(default_factory=list)  # ages, curing, test methods
+    terms: list[TableTerm] = Field(default_factory=list)
+    # Other common names of the measured properties, e.g. "compressive strength" for UCS
+    synonyms: list[str] = Field(default_factory=list)
+
+
 @dataclass(frozen=True, slots=True)
 class PaperFigure:
     """One figure of a parsed paper, as the search index reads it from parsed.json."""
