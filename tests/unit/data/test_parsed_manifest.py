@@ -50,6 +50,21 @@ def test_manifest_keeps_a_description_of_its_table_block(manifest_record: dict[s
     assert manifest.table_descriptions[0].description.summary.startswith("Oxide composition")
 
 
+def test_a_description_is_written_with_a_source_only_when_it_is_the_papers_words(
+    manifest_record: dict[str, Any],
+) -> None:
+    paper = {**_stored(manifest_record), "source": "paper"}
+    for stored, written in [(_stored(manifest_record), None), (paper, "paper")]:
+        manifest = ParsedManifest.model_validate(
+            {**manifest_record, "table_descriptions": [stored]}
+        )
+
+        [record] = json.loads(manifest.model_dump_json())["table_descriptions"]
+
+        assert record.get("source") == written  # no key means "gemini", as older code expects
+        assert ParsedManifest.model_validate_json(manifest.model_dump_json()) == manifest
+
+
 def test_manifest_without_descriptions_has_none(manifest_record: dict[str, Any]) -> None:
     assert ParsedManifest.model_validate(manifest_record).table_descriptions == []
 

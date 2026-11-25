@@ -204,7 +204,26 @@ def table_texts(
     described = _description_lines(
         description, _table_fits(max_chars, tokens, MAX_DESCRIPTION_SHARE)
     )
-    return _pack_lines([*caption, *described, *rows[:1]], rows[1:], _table_fits(max_chars, tokens))
+    fits = _table_fits(max_chars, tokens)
+    if not fits("\n".join([*caption, *rows[:1]])):
+        # Only prose misread as a table has a caption and header this long (real ones take
+        # about a seventh of the budget): one passage cut to the budget, not one copy per row
+        return [_clip("\n".join([*caption, *described, *rows]), fits)]
+    return _pack_lines([*caption, *described, *rows[:1]], rows[1:], fits)
+
+
+def _clip(text: str, fits: Callable[[str], bool]) -> str:
+    """Return the longest start of text that fits, ending with "…" when it was cut."""
+    if fits(text):
+        return text
+    low, high = 0, len(text)
+    while low < high:  # binary search, since each check may count tokens
+        middle = (low + high + 1) // 2
+        if fits(text[:middle].rstrip() + "…"):
+            low = middle
+        else:
+            high = middle - 1
+    return text[:low].rstrip() + "…"
 
 
 def _table_fits(

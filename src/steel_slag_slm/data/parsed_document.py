@@ -83,6 +83,8 @@ def _parse_table_descriptions(
                 "%s: ignoring a description of a changed table (block %d)", paper_id, index
             )
             continue
+        if stored.source == "paper":
+            continue  # only the paper's caption and headers, which the chunk already holds
         descriptions[index] = stored.description
     return descriptions
 

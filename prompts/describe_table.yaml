@@ -1,5 +1,7 @@
 name: describe_table
-version: 1
+# 2: same wording; describes every table again under the checks of 2026-11-25, so every
+# stored description is made the same way and records its source ("gemini" or "paper")
+version: 2
 description: Describe one table from a steel slag paper (what it measures, symbols, units, samples) so search can find it.
 variables: [paper_id, paper_title, section, table_label, table, previous_table, context, correction]
 

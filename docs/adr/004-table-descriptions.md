@@ -29,8 +29,16 @@ Gemini's figure readings, by contrast, raised figure retrieval markedly.
   paper's paragraphs that explain it: notes under the table, the paragraph before it,
   sentences citing its "Table N", and sentences defining its codes. It returns a summary,
   column meanings and units, samples, conditions, defined terms and search synonyms. An
-  answer stating a number that no input prints is asked again once, naming those numbers,
-  then rejected.
+  answer stating a number that no input prints is asked again once, naming those numbers.
+  No table is ever left without a description, and no Gemini text that failed a check is
+  ever stored (amended 2026-11-25, after the full run left 9 of 4,973 tables undescribed).
+  When no attempt passes (unprinted numbers, malformed, too slow), Gemini's answers are
+  dropped and the description holds only the paper's caption and headers, marked
+  `"source": "paper"` (no `source` key means `"gemini"`, so code from before the field still
+  reads those); indexing leaves a "paper" one out, so those tables are
+  searched by their caption and rows alone. The numbers users act on always come from the
+  paper's own rows, never from Gemini's wording. Only Gemini being unreachable leaves a
+  table for the next run.
 - Descriptions are stored in `parsed.json` under `table_descriptions`, each tied to its
   content block, the SHA-256 of that table's text and the prompt version. A description that no
   longer matches its table is rejected when written and skipped when indexed. Bumping the
@@ -43,7 +51,9 @@ Gemini's figure readings, by contrast, raised figure retrieval markedly.
 - A table chunk is its caption, its description, then its compact rows. Long tables split into
   row groups that repeat caption, description and header, so a table yields about as many
   chunks as before, not one per row. Each piece is kept within 384 reranker tokens, so no row
-  is cut off.
+  is cut off. A "table" whose caption and header alone pass that budget is prose the parser
+  misread (real ones take about a seventh of it); it becomes one passage cut to the budget,
+  not a copy of that prose per row.
 - The per-row passages are retired. Manifests that still hold them (`contextual_tables`) load
   without them, and any rewrite of such a manifest, including `describe-tables`, removes them.
 

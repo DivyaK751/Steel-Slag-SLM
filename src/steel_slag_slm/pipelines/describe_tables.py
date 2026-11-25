@@ -26,7 +26,6 @@ from steel_slag_slm.data.parsed_manifest import (
 )
 from steel_slag_slm.data.parsed_publication import publish_table_descriptions
 from steel_slag_slm.data.table_context import is_describable, tables_to_describe
-from steel_slag_slm.exceptions import AgentOutputError
 from steel_slag_slm.llm.costs import estimate_cost_usd
 from steel_slag_slm.llm.prompts import PromptTemplate
 from steel_slag_slm.schemas import TableToDescribe
@@ -207,13 +206,12 @@ async def _describe_one(run: _Run, table: TableToDescribe) -> StoredTableDescrip
             run.report.outcomes["tables_not_started"] += 1
             return None
         try:
-            description, usage = await asyncio.wait_for(
-                describe_table(run.runner, run.prompt, table), run.settings.call_timeout_s
+            described = await describe_table(
+                run.runner, run.prompt, table, run.settings.call_timeout_s
             )
-        # Bad answers, API errors and timeouts cost this table only; a rerun retries it
+        # Bad answers still give a description; only errors reaching Gemini (login, quota,
+        # outage) end up here, and they cost this table only: a rerun retries it
         except Exception as error:
-            if isinstance(error, AgentOutputError) and error.usage is not None:
-                run.report.spent_usd += estimate_cost_usd(error.usage, run.settings.prices)
             run.failure_streak += 1
             run.report.outcomes["tables_failed"] += 1
             detail = f"{type(error).__name__}: {error}".removesuffix(": ")
@@ -223,13 +221,22 @@ async def _describe_one(run: _Run, table: TableToDescribe) -> StoredTableDescrip
             return None
 
     run.failure_streak = 0
-    run.report.spent_usd += estimate_cost_usd(usage, run.settings.prices)
+    run.report.spent_usd += estimate_cost_usd(described.usage, run.settings.prices)
     run.report.outcomes["tables_described"] += 1
+    if described.source == "paper":
+        run.report.outcomes["tables_from_paper"] += 1
+        logger.warning(
+            "%s %s: no Gemini answer passed (%s); stored the paper's caption and headers",
+            table.paper_id,
+            table_name(table),
+            described.problem,
+        )
     return StoredTableDescription(
         block_index=table.block_index,
         table_sha256=table.table_sha256,
         prompt_version=run.prompt.version,
-        description=description,
+        description=described.description,
+        source=described.source,
     )
 
 
@@ -248,6 +255,7 @@ _PAPER_OUTCOMES = (
 _TABLE_OUTCOMES = (
     ("tables_total", "in the papers checked"),
     ("tables_described", "described in this run"),
+    ("tables_from_paper", "of them in the paper's words only: no Gemini answer passed"),
     ("tables_failed", "failed (retried next run)"),
     ("tables_not_started", "not started (run stopped early)"),
     ("tables_missing", "still without a description"),
