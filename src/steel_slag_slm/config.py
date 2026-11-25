@@ -280,6 +280,8 @@ class QuestionRoutingSettings(BaseModel):
     reader_url: str  # local model server (Ollama) base URL
     reader_timeout_s: float
     prompt_name: str
+    examples_name: str  # worked question-to-form examples, prompts/<name>.yaml
+    examples_k: int = Field(gt=0)  # examples shown with each message, the most similar first
     max_listed_values: int  # text columns with at most this many values list them for the reader
     search_top_k: int  # paper passages handed to the answer model
     evidence_max_chars: int  # longest evidence text handed to the answer model

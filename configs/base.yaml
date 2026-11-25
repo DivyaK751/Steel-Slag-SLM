@@ -325,6 +325,9 @@ question_routing:
   reader_url: http://localhost:11434
   reader_timeout_s: 60
   prompt_name: read_question
+  # Worked examples (prompts/<name>.yaml); the examples_k most like each message are shown
+  examples_name: read_question_examples
+  examples_k: 6
   # Short text columns list the values the tables hold, so filters use the data's wording;
   # columns with more values (notes, titles) are free text and listed as "(text)"
   max_listed_values: 12

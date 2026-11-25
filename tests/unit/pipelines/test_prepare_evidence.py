@@ -11,6 +11,7 @@ from steel_slag_slm.schemas import Chunk
 
 SETTINGS = QuestionRoutingSettings(
     reader_model="m", reader_url="http://x", reader_timeout_s=1, prompt_name="read_question",
+    examples_name="read_question_examples", examples_k=6,
     max_listed_values=12, search_top_k=15, evidence_max_chars=9000,
 )  # fmt: skip
 HIT = SearchHit(0.9, Chunk("W7", "text", "Results", "Strength at 14 days was 31 MPa.", 0))
@@ -40,7 +41,7 @@ def _tools(searched: list[str]) -> RouteTools:
 def test_a_why_question_is_read_routed_to_paper_search_and_packaged():
     searched: list[str] = []
     model = FixedModel({
-        "message_type": "question", "wants_explanation": True,
+        "message_type": "question",
         "search_query": "why free lime causes expansion in steel slag",
     })  # fmt: skip
 
@@ -70,7 +71,7 @@ def test_an_unreadable_question_is_searched_as_typed():
 def test_an_age_without_a_column_uses_the_nearest_and_searches_the_papers():
     searched: list[str] = []
     model = FixedModel({
-        "message_type": "question",
+        "message_type": "question", "values_only": True,
         "properties": ["concrete_performance.compressive_strength_28d_mpa"],
         "search_query": "14-day strength of steel slag concrete",
     })  # fmt: skip

@@ -19,6 +19,7 @@ from steel_slag_slm.agents.abstract_extractor import build_extractor_agent
 from steel_slag_slm.agents.data_extractor import build_data_extractor_agent
 from steel_slag_slm.agents.extraction_judge import build_adjudicator_agent, build_judge_agent
 from steel_slag_slm.agents.figure_reader import build_figure_reader_agent
+from steel_slag_slm.agents.form_examples import ExamplePicker, load_examples
 from steel_slag_slm.agents.relevance_screener import build_screener_agent
 from steel_slag_slm.agents.runner import build_runner
 from steel_slag_slm.config import (
@@ -1136,6 +1137,7 @@ def ask() -> None:
         tools,
         routing,
         profile,
+        examples=ExamplePicker(load_examples(routing.examples_name), routing.examples_k, encoder),
     )
     print("FORM\n" + prepared.form.model_dump_json(indent=2))
     print("TOOLS: " + (", ".join(call.tool for call in prepared.plan.calls) or "none"))

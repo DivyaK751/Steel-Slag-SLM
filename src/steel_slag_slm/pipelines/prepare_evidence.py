@@ -9,6 +9,7 @@ from google.cloud import bigquery
 
 from steel_slag_slm.agents.age_columns import match_ages
 from steel_slag_slm.agents.evidence_package import build_evidence
+from steel_slag_slm.agents.form_examples import ExamplePicker
 from steel_slag_slm.agents.question_form import (
     FormColumn,
     QuestionForm,
@@ -94,14 +95,17 @@ def prepare_evidence(
     settings: QuestionRoutingSettings,
     profile: SlagProfile | None = None,
     previous: QuestionForm | None = None,
+    examples: ExamplePicker | None = None,
 ) -> PreparedEvidence:
     """Read the message, choose and run the tools, and package their results.
 
     If the reader gives no valid form, the papers are searched with the message as typed.
     An age with no column of its own uses the nearest one, and the papers are searched too.
+    examples, if given, picks the worked examples shown to the reader with this message.
     """
+    shown = examples.pick(question) if examples else []
     try:
-        form = read_question(question, model, prompt, columns, profile, previous)
+        form = read_question(question, model, prompt, columns, profile, previous, shown)
     except ValueError as error:
         logger.warning("Reading the question failed, searching the papers instead: %s", error)
         form = QuestionForm(message_type="question", search_query=question)
