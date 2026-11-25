@@ -321,10 +321,13 @@ similar_slags:
 question_routing:
   # Small open model that reads each question into a form (served locally, e.g. by Ollama);
   # its output is forced to the form's JSON schema, so it can only name real columns
-  reader_model: qwen2.5:3b
+  reader_model: qwen2.5:7b
   reader_url: http://localhost:11434
   reader_timeout_s: 60
   prompt_name: read_question
+  # Short text columns list the values the tables hold, so filters use the data's wording;
+  # columns with more values (notes, titles) are free text and listed as "(text)"
+  max_listed_values: 12
   # The answer model reads this many paper passages, after table values and similar slags
   search_top_k: 15
   # Evidence beyond this length is cut, passages first, so a small answer model is not flooded

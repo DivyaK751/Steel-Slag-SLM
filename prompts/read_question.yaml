@@ -1,8 +1,8 @@
 name: read_question
-version: 1
+version: 2
 description: >
   Read one user message into the question form the router uses to choose tools and filters.
-variables: [columns, profile, previous_form, question]
+variables: [columns, profile, previous_form, question, problem]
 
 # Sent once as the system instruction; the column list is filled in from the sheet definitions
 instruction: |
@@ -17,24 +17,28 @@ instruction: |
   - chat: greetings, thanks, small talk.
   - off_topic: anything unrelated to slag, cement, concrete or the papers.
 
-  INTENTS (any that apply; none for chat and off_topic)
-  - value_lookup: asks for reported values (strength, composition, expansion, CO2 uptake...).
-  - similar_slags: asks about the user's own slag, or about slags like a composition given.
-  - explanation: asks why or how, or for a summary, comparison or recommendation.
+  WANTS EXPLANATION
+  - wants_explanation: true when the message asks why or how, or for a summary, comparison or
+    recommendation. False when it only asks for values, and for chat and off_topic.
 
-  COLUMNS
+  COLUMNS (fill these whenever the message asks for or limits reported values)
   - properties: the columns whose values answer the question.
   - filters: conditions the question sets, each {column, op, value}. op is one of
     =, <, >, between (value is [low, high]) or contains (text). Examples: slag type BOF ->
     {column: <sheet>.steel_slag_type, op: "=", value: "BOF"}; 20% replacement ->
     {column: concrete_performance.scm_replacement_pct, op: "=", value: 20}.
   - Strength at an age is its own column (compressive_strength_28d_mpa), not a filter.
+  - A why or how question about a property still lists that property's columns, so the
+    reported values can back up the explanation.
   - Use only column names from the COLUMN LIST. Use a column's allowed values exactly.
+  - Where the list shows the values in the data, filter with the one that means what the
+    message says ("ordinary Portland cement" -> the data's own name for it). Map other names
+    to the list too: ladle furnace or LMF -> Ladle; LD, BOS or converter slag -> BOF.
 
   OTHER FIELDS
   - chemistry: oxide wt% the message itself states, by oxide column (cao_pct, sio2_pct...).
     Leave it empty when the message gives no numbers; the stored profile is used instead.
-  - about_my_slag: true when the message is about the user's own slag ("my slag").
+  - about_my_slag: true when the message is about the user's own slag ("my slag", "our slag").
   - missing_fields: details whose absence makes the answer vaguer (e.g. replacement level,
     curing age), as column names or short phrases.
   - search_query: the question rewritten to stand alone for searching papers: unchanged if it
@@ -43,7 +47,7 @@ instruction: |
 
   EXAMPLES
   Message: "What 28-day strength do concretes with 20% BOF slag reach?"
-  Form: {"message_type": "question", "intents": ["value_lookup"],
+  Form: {"message_type": "question", "wants_explanation": false,
     "properties": ["concrete_performance.compressive_strength_28d_mpa"],
     "filters": [{"column": "concrete_performance.steel_slag_type", "op": "=", "value": "BOF"},
                 {"column": "concrete_performance.scm_replacement_pct", "op": "=", "value": 20}],
@@ -51,12 +55,20 @@ instruction: |
     "search_query": "28-day compressive strength of concrete with 20% BOF slag replacement"}
 
   Message: "How reactive is my slag and why?"
-  Form: {"message_type": "question", "intents": ["similar_slags", "explanation"],
+  Form: {"message_type": "question", "wants_explanation": true,
     "properties": [], "filters": [], "chemistry": {}, "about_my_slag": true, "missing_fields": [],
     "search_query": "reactivity of steel slag and the factors that limit it"}
 
+  Message: "Why does BOF slag expand?"
+  Form: {"message_type": "question", "wants_explanation": true,
+    "properties": ["durability.expansion_pct", "feedstock_chemistry.free_cao_pct",
+                   "feedstock_chemistry.free_mgo_pct"],
+    "filters": [{"column": "feedstock_chemistry.steel_slag_type", "op": "=", "value": "BOF"}],
+    "chemistry": {}, "about_my_slag": false, "missing_fields": [],
+    "search_query": "why BOF steel slag expands"}
+
   Message: "thanks, that helped"
-  Form: {"message_type": "chat", "intents": [], "properties": [], "filters": [], "chemistry": {},
+  Form: {"message_type": "chat", "wants_explanation": false, "properties": [], "filters": [], "chemistry": {},
     "about_my_slag": false, "missing_fields": [], "search_query": ""}
 
 # Filled per message. The column list comes first and is the same for every message, so the server can reuse it
@@ -67,3 +79,4 @@ input_template: |
   USER'S SLAG PROFILE: {profile}
   PREVIOUS FORM (for follow-ups): {previous_form}
   MESSAGE: {question}
+  PROBLEM WITH YOUR LAST FORM (fix it this time): {problem}

@@ -56,7 +56,7 @@ def _header_of(condition: ColumnFilter, columns: Sequence[FormColumn]) -> FormCo
     return next((column for column in columns if column.name == condition.column), None)
 
 
-def _is_slag_level(column: FormColumn) -> bool:
+def is_slag_level(column: FormColumn) -> bool:
     """Slag type and chemistry describe the slag itself, so they choose catalogue slags."""
     return column.header == _SLAG_TYPE or column.sheet == _CHEMISTRY_SHEET
 
@@ -70,7 +70,7 @@ def select_slags(
     chosen = list(catalogue)
     for condition in filters:
         column = _header_of(condition, columns)
-        if column is None or not _is_slag_level(column):
+        if column is None or not is_slag_level(column):
             continue
         if column.header == _SLAG_TYPE:
             chosen = [e for e in chosen if value_matches(e.steel_slag_type, condition)]
@@ -109,7 +109,7 @@ def filter_lookup(
     conditions = [
         (by_name[c.column], c)
         for c in filters
-        if c.column in by_name and not _is_slag_level(by_name[c.column])
+        if c.column in by_name and not is_slag_level(by_name[c.column])
     ]
     wanted: dict[str, set[str]] = {}
     for name in properties:

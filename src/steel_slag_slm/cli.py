@@ -19,7 +19,6 @@ from steel_slag_slm.agents.abstract_extractor import build_extractor_agent
 from steel_slag_slm.agents.data_extractor import build_data_extractor_agent
 from steel_slag_slm.agents.extraction_judge import build_adjudicator_agent, build_judge_agent
 from steel_slag_slm.agents.figure_reader import build_figure_reader_agent
-from steel_slag_slm.agents.question_form import form_columns
 from steel_slag_slm.agents.relevance_screener import build_screener_agent
 from steel_slag_slm.agents.runner import build_runner
 from steel_slag_slm.config import (
@@ -103,7 +102,11 @@ from steel_slag_slm.pipelines.fill_abstracts import run_fill_abstracts
 from steel_slag_slm.pipelines.judge_extraction import adjudicate_run, judge_run
 from steel_slag_slm.pipelines.paper_selection import select_papers
 from steel_slag_slm.pipelines.parse_pdfs import format_parse_summary, run_pdf_parsing
-from steel_slag_slm.pipelines.prepare_evidence import build_route_tools, prepare_evidence
+from steel_slag_slm.pipelines.prepare_evidence import (
+    build_route_tools,
+    load_form_columns,
+    prepare_evidence,
+)
 from steel_slag_slm.pipelines.promote_extraction import run_promotion
 from steel_slag_slm.pipelines.read_figures import (
     list_paper_dirs,
@@ -1116,9 +1119,11 @@ def ask() -> None:
         embedding.candidates,
     )
     gcp = load_gcp_settings()
+    client = build_bigquery_client(gcp.project, gcp.credentials_file)
+    catalogue_settings = load_slag_catalogue_settings()
     tools = build_route_tools(
-        build_bigquery_client(gcp.project, gcp.credentials_file),
-        load_slag_catalogue_settings(),
+        client,
+        catalogue_settings,
         load_similar_slag_settings(),
         load_slag_reference(),
         lambda query, top_k: retriever.search(query, top_k),
@@ -1127,7 +1132,7 @@ def ask() -> None:
         args.question,
         OllamaJsonModel(routing.reader_url, routing.reader_model, routing.reader_timeout_s),
         load_prompt(routing.prompt_name),
-        form_columns(),
+        load_form_columns(client, catalogue_settings.dataset, routing.max_listed_values),
         tools,
         routing,
         profile,

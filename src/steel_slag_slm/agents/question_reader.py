@@ -14,6 +14,9 @@ from steel_slag_slm.llm.local_model import JsonModel
 from steel_slag_slm.llm.prompts import PromptTemplate
 from steel_slag_slm.rag.similar_slags import SlagProfile
 
+READ_ATTEMPTS = 2  # the first try and one retry
+_PROBLEM_CHARS = 500  # enough of a validation error to show what was wrong
+
 
 def describe_columns(columns: list[FormColumn]) -> str:
     """The column list for the prompt: one line per column, grouped under its sheet."""
@@ -23,6 +26,8 @@ def describe_columns(columns: list[FormColumn]) -> str:
         for column in sheet_columns:
             if column.allowed_values:
                 detail = f": one of {', '.join(column.allowed_values)}"
+            elif column.seen_values:
+                detail = f": values in the data: {', '.join(column.seen_values)}"
             else:
                 detail = f" ({column.unit})" if column.unit else " (text)"
             lines.append(f"- {column.name}{detail}")
@@ -47,7 +52,7 @@ def merge_follow_up(previous: QuestionForm, form: QuestionForm) -> QuestionForm:
     return form.model_copy(
         update={
             "message_type": "question",
-            "intents": form.intents or previous.intents,
+            "wants_explanation": form.wants_explanation or previous.wants_explanation,
             "properties": form.properties or previous.properties,
             "filters": [f for f in previous.filters if f.column not in changed] + form.filters,
             "chemistry": {**previous.chemistry, **form.chemistry},
@@ -67,20 +72,32 @@ def read_question(
 ) -> QuestionForm:
     """Ask the model for the message's form, check it, and merge a follow-up with its parent.
 
+    A failed try is retried once: an invalid form with the reason it failed in the prompt,
+    so the model does not repeat it; a server error as it was.
+
     Raises:
-        ValueError: If the model's answer is not a valid form.
+        ValueError: If no try gives a valid form.
     """
-    user = prompt.render_input(
-        columns=describe_columns(columns),
-        profile=describe_profile(profile),
-        previous_form=previous.model_dump_json() if previous else "none",
-        question=question.strip(),
-    )
-    answer = model.complete_json(prompt.instruction, user, form_json_schema(columns))
-    try:
-        form = clean_form(QuestionForm.model_validate(answer), columns)
-    except ValidationError as error:
-        raise ValueError(f"the reader's form is not valid: {error}") from error
-    if form.message_type == "follow_up" and previous is not None:
-        form = merge_follow_up(previous, form)
-    return form
+    schema = form_json_schema(columns)
+    problem = "none"
+    for _ in range(READ_ATTEMPTS):
+        user = prompt.render_input(
+            columns=describe_columns(columns),
+            profile=describe_profile(profile),
+            previous_form=previous.model_dump_json() if previous else "none",
+            question=question.strip(),
+            problem=problem,
+        )
+        try:
+            answer = model.complete_json(prompt.instruction, user, schema)
+            form = clean_form(QuestionForm.model_validate(answer), columns)
+        except ValidationError as error:
+            problem = str(error)[:_PROBLEM_CHARS]
+            continue
+        except (OSError, ValueError) as error:  # unreachable server, or not JSON
+            problem = f"no usable answer ({error})"[:_PROBLEM_CHARS]
+            continue
+        if form.message_type == "follow_up" and previous is not None:
+            form = merge_follow_up(previous, form)
+        return form
+    raise ValueError(f"the reader gave no valid form in {READ_ATTEMPTS} tries: {problem}")

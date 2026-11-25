@@ -5,11 +5,11 @@ same form always gives the same calls and every routing decision can be tested.
 """
 
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Literal, get_args
 
 from steel_slag_slm.agents.question_form import FormColumn, QuestionForm
-from steel_slag_slm.agents.table_filters import filter_lookup, select_slags
+from steel_slag_slm.agents.table_filters import filter_lookup, is_slag_level, select_slags
 from steel_slag_slm.data.slag_catalogue import SlagCatalogueEntry
 from steel_slag_slm.rag.search import SearchHit
 from steel_slag_slm.rag.similar_slags import SimilarSlags, SlagProfile
@@ -77,34 +77,58 @@ def slag_to_match(form: QuestionForm, stored: SlagProfile | None) -> SlagProfile
         return SlagProfile.model_validate(
             {"steel_slag_type": slag_type or _UNKNOWN_TYPE, "oxides": form.chemistry}
         )
-    if stored is not None and (form.about_my_slag or "similar_slags" in form.intents):
+    if stored is not None and form.about_my_slag:
         return stored
     return None
 
 
-def plan_route(form: QuestionForm, stored: SlagProfile | None) -> RoutePlan:
+def _needs_lookup(form: QuestionForm, columns: Sequence[FormColumn]) -> bool:
+    """Lookup runs for asked-for columns or a filter on results. A why question whose only
+    filters are slag type or chemistry goes to the papers alone: with no columns to keep,
+    lookup would return every value of the chosen slags."""
+    if form.properties:
+        return True
+    by_name = {column.name: column for column in columns}
+    slag_level = [is_slag_level(by_name[f.column]) for f in form.filters if f.column in by_name]
+    if not slag_level:
+        return False
+    return not all(slag_level) or not form.wants_explanation
+
+
+def plan_route(
+    form: QuestionForm, stored: SlagProfile | None, columns: Sequence[FormColumn]
+) -> RoutePlan:
     """Decide which tools run for this form.
 
     - chat or off-topic: no tools.
     - about the user's slag, or a composition given: similar slags, then lookup on them.
-    - asks for values: lookup on the catalogue slags the filters choose.
-    - asks why or how, or nothing above applies: paper search.
+    - names columns or result filters: lookup on the catalogue slags the filters choose.
+    - wants an explanation, or nothing above applies: paper search.
     """
     if form.message_type in ("chat", "off_topic"):
         return RoutePlan((), True, None, ())
     profile = slag_to_match(form, stored)
     calls: list[ToolCall] = []
     notes: list[str] = []
-    wants_similar = form.about_my_slag or "similar_slags" in form.intents
-    if wants_similar and profile is None:
+    if form.about_my_slag and profile is None:
         notes.append("The question is about the user's slag, but no composition is stored")
     if profile is not None:
         calls += [ToolCall("similar_slags"), ToolCall("lookup", after_similar=True)]
-    elif "value_lookup" in form.intents or form.properties:
+    elif _needs_lookup(form, columns):
         calls.append(ToolCall("lookup"))
-    if "explanation" in form.intents or not calls:
+    if form.wants_explanation or not calls:
         calls.append(ToolCall("paper_search"))
     return RoutePlan(tuple(calls), False, profile, tuple(notes))
+
+
+def add_paper_search(plan: RoutePlan, notes: Sequence[str]) -> RoutePlan:
+    """Search the papers too (once), with notes saying why; chat and off-topic stay as is."""
+    if plan.reply_only:
+        return plan
+    calls = plan.calls
+    if all(call.tool != "paper_search" for call in calls):
+        calls += (ToolCall("paper_search"),)
+    return replace(plan, calls=calls, notes=plan.notes + tuple(notes))
 
 
 def run_route(

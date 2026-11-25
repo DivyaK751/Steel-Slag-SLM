@@ -4,7 +4,8 @@ The columns come from the sheet definitions in data/extraction_tables.py, so a c
 there can be asked about without changing this module.
 """
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, replace
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -20,7 +21,6 @@ from steel_slag_slm.data.extraction_tables import (
 from steel_slag_slm.data.slag_catalogue import CATALOGUE_OXIDES
 
 MessageType = Literal["question", "chat", "off_topic", "follow_up"]
-Intent = Literal["value_lookup", "similar_slags", "explanation"]
 FilterOp = Literal["=", "<", ">", "between", "contains"]
 
 # Sheets whose columns a question can ask about; sheet 9 only records where values were found
@@ -36,6 +36,12 @@ class FormColumn:
     header: str  # workbook column header, e.g. "Compressive_Strength_28d_MPa"
     unit: str | None  # None for a text column
     allowed_values: tuple[str, ...]  # the controlled vocabulary, if the column has one
+    seen_values: tuple[str, ...] = ()  # values the tables hold now, for short text columns
+
+    @property
+    def known_values(self) -> tuple[str, ...]:
+        """The values a filter on this column can match: the vocabulary, else those seen."""
+        return self.allowed_values or self.seen_values
 
 
 class ColumnFilter(BaseModel):
@@ -50,7 +56,7 @@ class QuestionForm(BaseModel):
     """What a message asks, in terms the tools understand. Every field may stay empty."""
 
     message_type: MessageType
-    intents: list[Intent] = Field(default_factory=list)
+    wants_explanation: bool = False  # asks why or how, or for a summary or recommendation
     properties: list[str] = Field(default_factory=list)  # columns whose values are wanted
     filters: list[ColumnFilter] = Field(default_factory=list)
     # Oxide wt% typed into the question, by catalogue column; the stored profile fills the rest
@@ -81,6 +87,28 @@ def form_columns(sheet_tables: tuple[SheetTable, ...] = _ASKABLE_SHEETS) -> list
     ]
 
 
+def add_seen_values(
+    columns: list[FormColumn], seen: Mapping[tuple[str, str], tuple[str, ...]]
+) -> list[FormColumn]:
+    """The columns with the values the tables hold, keyed by (sheet, header)."""
+    return [
+        replace(column, seen_values=seen.get((column.sheet, column.header), ()))
+        for column in columns
+    ]
+
+
+def _fix_filter(condition: ColumnFilter, column: FormColumn) -> ColumnFilter:
+    """Spell a text filter's value as the data does; if no value matches, look for it inside
+    the values instead ("OPC" finds "OPC (Type I)")."""
+    if column.unit is not None or not isinstance(condition.value, str) or condition.op != "=":
+        return condition
+    wanted = condition.value.casefold()
+    match = next((v for v in column.known_values if v.casefold() == wanted), None)
+    if match is not None:
+        return condition.model_copy(update={"value": match})
+    return condition.model_copy(update={"op": "contains"})
+
+
 def form_json_schema(columns: list[FormColumn]) -> dict[str, Any]:
     """The form's JSON schema, with column and oxide names limited to the real ones.
 
@@ -95,17 +123,19 @@ def form_json_schema(columns: list[FormColumn]) -> dict[str, Any]:
 
 
 def clean_form(form: QuestionForm, columns: list[FormColumn]) -> QuestionForm:
-    """Drop any column, filter or oxide the tables do not have, and repeated entries.
+    """Drop any column, filter or oxide the tables do not have, and repeated columns; spell
+    text filter values as the data does.
 
     The reader's output is forced to the schema, but a model without forced output, or a
-    hand-written form, might still name one.
+    hand-written form, might still name one. The schema does not limit filter values.
     """
-    known = {column.name for column in columns}
+    by_name = {column.name: column for column in columns}
     return form.model_copy(
         update={
-            "intents": list(dict.fromkeys(form.intents)),
-            "properties": [p for p in dict.fromkeys(form.properties) if p in known],
-            "filters": [f for f in form.filters if f.column in known],
+            "properties": [p for p in dict.fromkeys(form.properties) if p in by_name],
+            "filters": [
+                _fix_filter(f, by_name[f.column]) for f in form.filters if f.column in by_name
+            ],
             "chemistry": {k: v for k, v in form.chemistry.items() if k in CATALOGUE_OXIDES},
         }
     )

@@ -4,6 +4,8 @@ import json
 import urllib.request
 from typing import Any, Protocol
 
+CONTEXT_TOKENS = 8192  # room for the instruction, column list, value lists and a follow-up
+
 
 class JsonModel(Protocol):
     """Anything that answers a prompt with a JSON object matching a schema."""
@@ -31,7 +33,9 @@ class OllamaJsonModel:
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
             "format": schema,
             "stream": False,
-            "options": {"temperature": 0},  # the same question should give the same form
+            # temperature 0: the same question gives the same form. num_ctx: Ollama's default
+            # window (4096 tokens) silently cuts longer prompts, and the column list is long
+            "options": {"temperature": 0, "num_ctx": CONTEXT_TOKENS},
         }
         request = urllib.request.Request(
             self._url, json.dumps(body).encode(), {"Content-Type": "application/json"}
