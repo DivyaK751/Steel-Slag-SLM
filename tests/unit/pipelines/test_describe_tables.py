@@ -4,9 +4,9 @@ from typing import Any
 
 import pytest
 
+from steel_slag_slm.agents.table_describer import DescribedTable
 from steel_slag_slm.config import ModelPrices, TableDescriptionSettings
 from steel_slag_slm.data.parsed_manifest import ParsedManifest, has_retired_fields
-from steel_slag_slm.exceptions import AgentOutputError
 from steel_slag_slm.llm.prompts import PromptTemplate
 from steel_slag_slm.pipelines import describe_tables
 from steel_slag_slm.schemas import TableDescription, TableToDescribe, TokenUsage
@@ -30,9 +30,9 @@ def described(monkeypatch: pytest.MonkeyPatch) -> list[TableToDescribe]:
     """Answer every table with DESCRIPTION, and record which tables were sent."""
     sent: list[TableToDescribe] = []
 
-    async def fake_describe(_runner: Any, _prompt: Any, table: TableToDescribe) -> Any:
+    async def fake_describe(_runner: Any, _prompt: Any, table: TableToDescribe, _s: float) -> Any:
         sent.append(table)
-        return DESCRIPTION, USAGE
+        return DescribedTable(DESCRIPTION, USAGE)
 
     monkeypatch.setattr(describe_tables, "describe_table", fake_describe)
     return sent
@@ -99,23 +99,41 @@ def test_a_described_paper_with_retired_rows_is_rewritten_without_them(
     assert len(described) == 1  # the description was kept, not requested again
 
 
-def test_a_failed_table_is_left_for_the_next_run(
+def test_a_table_gemini_cannot_be_reached_for_is_left_for_the_next_run(
     fake_drive: Any, manifest_record: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     file_id = _publish(fake_drive, manifest_record)
     before = fake_drive.contents[file_id]
 
-    async def invented(_runner: Any, _prompt: Any, _table: Any) -> Any:
-        raise AgentOutputError("Description states numbers the table does not print", usage=USAGE)
+    async def unreachable(_runner: Any, _prompt: Any, _table: Any, _s: float) -> Any:
+        raise RuntimeError("429 RESOURCE_EXHAUSTED")
 
-    monkeypatch.setattr(describe_tables, "describe_table", invented)
+    monkeypatch.setattr(describe_tables, "describe_table", unreachable)
     report = _run()
 
     assert report.outcomes == {
         "not_described": 1, "tables_failed": 1, "tables_total": 1, "tables_missing": 1
     }  # fmt: skip
-    assert report.spent_usd == pytest.approx(0.002)  # the rejected answer was still billed
     assert fake_drive.contents[file_id] == before
+
+
+def test_a_table_described_in_the_papers_words_is_stored_as_such(
+    fake_drive: Any, manifest_record: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    file_id = _publish(fake_drive, manifest_record)
+
+    async def no_answer_passed(_runner: Any, _prompt: Any, _table: Any, _s: float) -> Any:
+        return DescribedTable(
+            DESCRIPTION, USAGE, "paper", "states numbers its inputs never print: 8"
+        )
+
+    monkeypatch.setattr(describe_tables, "describe_table", no_answer_passed)
+    report = _run()
+
+    [stored] = ParsedManifest.model_validate_json(fake_drive.contents[file_id]).table_descriptions
+    assert (stored.description, stored.source) == (DESCRIPTION, "paper")
+    assert report.outcomes["tables_from_paper"] == 1
+    assert "tables_missing" not in report.outcomes  # the table counts as described
 
 
 def test_a_spent_budget_stops_the_run_before_any_download(
@@ -136,9 +154,9 @@ def test_a_file_rewritten_during_the_run_is_not_overwritten(
     file_id = _publish(fake_drive, manifest_record)
     rewritten = json.dumps({**manifest_record, "markdown": "reparsed"}).encode()
 
-    async def rewrite_meanwhile(_runner: Any, _prompt: Any, _table: Any) -> Any:
+    async def rewrite_meanwhile(_runner: Any, _prompt: Any, _table: Any, _s: float) -> Any:
         fake_drive.contents[file_id] = rewritten
-        return DESCRIPTION, USAGE
+        return DescribedTable(DESCRIPTION, USAGE)
 
     monkeypatch.setattr(describe_tables, "describe_table", rewrite_meanwhile)
     report = _run()

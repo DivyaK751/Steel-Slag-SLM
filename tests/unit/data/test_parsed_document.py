@@ -120,6 +120,14 @@ def test_parse_parsed_json_reads_each_table_description_by_block(
     assert paper.table_descriptions == {1: TableDescription(summary="Oxides of the steel slag.")}
 
 
+def test_parse_parsed_json_leaves_out_descriptions_in_the_papers_words_only(
+    manifest_record: dict[str, Any],
+) -> None:
+    paper = parse_parsed_json(_described(manifest_record, source="paper"))
+
+    assert paper.table_descriptions == {}  # the chunk keeps just the paper's caption and rows
+
+
 def test_parse_parsed_json_has_no_descriptions_for_papers_never_described() -> None:
     assert parse_parsed_json(_record()).table_descriptions == {}
 

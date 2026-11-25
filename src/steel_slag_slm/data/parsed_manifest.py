@@ -110,6 +110,9 @@ class StoredTableDescription(BaseModel):
     table_sha256: Digest  # of the table block's text, so a reparsed table is never mislabelled
     prompt_version: PositiveInt
     description: TableDescription
+    # "gemini": Gemini's answer, which passed every check. "paper": no answer passed, so the
+    # description holds only the paper's own words (caption, headers) and adds nothing to search
+    source: Literal["gemini", "paper"] = "gemini"
 
 
 class ParsedManifest(BaseModel):
