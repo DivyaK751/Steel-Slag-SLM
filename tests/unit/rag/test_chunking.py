@@ -183,6 +183,16 @@ def test_table_texts_split_a_table_that_passes_the_token_budget() -> None:
     ]
 
 
+def test_table_texts_keep_prose_misread_as_a_table_as_one_passage_within_the_budget() -> None:
+    prose = " ".join(["Bauxite is a sedimentary rock rich in alumina."] * 4)
+    table = f"| {prose} |\n" + "\n".join(f"| more prose in row {i} |" for i in range(5))
+
+    pieces = table_texts(table, None, max_chars=1500, tokens=WORDS)
+
+    assert len(pieces) == 1  # not one copy of the header per row
+    assert WORDS.fits(pieces[0]) and pieces[0].startswith("| Bauxite") and pieces[0].endswith("…")
+
+
 def test_build_chunks_keeps_table_chunks_within_the_token_budget() -> None:
     long_table = TABLE + "".join(f"\n| row{i} | {i} |" for i in range(6))
     paper = _block_paper([_block("table", long_table, kind="table")])
