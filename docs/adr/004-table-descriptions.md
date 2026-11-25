@@ -34,7 +34,8 @@ Gemini's figure readings, by contrast, raised figure retrieval markedly.
   ever stored (amended 2026-11-25, after the full run left 9 of 4,973 tables undescribed).
   When no attempt passes (unprinted numbers, malformed, too slow), Gemini's answers are
   dropped and the description holds only the paper's caption and headers, marked
-  `"source": "paper"` (otherwise `"gemini"`); indexing leaves it out, so those tables are
+  `"source": "paper"` (no `source` key means `"gemini"`, so code from before the field still
+  reads those); indexing leaves a "paper" one out, so those tables are
   searched by their caption and rows alone. The numbers users act on always come from the
   paper's own rows, never from Gemini's wording. Only Gemini being unreachable leaves a
   table for the next run.

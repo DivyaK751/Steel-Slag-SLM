@@ -6,7 +6,14 @@ from importlib.metadata import version
 from pathlib import PurePosixPath
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    model_serializer,
+    model_validator,
+)
 
 from steel_slag_slm.config import FigureExtractionSettings
 from steel_slag_slm.schemas import FigureReading, TableDescription
@@ -113,6 +120,15 @@ class StoredTableDescription(BaseModel):
     # "gemini": Gemini's answer, which passed every check. "paper": no answer passed, so the
     # description holds only the paper's own words (caption, headers) and adds nothing to search
     source: Literal["gemini", "paper"] = "gemini"
+
+    @model_serializer(mode="wrap")
+    def _write_source_only_when_paper(self, handler: SerializerFunctionWrapHandler) -> Any:
+        # A missing source means "gemini", so code written before the field existed still
+        # reads nearly every description; it skips a "paper" one as unreadable, as intended
+        data = handler(self)
+        if data.get("source") == "gemini":
+            del data["source"]
+        return data
 
 
 class ParsedManifest(BaseModel):

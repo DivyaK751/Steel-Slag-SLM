@@ -367,7 +367,7 @@ uv run build-index --rebuild                       # then rebuild the index to u
 - No table is ever left out, and no unchecked Gemini text is ever stored. An answer that is
   malformed, too slow, or states a number none of its inputs print is asked again once. If
   no answer passes, it is dropped: the description holds only the table's caption and
-  headers and is marked `"source": "paper"` (otherwise `"gemini"`), and its search passages
+  headers and is marked `"source": "paper"` (no `source` key means Gemini), and its passages
   stay the paper's caption and rows. Only Gemini being unreachable leaves a table for the
   next run. Settings are in `table_description:` in `configs/base.yaml`; design notes in
   [docs/adr/004-table-descriptions.md](docs/adr/004-table-descriptions.md).
