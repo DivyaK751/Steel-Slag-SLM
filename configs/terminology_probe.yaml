@@ -1,0 +1,263 @@
+# Steel slag terminology questions for checking what a base model already knows, with no RAG.
+# Used to decide whether the SLM needs training on raw paper text before Q&A fine-tuning.
+# Numeric ranges come from Keith's reference table (configs/slag_reference.yaml).
+
+questions:
+  # Slag types
+  - id: types_01
+    category: slag types
+    question: What is the difference between BOF slag and EAF slag?
+    reference: >-
+      BOF (basic oxygen furnace) slag comes from refining blast-furnace hot metal with oxygen and
+      lime; EAF (electric arc furnace) slag comes from melting scrap (or DRI). BOF slag is
+      typically richer in CaO and free lime; EAF slag typically has more iron oxide.
+  - id: types_02
+    category: slag types
+    question: What is ladle furnace (LMF) slag, and how does it differ from EAF slag?
+    reference: >-
+      Slag from secondary refining in the ladle (deoxidation, desulfurization). High CaO and
+      Al2O3, very low FeO (light colored, "white slag"), rich in dicalcium silicate and calcium
+      aluminates such as mayenite; tends to dust. EAF slag is dark, iron-rich "black slag".
+  - id: types_03
+    category: slag types
+    question: How does steel slag differ from ground granulated blast furnace slag (GGBS)?
+    reference: >-
+      GGBS comes from ironmaking, is quenched to a glass, has little iron and is latently
+      hydraulic, so it is widely used in cement. Steel slag is mostly crystalline, iron-rich,
+      contains free lime/MgO, is much less reactive and can be volumetrically unstable.
+  - id: types_04
+    category: slag types
+    question: What is meant by the basicity of a slag, and how is it usually calculated?
+    reference: >-
+      Ratio of basic to acidic oxides. Most often CaO/SiO2 (binary basicity); sometimes
+      (CaO+MgO)/(SiO2+Al2O3) or similar.
+  - id: types_05
+    category: slag types
+    question: Why is EAF slag often called "black slag" and ladle slag "white slag"?
+    reference: >-
+      EAF slag is dark because of its high iron oxide content; ladle slag is light because it is
+      low in iron and high in CaO and Al2O3.
+
+  # Chemistry (Keith's typical ranges, wt%)
+  - id: chem_01
+    category: chemistry
+    question: What is the typical CaO content range of EAF slag, in wt%?
+    reference: About 22-60 wt%, with a typical average of 35-40 wt%.
+  - id: chem_02
+    category: chemistry
+    question: What is the typical iron oxide (FeO/Fe2O3) content range of EAF slag, in wt%?
+    reference: About 10-40 wt%, with a typical average of 25-30 wt%.
+  - id: chem_03
+    category: chemistry
+    question: What is the typical CaO content range of BOF slag, in wt%?
+    reference: About 40-60 wt%.
+  - id: chem_04
+    category: chemistry
+    question: What is the typical Al2O3 content range of ladle (LMF) slag, in wt%?
+    reference: About 15-35 wt% (higher in Al-killed steel).
+  - id: chem_05
+    category: chemistry
+    question: In cement chemistry notation, what do C, S, A, F, M and H stand for?
+    reference: C = CaO, S = SiO2, A = Al2O3, F = Fe2O3, M = MgO, H = H2O.
+  - id: chem_06
+    category: chemistry
+    question: What does "total iron" (T.Fe) mean in a slag analysis?
+    reference: >-
+      All iron in the slag (FeO, Fe2O3 and metallic iron) expressed as elemental Fe, regardless of
+      oxidation state.
+
+  # Mineral phases
+  - id: phase_01
+    category: mineral phases
+    question: What is larnite (belite, C2S), and why does it matter in steel slag?
+    reference: >-
+      Dicalcium silicate, Ca2SiO4. The main potentially hydraulic phase of steel slag; it reacts
+      slowly with water and with CO2. Its beta form is hydraulic; the gamma form is not.
+  - id: phase_02
+    category: mineral phases
+    question: What is the "RO phase" in steel slag?
+    reference: >-
+      A solid solution of divalent oxides (FeO, MgO, MnO), i.e. wüstite/magnesiowüstite. It is
+      largely inert in hydration.
+  - id: phase_03
+    category: mineral phases
+    question: What is brownmillerite (C4AF)?
+    reference: >-
+      Tetracalcium aluminoferrite, Ca2(Al,Fe)2O5, a calcium aluminoferrite found in steel slag and
+      cement clinker, with low hydraulic activity.
+  - id: phase_04
+    category: mineral phases
+    question: What is srebrodolskite?
+    reference: Dicalcium ferrite, Ca2Fe2O5 (C2F), common in BOF slag.
+  - id: phase_05
+    category: mineral phases
+    question: What is mayenite, and in which steel slag is it common?
+    reference: >-
+      Calcium aluminate Ca12Al14O33 (C12A7), a fast-reacting phase common in ladle (LMF) slag.
+  - id: phase_06
+    category: mineral phases
+    question: What are gehlenite and åkermanite?
+    reference: >-
+      Melilite-group calcium silicates: gehlenite Ca2Al2SiO7 and åkermanite Ca2MgSi2O7; mostly low
+      reactivity.
+  - id: phase_07
+    category: mineral phases
+    question: What is merwinite?
+    reference: Calcium magnesium silicate, Ca3Mg(SiO4)2 (C3MS2).
+  - id: phase_08
+    category: mineral phases
+    question: Why does ladle slag "dust" (disintegrate into powder) as it cools?
+    reference: >-
+      Beta-C2S converts to gamma-C2S on slow cooling, with a volume increase of about 10%, which
+      breaks the slag into fine powder. Fast cooling or stabilizers (e.g. B2O3, P2O5) prevent it.
+
+  # Volume stability and leaching
+  - id: stability_01
+    category: stability and leaching
+    question: Why does free lime (f-CaO) cause problems when steel slag is used as aggregate?
+    reference: >-
+      Free lime hydrates to Ca(OH)2 with a large volume increase, causing expansion, cracking and
+      heave (volume instability).
+  - id: stability_02
+    category: stability and leaching
+    question: Why is free MgO (periclase) in steel slag a concern?
+    reference: >-
+      It hydrates very slowly to brucite, Mg(OH)2, with volume increase, causing delayed
+      expansion long after construction.
+  - id: stability_03
+    category: stability and leaching
+    question: What is weathering (aging) of steel slag, and why is it done?
+    reference: >-
+      Stockpiling slag exposed to water and air (or steam aging to speed it up) so free lime and
+      MgO hydrate and carbonate before use, reducing later expansion.
+  - id: stability_04
+    category: stability and leaching
+    question: Why are chromium and vanadium in steel slag a concern?
+    reference: >-
+      They can leach in toxic forms (Cr(VI), V(V)), limiting reuse; EAF and stainless slags often
+      contain more Cr. High pH leachate is a related concern.
+  - id: stability_05
+    category: stability and leaching
+    question: Which tests are used to check the volume stability of steel slag?
+    reference: >-
+      Expansion tests such as the steam test (EN 1744-1), ASTM D4792, and autoclave expansion,
+      plus measuring free lime content.
+
+  # Use in cement and concrete
+  - id: binder_01
+    category: cement and concrete use
+    question: What is a supplementary cementitious material (SCM)?
+    reference: >-
+      A material that partly replaces Portland cement and contributes to strength through
+      hydraulic or pozzolanic reactions, e.g. fly ash, GGBS, silica fume; steel slag is a
+      low-reactivity SCM.
+  - id: binder_02
+    category: cement and concrete use
+    question: What is the difference between hydraulic and pozzolanic activity?
+    reference: >-
+      Hydraulic materials react with water alone to form binding hydrates (e.g. C3S, C2S).
+      Pozzolanic materials need Ca(OH)2 and water to form C-S-H. Latent hydraulic materials (e.g.
+      GGBS) need an activator.
+  - id: binder_03
+    category: cement and concrete use
+    question: Why is steel slag a weak cementitious material compared with Portland cement?
+    reference: >-
+      It is mostly crystalline, has little C3S, contains a lot of inert iron-rich phases (RO
+      phase), and its C2S reacts slowly, so it gains strength slowly unless activated.
+  - id: binder_04
+    category: cement and concrete use
+    question: What is the strength activity index?
+    reference: >-
+      The compressive strength of a mortar in which part of the cement is replaced by the test
+      material, divided by the strength of a control mortar at the same age, as a percentage.
+  - id: binder_05
+    category: cement and concrete use
+    question: What is C-S-H?
+    reference: Calcium silicate hydrate, the main strength-giving phase of hydrated cement paste.
+
+  # Activation
+  - id: activation_01
+    category: activation
+    question: What is alkali activation of slag?
+    reference: >-
+      Reacting a calcium- or aluminosilicate-rich precursor with an alkaline activator (e.g. NaOH,
+      sodium silicate/waterglass, Na2CO3) to form a binder (C-A-S-H, N-A-S-H) without Portland
+      cement.
+  - id: activation_02
+    category: activation
+    question: What is mechanical activation of steel slag?
+    reference: >-
+      Grinding the slag finer to increase its specific surface area (and disorder its crystals),
+      which increases reactivity.
+  - id: activation_03
+    category: activation
+    question: What is Blaine fineness, and what units is it reported in?
+    reference: >-
+      Specific surface area measured by air permeability; reported in m2/kg or cm2/g. Portland
+      cement is typically around 300-400 m2/kg.
+  - id: activation_04
+    category: activation
+    question: What is thermal activation of steel slag?
+    reference: >-
+      Heat treatment (e.g. elevated-temperature curing or calcination/remelting) to speed up
+      reactions or change the phases to more reactive ones.
+
+  # Carbonation and carbon uptake
+  - id: carbon_01
+    category: carbonation
+    question: What is mineral carbonation of steel slag?
+    reference: >-
+      Reacting CO2 with calcium and magnesium phases in the slag (free lime, portlandite, C2S and
+      other silicates) to form stable carbonates such as CaCO3, permanently storing CO2.
+  - id: carbon_02
+    category: carbonation
+    question: What is the difference between direct and indirect carbonation?
+    reference: >-
+      Direct: slag reacts with CO2 in one step (gas-solid, or in a wet slurry). Indirect: Ca/Mg
+      is first extracted with a solvent (e.g. acetic acid, NH4Cl) and then precipitated as a
+      carbonate, giving a purer product.
+  - id: carbon_03
+    category: carbonation
+    question: What is carbonation curing?
+    reference: >-
+      Curing slag-based compacts or concrete in a CO2-rich atmosphere so CO2 reacts to form CaCO3
+      and silica gel, gaining strength quickly while storing CO2.
+  - id: carbon_04
+    category: carbonation
+    question: How is CO2 uptake of carbonated slag usually measured and reported?
+    reference: >-
+      Mostly by TGA (mass loss from CaCO3 decomposition, roughly 550-900 C), or by mass gain,
+      LOI or carbon analysis; reported as wt% CO2 or g CO2 per kg of slag.
+  - id: carbon_05
+    category: carbonation
+    question: How can the theoretical maximum CO2 uptake of a slag be estimated from its chemistry?
+    reference: >-
+      With the Steinour formula: CO2 (%) = 0.785(CaO - 0.7 SO3) + 1.091 MgO + 0.71 Na2O + 0.468
+      K2O.
+
+  # Characterization and processing
+  - id: methods_01
+    category: methods
+    question: What do XRF and XRD each tell you about a slag?
+    reference: >-
+      XRF gives the bulk chemical (oxide) composition; XRD identifies (and with Rietveld,
+      quantifies) the crystalline mineral phases.
+  - id: methods_02
+    category: methods
+    question: What is loss on ignition (LOI), and what does it indicate for slag?
+    reference: >-
+      The mass lost on heating to about 950-1000 C; it reflects volatiles such as water and CO2,
+      so it indicates how much the slag has weathered or carbonated.
+  - id: methods_03
+    category: methods
+    question: Why is steel slag magnetically separated after crushing?
+    reference: >-
+      To recover metallic iron and iron-rich particles for recycling to steelmaking, leaving a
+      lower-iron mineral fraction for other uses.
+  - id: methods_04
+    category: methods
+    question: What is hot-stage modification of steel slag?
+    reference: >-
+      Treating the molten slag (e.g. adding SiO2 or Al2O3, or rapid cooling/granulation) to
+      reduce free lime, stabilize C2S or increase glass content, improving stability and
+      reactivity.
