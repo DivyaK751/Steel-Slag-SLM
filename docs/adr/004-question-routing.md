@@ -12,8 +12,8 @@ data it came from.
 
 ## Decision
 
-- **A small open model reads; code decides.** The reader model (Qwen2.5-3B, served locally by
-  Ollama) only fills a `QuestionForm`: message type, whether it wants an explanation, the
+- **A small open model reads; code decides.** The reader model (qwen2.5:7b, served locally by
+  Ollama) only fills a `QuestionForm`: message type, whether the answer is values only, the
   extraction-table columns asked for, filters on columns, oxides stated in the message, whether
   it is about the user's slag, missing details and a stand-alone search query. Fixed rules in
   `agents/router.py` turn the form into tool calls, so the same form always gives the same calls.
@@ -36,11 +36,20 @@ data it came from.
     chemistry filters, keeping only rows that meet the result filters and report the
     asked-for columns. A why question whose only filters are slag type or chemistry skips
     lookup, which would otherwise return every value of those slags.
+    A reasoning question with no filters at all also skips lookup: nothing would narrow it,
+    so it would read every catalogue slag.
   - asks for an age with no column of its own (14-day strength): the nearest age's column,
     with a note, and paper search too.
   - the reader gives no valid form after one retry (the retry is told what was wrong):
     paper search with the message as typed, with a note.
-  - wants an explanation, or none of the above: paper search with the stand-alone query.
+  - not values-only (the default: reasoning, advice, comparison...), or none of the above:
+    paper search with the stand-alone query. A wrong guess adds evidence instead of losing it.
+  - an "=" filter on a chemistry oxide is a composition the user states: it moves to
+    chemistry, so similar slags are found.
+- **Examples are picked per message.** `prompts/read_question_examples.yaml` holds worked
+  forms for every kind of message; the few closest in meaning (same embedder as paper search)
+  are shown with each message. Examples are written for kinds of failure, never copied from
+  an evaluation set.
   - the tables return nothing: paper search, with a note saying so.
 - **Evidence is one cited text** (`agents/evidence_package.py`): notes to keep in mind, how well
   the similar slags match, table values with their page or table, then paper passages. Passages

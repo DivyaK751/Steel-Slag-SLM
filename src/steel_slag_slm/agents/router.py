@@ -83,16 +83,23 @@ def slag_to_match(form: QuestionForm, stored: SlagProfile | None) -> SlagProfile
 
 
 def _needs_lookup(form: QuestionForm, columns: Sequence[FormColumn]) -> bool:
-    """Lookup runs for asked-for columns or a filter on results. A why question whose only
-    filters are slag type or chemistry goes to the papers alone: with no columns to keep,
-    lookup would return every value of the chosen slags."""
+    """Lookup runs for asked-for columns or a filter on results. A question that is not
+    values-only and whose only filters are slag type or chemistry goes to the papers alone:
+    with no columns to keep, lookup would return every value of the chosen slags.
+
+    A question that is not values-only and has no filters ("how can iron be recovered from
+    slag?") also goes to the papers alone: nothing narrows the lookup, so it would read every
+    catalogue slag and hand the answer model unrelated rows."""
+    by_name = {column.name: column for column in columns}
+    known_filters = [f for f in form.filters if f.column in by_name]
+    if not form.values_only and not known_filters:
+        return False
     if form.properties:
         return True
-    by_name = {column.name: column for column in columns}
-    slag_level = [is_slag_level(by_name[f.column]) for f in form.filters if f.column in by_name]
+    slag_level = [is_slag_level(by_name[f.column]) for f in known_filters]
     if not slag_level:
         return False
-    return not all(slag_level) or not form.wants_explanation
+    return not all(slag_level) or form.values_only
 
 
 def plan_route(
@@ -102,8 +109,9 @@ def plan_route(
 
     - chat or off-topic: no tools.
     - about the user's slag, or a composition given: similar slags, then lookup on them.
-    - names columns or result filters: lookup on the catalogue slags the filters choose.
-    - wants an explanation, or nothing above applies: paper search.
+    - names columns or result filters: lookup on the catalogue slags the filters choose;
+      a reasoning question with no filters skips it (nothing would narrow the lookup).
+    - not values-only, or nothing above applies: paper search too.
     """
     if form.message_type in ("chat", "off_topic"):
         return RoutePlan((), True, None, ())
@@ -116,7 +124,7 @@ def plan_route(
         calls += [ToolCall("similar_slags"), ToolCall("lookup", after_similar=True)]
     elif _needs_lookup(form, columns):
         calls.append(ToolCall("lookup"))
-    if form.wants_explanation or not calls:
+    if not form.values_only or not calls:
         calls.append(ToolCall("paper_search"))
     return RoutePlan(tuple(calls), False, profile, tuple(notes))
 

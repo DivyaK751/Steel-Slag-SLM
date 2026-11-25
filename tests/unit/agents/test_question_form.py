@@ -5,6 +5,7 @@ from steel_slag_slm.agents.question_form import (
     clean_form,
     form_columns,
     form_json_schema,
+    off_vocabulary,
 )
 
 CEMENT = "concrete_performance.cement_type"
@@ -63,6 +64,16 @@ def test_schema_limits_columns_and_oxides_to_real_names():
     filter_column = schema["$defs"]["ColumnFilter"]["properties"]["column"]
     assert filter_column["enum"] == property_names
     assert "cao_pct" in schema["properties"]["chemistry"]["propertyNames"]["enum"]
+
+
+def test_a_filter_value_outside_its_columns_list_is_reported():
+    form = QuestionForm(
+        message_type="question",
+        filters=[ColumnFilter(column="concrete_performance.steel_slag_type", op="=", value="LD"),
+                 ColumnFilter(column="feedstock_chemistry.steel_slag_type", op="=", value="bof")],
+    )  # fmt: skip
+    problems = off_vocabulary(form, form_columns())
+    assert len(problems) == 1 and "'LD' is not allowed" in problems[0] and "BOF" in problems[0]
 
 
 def test_clean_form_drops_unknown_columns_oxides_and_repeats():

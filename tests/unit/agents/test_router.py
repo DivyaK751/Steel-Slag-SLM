@@ -31,26 +31,32 @@ def test_chat_and_off_topic_messages_run_no_tools():
     assert plan.reply_only and plan.calls == ()
 
 
-def test_a_question_about_my_slag_finds_similar_slags_then_looks_them_up():
-    assert _plan(_form(about_my_slag=True)) == ["similar_slags", "lookup"]
+def test_a_values_only_question_about_my_slag_finds_similar_slags_then_looks_them_up():
+    assert _plan(_form(about_my_slag=True, values_only=True)) == ["similar_slags", "lookup"]
 
 
-def test_a_why_question_about_my_slag_also_searches_the_papers():
-    form = _form(about_my_slag=True, wants_explanation=True)
-    assert _plan(form) == ["similar_slags", "lookup", "paper_search"]
+def test_a_reasoning_question_about_my_slag_also_searches_the_papers():
+    assert _plan(_form(about_my_slag=True)) == ["similar_slags", "lookup", "paper_search"]
 
 
-def test_a_value_question_looks_up_values_with_its_filters():
-    assert _plan(_form(properties=[STRENGTH]), None) == ["lookup"]
+def test_a_values_only_question_looks_up_values_with_its_filters():
+    assert _plan(_form(properties=[STRENGTH], values_only=True), None) == ["lookup"]
+
+
+def test_a_question_not_marked_values_only_searches_the_papers_too():
+    # A wrong guess about values_only adds evidence instead of losing it
+    over_40 = ColumnFilter(column=STRENGTH, op=">", value=40.0)
+    form = _form(properties=[STRENGTH], filters=[over_40])
+    assert _plan(form, None) == ["lookup", "paper_search"]
 
 
 def test_filters_alone_are_enough_for_a_lookup():
     over_40 = ColumnFilter(column=STRENGTH, op=">", value=40.0)
-    assert _plan(_form(filters=[over_40]), None) == ["lookup"]
+    assert _plan(_form(filters=[over_40], values_only=True), None) == ["lookup"]
 
 
-def test_a_why_question_with_no_columns_only_searches_the_papers():
-    assert _plan(_form(wants_explanation=True), None) == ["paper_search"]
+def test_a_reasoning_question_with_no_columns_only_searches_the_papers():
+    assert _plan(_form(), None) == ["paper_search"]
 
 
 BOF = ColumnFilter(column="feedstock_chemistry.steel_slag_type", op="=", value="BOF")
@@ -58,20 +64,21 @@ BOF = ColumnFilter(column="feedstock_chemistry.steel_slag_type", op="=", value="
 
 def test_a_why_question_with_only_a_slag_type_filter_skips_the_lookup():
     # Lookup would return every value of every BOF slag
-    assert _plan(_form(wants_explanation=True, filters=[BOF]), None) == ["paper_search"]
+    assert _plan(_form(filters=[BOF]), None) == ["paper_search"]
 
 
 def test_a_slag_type_filter_with_its_columns_still_looks_values_up():
-    form = _form(wants_explanation=True, filters=[BOF], properties=[STRENGTH])
+    form = _form(filters=[BOF], properties=[STRENGTH])
     assert _plan(form, None) == ["lookup", "paper_search"]
 
 
 def test_a_value_question_with_only_a_slag_type_filter_looks_values_up():
-    assert _plan(_form(filters=[BOF]), None) == ["lookup"]
+    assert _plan(_form(filters=[BOF], values_only=True), None) == ["lookup"]
 
 
 def test_paper_search_is_added_once_with_its_notes():
-    plan = add_paper_search(plan_route(_form(properties=[STRENGTH]), None, COLUMNS), ["why"])
+    form = _form(properties=[STRENGTH], values_only=True)
+    plan = add_paper_search(plan_route(form, None, COLUMNS), ["why"])
     again = add_paper_search(plan, ["and why not"])
     assert [call.tool for call in again.calls] == ["lookup", "paper_search"]
     assert again.notes == ("why", "and why not")
@@ -135,7 +142,7 @@ class Recorder:
 
 def test_running_my_slag_looks_up_exactly_the_similar_slags():
     recorder = Recorder()
-    form = _form(about_my_slag=True, properties=[STRENGTH])
+    form = _form(about_my_slag=True, properties=[STRENGTH], values_only=True)
     results = run_route(
         "q", plan_route(form, PROFILE, COLUMNS), form, recorder.tools(), COLUMNS, 15
     )
@@ -152,3 +159,17 @@ def test_when_the_tables_have_nothing_the_papers_are_searched_with_the_question(
     assert recorder.asked[-1] == ("search", "how reactive?")
     assert "No EAF slag to compare" in results.notes
     assert results.passages
+
+
+def test_a_reasoning_question_with_columns_but_no_filters_only_searches_the_papers():
+    # Nothing narrows the lookup, so it would read every catalogue slag
+    assert _plan(_form(properties=[STRENGTH]), None) == ["paper_search"]
+
+
+def test_a_values_only_question_with_columns_but_no_filters_still_looks_values_up():
+    assert _plan(_form(properties=[STRENGTH], values_only=True), None) == ["lookup"]
+
+
+def test_a_reasoning_question_about_my_slag_still_looks_up_the_similar_slags():
+    form = _form(about_my_slag=True, properties=[STRENGTH])
+    assert _plan(form) == ["similar_slags", "lookup", "paper_search"]

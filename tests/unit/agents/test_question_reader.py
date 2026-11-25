@@ -2,6 +2,7 @@ from typing import Any
 
 import pytest
 
+from steel_slag_slm.agents.form_examples import FormExample
 from steel_slag_slm.agents.question_form import (
     ColumnFilter,
     QuestionForm,
@@ -53,7 +54,7 @@ def test_the_model_gets_every_column_the_profile_and_a_schema_of_real_names():
 
 def test_a_valid_answer_becomes_a_clean_form():
     form, _ = _read({
-        "message_type": "question", "wants_explanation": False,
+        "message_type": "question", "values_only": True,
         "properties": [STRENGTH, "invented.column"],
         "filters": [{"column": SLAG_TYPE, "op": "=", "value": "BOF"}],
     })  # fmt: skip
@@ -101,7 +102,7 @@ def test_two_failed_tries_are_reported():
 
 def test_a_follow_up_keeps_the_previous_question_and_changes_only_what_it_names():
     previous = QuestionForm(
-        message_type="question", wants_explanation=True, properties=[STRENGTH],
+        message_type="question", values_only=True, properties=[STRENGTH],
         filters=[ColumnFilter(column=SLAG_TYPE, op="=", value="BOF"),
                  ColumnFilter(column=REPLACEMENT, op="=", value=20.0)],
         search_query="28-day strength of concrete with 20% BOF slag",
@@ -137,3 +138,58 @@ def test_the_values_seen_in_the_data_are_listed():
 
 def test_no_profile_is_said_plainly():
     assert describe_profile(None) == "none stored"
+
+
+def test_a_follow_up_is_values_only_only_if_both_questions_are():
+    previous = QuestionForm(message_type="question", values_only=False, properties=[STRENGTH])
+    follow_up = QuestionForm(message_type="follow_up", values_only=True)
+    assert not merge_follow_up(previous, follow_up).values_only
+
+
+def test_a_composition_read_as_filters_becomes_the_slag_to_match():
+    model = FakeModel({
+        "message_type": "question",
+        "filters": [{"column": "feedstock_chemistry.mgo_pct", "op": "=", "value": 8},
+                    {"column": "feedstock_chemistry.cao_pct", "op": ">", "value": 40}],
+    })  # fmt: skip
+    form = read_question(
+        "8% MgO and CaO above 40: expansion risk?", model, load_prompt("read_question"),
+        form_columns(),
+    )  # fmt: skip
+    assert form.chemistry == {"mgo_pct": 8.0}
+    assert [(f.column, f.op) for f in form.filters] == [("feedstock_chemistry.cao_pct", ">")]
+
+
+def test_the_examples_given_are_shown_to_the_model():
+    example = FormExample("good morning", QuestionForm(message_type="chat"))
+    _, model = _read({"message_type": "chat"}, examples=[example])
+    shown = 'Message: good morning\nForm: {"message_type":"chat","values_only":false'
+    assert shown in model.calls[0][1]
+
+
+def test_the_schema_makes_the_model_give_every_field():
+    _, model = _read({"message_type": "chat"})
+    required = set(model.calls[0][2]["required"])
+    assert {"values_only", "about_my_slag", "chemistry"} <= required
+
+
+def test_chemistry_the_user_did_not_give_is_dropped():
+    profile = SlagProfile(steel_slag_type="EAF", oxides={"cao_pct": 38.0})
+    form, _ = _read(
+        {"message_type": "question",
+         "chemistry": {"cao_pct": 38, "mgo_pct": 9, "sio2_pct": 0, "al2o3_pct": 20}},
+        profile=profile,
+    )  # fmt: skip
+    # 38 is the stored profile's, 20 is in the question; 9 is made up and 0 is no value
+    assert form.chemistry == {"cao_pct": 38.0, "al2o3_pct": 20.0}
+
+
+def test_a_slag_type_outside_the_list_is_retried_with_the_allowed_values():
+    ld = {"column": SLAG_TYPE, "op": "=", "value": "LD"}
+    bof = {"column": SLAG_TYPE, "op": "=", "value": "BOF"}
+    form, model = _read_scripted(
+        {"message_type": "question", "filters": [ld]},
+        {"message_type": "question", "filters": [bof]},
+    )
+    assert form.filters[0].value == "BOF"
+    assert "'LD' is not allowed" in model.users[1]

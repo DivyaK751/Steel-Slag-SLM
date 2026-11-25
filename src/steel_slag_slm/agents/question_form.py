@@ -25,6 +25,7 @@ FilterOp = Literal["=", "<", ">", "between", "contains"]
 
 # Sheets whose columns a question can ask about; sheet 9 only records where values were found
 _ASKABLE_SHEETS = SHEET_TABLES[:-1]
+_CHEMISTRY_SHEET = "2 Feedstock Chemistry"
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,7 +57,10 @@ class QuestionForm(BaseModel):
     """What a message asks, in terms the tools understand. Every field may stay empty."""
 
     message_type: MessageType
-    wants_explanation: bool = False  # asks why or how, or for a summary or recommendation
+    # True only when the answer is just values read from the tables: no reasoning, advice,
+    # comparison or recommendation. False (the default) searches the papers too, so a wrong
+    # guess adds evidence instead of losing it
+    values_only: bool = False
     properties: list[str] = Field(default_factory=list)  # columns whose values are wanted
     filters: list[ColumnFilter] = Field(default_factory=list)
     # Oxide wt% typed into the question, by catalogue column; the stored profile fills the rest
@@ -109,12 +113,61 @@ def _fix_filter(condition: ColumnFilter, column: FormColumn) -> ColumnFilter:
     return condition.model_copy(update={"op": "contains"})
 
 
+def move_stated_oxides(form: QuestionForm, columns: list[FormColumn]) -> QuestionForm:
+    """Treat an "=" filter on a chemistry oxide column as a composition the message states.
+
+    "A slag with 8% MgO" is the user's slag, not a condition on other slags: it belongs in
+    chemistry, so similar slags are found. Oxides already in chemistry are kept as they are;
+    ranges ("CaO above 40") stay filters.
+    """
+    by_name = {column.name: column for column in columns}
+    chemistry = dict(form.chemistry)
+    kept: list[ColumnFilter] = []
+    for condition in form.filters:
+        column = by_name.get(condition.column)
+        value = condition.value
+        if (
+            column is not None
+            and column.sheet == _CHEMISTRY_SHEET
+            and (oxide := to_column_name(column.header)) in CATALOGUE_OXIDES
+            and condition.op == "="
+            and isinstance(value, int | float)
+        ):
+            chemistry.setdefault(oxide, float(value))
+        else:
+            kept.append(condition)
+    if len(kept) == len(form.filters):
+        return form
+    return form.model_copy(update={"filters": kept, "chemistry": chemistry})
+
+
+def off_vocabulary(form: QuestionForm, columns: list[FormColumn]) -> list[str]:
+    """Filters on a column with a fixed vocabulary whose value is not one of its values, each
+    as a line telling the reader which values it may use ("LD" is not a slag type; "BOF" is)."""
+    by_name = {column.name: column for column in columns}
+    problems = []
+    for condition in form.filters:
+        column = by_name.get(condition.column)
+        if column is None or not column.allowed_values:
+            continue
+        allowed = {value.casefold() for value in column.allowed_values}
+        if str(condition.value).casefold() not in allowed:
+            problems.append(
+                f"{condition.column} = {condition.value!r} is not allowed; use one of "
+                f"{', '.join(column.allowed_values)} with op '='"
+            )
+    return problems
+
+
 def form_json_schema(columns: list[FormColumn]) -> dict[str, Any]:
     """The form's JSON schema, with column and oxide names limited to the real ones.
 
     Passed to the reader model as its output format, so it cannot invent a column.
     """
     schema = QuestionForm.model_json_schema()
+    # Every field must be given, so the model decides values_only and about_my_slag each time
+    # instead of leaving them out and falling back to the defaults
+    schema["required"] = list(schema["properties"])
     names = [column.name for column in columns]
     schema["properties"]["properties"]["items"] = {"type": "string", "enum": names}
     schema["$defs"]["ColumnFilter"]["properties"]["column"] = {"type": "string", "enum": names}
