@@ -55,8 +55,10 @@ It streams the answer, then lists any `[S#]`/`[P#]` label it cites that the evid
 ## Chat API
 
 `backend/app.py` serves the chat over HTTP (endpoints and event contract:
-[ADR 005](docs/adr/005-chat-interface.md)). Until routing is connected, it streams fixed stub
-events.
+[ADR 005](docs/adr/005-chat-interface.md)). Each message is read, routed to the tools,
+answered from the evidence and streamed with its citations. Startup takes about a minute (it
+loads the search index and models); it needs the LiteLLM gateway, BigQuery and Drive, like
+`ask`.
 
 ```bash
 uv run uvicorn backend.app:app --reload --port 8765

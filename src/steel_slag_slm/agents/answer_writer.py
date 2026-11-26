@@ -1,7 +1,7 @@
 """Write the answer to one chat message from its evidence, and check the labels it cites.
 
 The evidence labels table slags [S1], [S2] ... and paper passages [P1], [P2] ...
-(agents/evidence_package.py on feature/question-routing); the answer cites those labels.
+(agents/evidence_package.py); the answer cites those labels.
 """
 
 import re
@@ -46,13 +46,24 @@ def write_answer(
     )
 
 
+def defined_labels(evidence: str) -> set[str]:
+    """The S#/P# labels the evidence defines."""
+    return set(_DEFINED_LABEL.findall(evidence))
+
+
+def cited_labels(answer: str) -> list[str]:
+    """The S#/P# labels the answer cites, in order of first use, each once.
+
+    Brackets without an S#/P# label, such as "[source_a; source_b]", are ignored.
+    """
+    cited = (label for group in _BRACKET.findall(answer) for label in _LABEL.findall(group))
+    return list(dict.fromkeys(cited))  # drops repeats and keeps first-use order
+
+
 def unknown_citations(answer: str, evidence: str) -> list[str]:
     """Labels the answer cites that the evidence never defines, in order of first use.
 
-    A cheap check for made-up citations: brackets without an S#/P# label, such as the
-    evidence's "[source_a; source_b]" summaries, are ignored.
+    A cheap check for made-up citations.
     """
-    defined = set(_DEFINED_LABEL.findall(evidence))
-    cited = (label for group in _BRACKET.findall(answer) for label in _LABEL.findall(group))
-    # dict.fromkeys drops repeats and keeps first-use order
-    return [label for label in dict.fromkeys(cited) if label not in defined]
+    defined = defined_labels(evidence)
+    return [label for label in cited_labels(answer) if label not in defined]

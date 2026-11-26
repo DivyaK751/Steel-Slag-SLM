@@ -64,7 +64,10 @@ contract before either is written.
   `JsonModel` protocol (`complete_json`) that `GatewayClient` implements.
 - Sessions are lost when the server restarts, and the backend must run as one process. This is
   enough for a demo, but not for many users.
-- Until routing merges, `answer_message` is a stub that yields fixed events in the contract's
-  order, so the API and UI can be built and tested against it.
+- `answer_message` runs the whole path: the reader's form, the routed tools, the evidence, the
+  streamed answer, then one citation per `[S#]`/`[P#]` label the answer cites and the evidence
+  defines. Each question's form is kept in the session, so a follow-up builds on it. The
+  backend builds the assistant (index, models, BigQuery tools) once at startup, which takes
+  about a minute; tests pass a fake answer function instead.
 - The frontend depends on the event contract, so changing it means amending this record and
   the frontend in the same PR.

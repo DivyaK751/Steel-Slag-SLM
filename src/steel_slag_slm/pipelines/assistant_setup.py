@@ -1,8 +1,9 @@
 """Build everything the chat needs once (models, index, tools), shared by the CLI and the API."""
 
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 
+from steel_slag_slm.agents.answer_citations import PaperCitations
 from steel_slag_slm.agents.answer_writer import TextModel
 from steel_slag_slm.agents.form_examples import ExamplePicker, load_examples
 from steel_slag_slm.agents.question_form import FormColumn, QuestionForm
@@ -35,8 +36,6 @@ from steel_slag_slm.rag.embeddings import Embedder
 from steel_slag_slm.rag.retrieval import CrossEncoderScorer, TwoStageRetriever
 from steel_slag_slm.rag.similar_slags import SlagProfile
 from steel_slag_slm.schemas import PaperCitation
-
-PaperCitations = Callable[[Sequence[str]], dict[str, PaperCitation]]
 
 
 @dataclass(frozen=True, slots=True)

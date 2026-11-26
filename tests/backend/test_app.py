@@ -7,13 +7,27 @@ from fastapi.testclient import TestClient
 
 from backend.app import SERVER_ERROR_MESSAGE, create_app
 from steel_slag_slm.data.slag_catalogue import OXIDE_LABELS
-from steel_slag_slm.pipelines.answer_message import ChatSession
-from steel_slag_slm.schemas import ChatEvent
+from steel_slag_slm.pipelines.answer_message import BLANK_MESSAGE, ChatSession
+from steel_slag_slm.schemas import ChatEvent, Citation
+
+
+def fake_answer(message: str, session: ChatSession) -> Iterator[ChatEvent]:
+    """Stands in for the real assistant: fixed events in the contract's order."""
+    if not message.strip():
+        yield ChatEvent(type="error", text=BLANK_MESSAGE)
+        return
+    yield ChatEvent(type="status", text="Searching…")
+    slag = f"your {session.profile.steel_slag_type} slag" if session.profile else "steel slag"
+    for token in (f"About {slag}: ", "it works [P1] ", "as tables show [S1]."):
+        yield ChatEvent(type="token", text=token)
+    citations = [Citation(label="P1", paper_id="W1"), Citation(label="S1", paper_id="W2")]
+    yield ChatEvent(type="citations", citations=citations)
+    yield ChatEvent(type="done")
 
 
 @pytest.fixture
 def client() -> Iterator[TestClient]:
-    with TestClient(create_app()) as test_client:  # "with" runs the startup hook
+    with TestClient(create_app(answer=fake_answer)) as test_client:  # "with" runs startup
         yield test_client
 
 

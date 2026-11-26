@@ -6,6 +6,7 @@ Run with: uv run uvicorn backend.app:app --reload --port 8765
 import logging
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager
+from functools import partial
 from typing import get_args
 from uuid import UUID
 
@@ -16,6 +17,7 @@ from pydantic import BaseModel
 from backend.sessions import SessionStore
 from steel_slag_slm.data.slag_catalogue import OXIDE_LABELS
 from steel_slag_slm.pipelines.answer_message import ChatSession, answer_message
+from steel_slag_slm.pipelines.assistant_setup import build_assistant
 from steel_slag_slm.rag.similar_slags import SlagProfile
 from steel_slag_slm.schemas import ChatEvent, SteelSlagType
 
@@ -65,13 +67,15 @@ def stream_answer(answer: AnswerFn, message: str, session: ChatSession) -> Itera
         yield format_sse(ChatEvent(type="error", text=SERVER_ERROR_MESSAGE))
 
 
-def create_app(answer: AnswerFn = answer_message) -> FastAPI:
-    """Build the API; tests pass a fake answer function."""
+def create_app(answer: AnswerFn | None = None) -> FastAPI:
+    """Build the API. Without an answer function (tests pass a fake), the real assistant is
+    built at startup: the search index, models and BigQuery tools, once for every chat."""
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        # Heavy objects (models, index, catalogue) are built here once, from A3 on
         app.state.sessions = SessionStore()
+        # Slow (about a minute): loads the index from Drive and the embedding models
+        app.state.answer = answer or partial(answer_message, assistant=build_assistant())
         yield
 
     app = FastAPI(title="Steel slag chat", lifespan=lifespan)
@@ -94,7 +98,7 @@ def create_app(answer: AnswerFn = answer_message) -> FastAPI:
     def chat(chat_request: ChatRequest, request: Request) -> StreamingResponse:
         session = request.app.state.sessions.get_or_create(chat_request.session_id)
         # A plain generator: Starlette runs it in a thread, so blocking model calls are fine
-        events = stream_answer(answer, chat_request.message, session)
+        events = stream_answer(request.app.state.answer, chat_request.message, session)
         return StreamingResponse(events, media_type="text/event-stream", headers=SSE_HEADERS)
 
     return app
