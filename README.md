@@ -52,6 +52,18 @@ uv run pytest -m integration tests/integration/test_answer_writer_live.py  # eve
 
 It streams the answer, then lists any `[S#]`/`[P#]` label it cites that the evidence lacks.
 
+## Chat API
+
+`backend/app.py` serves the chat over HTTP (endpoints and event contract:
+[ADR 005](docs/adr/005-chat-interface.md)). Until routing is connected, it streams fixed stub
+events.
+
+```bash
+uv run uvicorn backend.app:app --reload --port 8765
+curl -N -X POST localhost:8765/chat -H 'content-type: application/json' \
+  -d '{"session_id": "'"$(uuidgen)"'", "message": "What is steel slag used for?"}'
+```
+
 ## Paper fetcher
 
 A background job (GitHub Actions, every night) that searches [OpenAlex](https://openalex.org)
