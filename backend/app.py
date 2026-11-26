@@ -6,6 +6,7 @@ Run with: uv run uvicorn backend.app:app --reload --port 8765
 import logging
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager
+from typing import get_args
 from uuid import UUID
 
 from fastapi import FastAPI, Request, Response
@@ -13,9 +14,10 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from backend.sessions import SessionStore
+from steel_slag_slm.data.slag_catalogue import OXIDE_LABELS
 from steel_slag_slm.pipelines.answer_message import ChatSession, answer_message
 from steel_slag_slm.rag.similar_slags import SlagProfile
-from steel_slag_slm.schemas import ChatEvent
+from steel_slag_slm.schemas import ChatEvent, SteelSlagType
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +33,20 @@ class ChatRequest(BaseModel):
 
     session_id: UUID
     message: str
+
+
+class OxideOption(BaseModel):
+    """One oxide the profile form offers: its catalogue column and the name shown."""
+
+    column: str
+    label: str
+
+
+class ProfileOptions(BaseModel):
+    """The choices the profile form offers, from the same lists the backend validates with."""
+
+    slag_types: list[str]
+    oxides: list[OxideOption]
 
 
 def format_sse(event: ChatEvent) -> str:
@@ -63,6 +79,11 @@ def create_app(answer: AnswerFn = answer_message) -> FastAPI:
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/profile/options")
+    def profile_options() -> ProfileOptions:
+        oxides = [OxideOption(column=col, label=label) for col, label in OXIDE_LABELS.items()]
+        return ProfileOptions(slag_types=list(get_args(SteelSlagType)), oxides=oxides)
 
     @app.put("/session/{session_id}/profile", status_code=204)
     def put_profile(session_id: UUID, profile: SlagProfile, request: Request) -> Response:
