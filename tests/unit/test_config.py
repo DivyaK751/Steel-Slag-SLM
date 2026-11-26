@@ -280,3 +280,11 @@ def test_llm_gateway_settings_reject_a_job_model_not_listed() -> None:
             answer_model="gemnii",
             models={"gemini": {}},
         )
+
+
+def test_answer_settings_load_from_base_config() -> None:
+    settings = config.load_answer_settings()
+
+    assert settings.prompt_name == "answer_question"
+    assert 0 <= settings.temperature <= 1
+    assert settings.max_tokens is None or settings.max_tokens > 0

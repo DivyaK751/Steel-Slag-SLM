@@ -16,6 +16,7 @@ from google.adk.runners import Runner
 from google.cloud import bigquery
 
 from steel_slag_slm.agents.abstract_extractor import build_extractor_agent
+from steel_slag_slm.agents.answer_writer import unknown_citations, write_answer
 from steel_slag_slm.agents.data_extractor import build_data_extractor_agent
 from steel_slag_slm.agents.extraction_judge import build_adjudicator_agent, build_judge_agent
 from steel_slag_slm.agents.figure_reader import build_figure_reader_agent
@@ -28,6 +29,7 @@ from steel_slag_slm.config import (
     ScreeningSettings,
     Settings,
     load_abstract_extraction_settings,
+    load_answer_settings,
     load_benchmark_split,
     load_data_extraction_settings,
     load_drive_connection_settings,
@@ -38,6 +40,7 @@ from steel_slag_slm.config import (
     load_figure_extraction_settings,
     load_figure_reading_settings,
     load_gcp_settings,
+    load_llm_gateway_settings,
     load_pdf_parsing_settings,
     load_retrieval_eval_set,
     load_screening_settings,
@@ -82,6 +85,7 @@ from steel_slag_slm.evaluation.extraction_report import (
 from steel_slag_slm.evaluation.figure_checks import total_checks
 from steel_slag_slm.evaluation.value_metrics import count_values
 from steel_slag_slm.exceptions import PapersNotFoundError, PromotionError
+from steel_slag_slm.llm.gateway import GatewayClient
 from steel_slag_slm.llm.prompts import PromptTemplate, load_prompt
 from steel_slag_slm.pipelines.background_figure_reader import BackgroundFigureReader
 from steel_slag_slm.pipelines.build_index import run_build_index
@@ -1177,3 +1181,37 @@ def read_figures() -> None:
         f"{checks.rows_malformed} rows with missing cells"
     )
     print(f"Each reading is saved beside its source image under {args.figures_dir}")
+
+
+def answer() -> None:
+    """Answer a question from a saved evidence text, to compare answer models."""
+    parser = argparse.ArgumentParser(description=answer.__doc__)
+    parser.add_argument("question", help="the question the evidence was prepared for")
+    parser.add_argument(
+        "--evidence", type=Path, required=True, help="text file with the evidence (from ask)"
+    )
+    parser.add_argument(
+        "--model", help="gateway model name; default: llm_gateway.answer_model in base.yaml"
+    )
+    args = parser.parse_args()
+    if not args.evidence.is_file():
+        parser.error(f"{args.evidence} does not exist")
+
+    gateway = load_llm_gateway_settings()
+    model = args.model or gateway.answer_model
+    if model not in gateway.models:
+        parser.error(f"--model must be one of: {', '.join(gateway.models)}")
+    settings = load_answer_settings()
+    evidence = args.evidence.read_text(encoding="utf-8")
+    pieces = []
+    for piece in write_answer(
+        args.question,
+        evidence,
+        GatewayClient(gateway, model),
+        load_prompt(settings.prompt_name),
+        settings,
+    ):
+        print(piece, end="", flush=True)
+        pieces.append(piece)
+    unknown = unknown_citations("".join(pieces), evidence)
+    print(f"\n\n[{model}] Unknown citations: {', '.join(unknown) or 'none'}")

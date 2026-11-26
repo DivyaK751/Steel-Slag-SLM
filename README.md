@@ -41,6 +41,17 @@ uv run pytest -m integration tests/integration/test_llm_gateway_live.py  # every
 - Qwen3 is served by vLLM with `chat_template_kwargs: {enable_thinking: false}`, so it answers
   without a `<think>` block.
 
+The answer model writes the chat answer from the evidence text that question routing prepares
+(prompt: `prompts/answer_question.yaml`, settings: `answer:` in `configs/base.yaml`). To compare
+models on the same evidence, save it to a file and run:
+
+```bash
+uv run answer "What strength does 20% BOF slag concrete reach?" --evidence evidence.txt --model qwen3-8b
+uv run pytest -m integration tests/integration/test_answer_writer_live.py  # every model, live
+```
+
+It streams the answer, then lists any `[S#]`/`[P#]` label it cites that the evidence lacks.
+
 ## Paper fetcher
 
 A background job (GitHub Actions, every night) that searches [OpenAlex](https://openalex.org)

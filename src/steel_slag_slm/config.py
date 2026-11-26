@@ -381,6 +381,16 @@ class LlmGatewaySettings(BaseModel):
         return self
 
 
+class AnswerSettings(BaseModel):
+    """How the answer model writes; the model itself is llm_gateway.answer_model."""
+
+    prompt_name: str
+    temperature: float
+    # None: no cap. Thinking models count their reasoning here too, so a cap can cut the
+    # answer short with no error
+    max_tokens: int | None = None
+
+
 class Settings(BaseModel):
     """Everything the paper fetcher needs, from configs/ and the environment."""
 
@@ -641,3 +651,8 @@ def load_llm_gateway_settings(config_path: Path = BASE_CONFIG_PATH) -> LlmGatewa
         base_url=_require_env("LLM_GATEWAY_URL"),
         api_key=SecretStr(_require_env("LLM_GATEWAY_KEY")),
     )
+
+
+def load_answer_settings(config_path: Path = BASE_CONFIG_PATH) -> AnswerSettings:
+    """Build the answer model's prompt and sampling settings from the YAML config."""
+    return AnswerSettings(**_read_base_config(config_path)["answer"])
