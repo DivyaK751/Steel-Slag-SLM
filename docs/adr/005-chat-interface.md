@@ -40,6 +40,19 @@ contract before either is written.
     with the paper, authors, year, DOI and pages a hover card shows.
   - The browser reads the stream with `fetch` and a `ReadableStream`, because `EventSource`
     only sends GET requests.
+- **Endpoints.** The backend runs on port 8765 (`uv run uvicorn backend.app:app --port 8765`);
+  in development the Vite server forwards these paths to it, so the browser sees one origin and
+  the backend needs no CORS settings.
+
+  | Route | Body | Response |
+  |---|---|---|
+  | `GET /health` | – | `{"status": "ok"}` |
+  | `PUT /session/{session_id}/profile` | a `SlagProfile` | `204`; `422` if it is invalid |
+  | `POST /chat` | `{"session_id": ..., "message": ...}` | the event stream above |
+
+  `session_id` is a UUID the browser makes with `crypto.randomUUID()`; a new chat is a new id.
+  The backend starts a session the first time it sees an id, so there is no "create session"
+  call. A session id that is not a UUID gets `422`.
 - **Sessions.** Each chat has a session id. The backend keeps a `ChatSession` (the user's slag
   profile, and from the routing merge on, the previous question's form for follow-ups) in
   memory, keyed by that id. There is no login.
