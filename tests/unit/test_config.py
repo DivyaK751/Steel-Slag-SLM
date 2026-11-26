@@ -246,3 +246,37 @@ def test_similar_slag_settings_load_from_base_config() -> None:
     settings = config.load_similar_slag_settings()
     assert settings.top_k == 5
     assert settings.min_shared_phases_cross_type == 3
+
+
+def test_llm_gateway_settings_read_models_from_yaml_and_secrets_from_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_GATEWAY_URL", "http://gateway.test/v1")
+    monkeypatch.setenv("LLM_GATEWAY_KEY", "secret")
+
+    settings = config.load_llm_gateway_settings()
+
+    assert settings.base_url == "http://gateway.test/v1"
+    assert settings.api_key.get_secret_value() == "secret"
+    assert settings.reader_model in settings.models
+    assert settings.answer_model in settings.models
+
+
+def test_llm_gateway_settings_need_the_gateway_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("LLM_GATEWAY_URL", raising=False)
+    monkeypatch.setenv("LLM_GATEWAY_KEY", "secret")
+
+    with pytest.raises(RuntimeError, match="LLM_GATEWAY_URL"):
+        config.load_llm_gateway_settings()
+
+
+def test_llm_gateway_settings_reject_a_job_model_not_listed() -> None:
+    with pytest.raises(ValueError, match="answer_model"):
+        config.LlmGatewaySettings(
+            base_url="http://gateway.test/v1",
+            api_key="k",
+            timeout_s=5,
+            reader_model="gemini",
+            answer_model="gemnii",
+            models={"gemini": {}},
+        )

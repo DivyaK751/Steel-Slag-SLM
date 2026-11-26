@@ -469,3 +469,18 @@ pricing:
   gemini-3.1-pro-preview: {input: 2.00, output: 12.00}  # 4.00 / 18.00 if prompt > 200K tokens
   gemini-3.7-flash: {input: null, output: null}
   gemini-3.5-flash-lite: {input: null, output: null}
+
+# Every chat-time model, called through the team's LiteLLM gateway (docs/adr/005).
+# URL and key: LLM_GATEWAY_URL and LLM_GATEWAY_KEY in .env
+llm_gateway:
+  timeout_s: 120
+  reader_model: gemini-3.8-flash  # reads each question into a form
+  answer_model: gemini-3.8-flash  # writes the answer from the evidence
+  # LiteLLM model name -> extra request fields it needs ({} for none)
+  models:
+    # LiteLLM wrongly rejects temperature for these two; this lets it through to Gemini
+    gemini-3.5-flash-lite: {allowed_openai_params: [temperature]}
+    gemini-3.8-flash: {allowed_openai_params: [temperature]}
+    gemini-4-neon: {}
+    # Served by vLLM; without this Qwen3 reasons in a <think> block before every answer
+    qwen3-8b: {chat_template_kwargs: {enable_thinking: false}}

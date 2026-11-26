@@ -26,6 +26,21 @@ The chat logic itself lives in `src/steel_slag_slm/pipelines/answer_message.py`,
 tests and API share it. See [ADR 005](docs/adr/005-chat-interface.md) for the stack and the
 streamed event contract.
 
+## Chat models (LiteLLM)
+
+Every chat-time model (Gemini and Qwen) is called through the team's LiteLLM gateway, with
+`GatewayClient` in `src/steel_slag_slm/llm/gateway.py`.
+
+```bash
+# in .env: LLM_GATEWAY_URL and LLM_GATEWAY_KEY (see .env.example)
+uv run pytest -m integration tests/integration/test_llm_gateway_live.py  # every model, live
+```
+
+- Models and which job uses which: the `llm_gateway:` section of `configs/base.yaml`. A model
+  the gateway adds is one more line under `models:`, with any extra request fields it needs.
+- Qwen3 is served by vLLM with `chat_template_kwargs: {enable_thinking: false}`, so it answers
+  without a `<think>` block.
+
 ## Paper fetcher
 
 A background job (GitHub Actions, every night) that searches [OpenAlex](https://openalex.org)

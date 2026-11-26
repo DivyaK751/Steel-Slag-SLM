@@ -361,6 +361,26 @@ class EvaluationSettings(BaseModel):
     prices: dict[str, ModelPrice] = {}
 
 
+class LlmGatewaySettings(BaseModel):
+    """The LiteLLM gateway every chat-time model is called through (docs/adr/005)."""
+
+    base_url: str
+    api_key: SecretStr
+    timeout_s: float
+    reader_model: str  # reads a question into a form
+    answer_model: str  # writes the answer from the evidence
+    # Every model the gateway serves, by its LiteLLM name, with the extra request fields it
+    # needs (e.g. Qwen's chat_template_kwargs); {} for none
+    models: dict[str, dict[str, Any]]
+
+    @model_validator(mode="after")
+    def _jobs_use_listed_models(self) -> "LlmGatewaySettings":
+        for job in ("reader_model", "answer_model"):
+            if getattr(self, job) not in self.models:
+                raise ValueError(f"llm_gateway.{job} must be one of llm_gateway.models")
+        return self
+
+
 class Settings(BaseModel):
     """Everything the paper fetcher needs, from configs/ and the environment."""
 
@@ -611,3 +631,13 @@ def load_slag_reference(path: Path = SLAG_REFERENCE_PATH) -> SlagReference:
     """Read the typical slag ranges and phase names from configs/slag_reference.yaml."""
     raw: dict[str, Any] = yaml.safe_load(path.read_text(encoding="utf-8"))
     return SlagReference(**raw)
+
+
+def load_llm_gateway_settings(config_path: Path = BASE_CONFIG_PATH) -> LlmGatewaySettings:
+    """Build the gateway's settings: models from the YAML config, URL and key from .env."""
+    raw_config = _read_base_config(config_path)
+    return LlmGatewaySettings(
+        **raw_config["llm_gateway"],
+        base_url=_require_env("LLM_GATEWAY_URL"),
+        api_key=SecretStr(_require_env("LLM_GATEWAY_KEY")),
+    )
