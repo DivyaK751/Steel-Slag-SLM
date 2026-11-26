@@ -9,10 +9,11 @@ export interface ChatMessage {
   text: string
   citations: Citation[]
   isError: boolean
+  isDone: boolean // the stream ended ("done" or "error"), so its citations are final
 }
 
 function newMessage(role: ChatMessage['role'], text = ''): ChatMessage {
-  return { id: crypto.randomUUID(), role, text, citations: [], isError: false }
+  return { id: crypto.randomUUID(), role, text, citations: [], isError: false, isDone: role === 'user' }
 }
 
 /** Return the assistant message with one streamed event applied; status events don't change it. */
@@ -22,9 +23,13 @@ export function applyEvent(message: ChatMessage, event: ChatEvent): ChatMessage 
       return { ...message, text: message.text + event.text }
     case 'citations':
       return { ...message, citations: event.citations }
-    case 'error':
+    case 'done':
+      return { ...message, isDone: true }
+    case 'error': {
       // Keep any answer text already shown, and add the error after it
-      return { ...message, text: [message.text, event.text].filter(Boolean).join('\n\n'), isError: true }
+      const text = [message.text, event.text].filter(Boolean).join('\n\n')
+      return { ...message, text, isError: true, isDone: true }
+    }
     default:
       return message
   }
@@ -77,5 +82,5 @@ export function useChat() {
     setIsStreaming(false)
   }
 
-  return { messages, status, isStreaming, send, newChat }
+  return { sessionId, messages, status, isStreaming, send, newChat }
 }

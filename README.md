@@ -77,6 +77,10 @@ npm test           # unit tests (Vitest)
 npm run lint       # oxlint; `npm run build` also type-checks
 ```
 
+"Add your slag" saves the user's slag profile (type, oxides, phases) in the browser and sends it to
+every new chat. Each `[S#]`/`[P#]` label in an answer shows its paper, authors, year, DOI and
+pages on hover; a label the evidence lacks is struck through.
+
 ## Paper fetcher
 
 A background job (GitHub Actions, every night) that searches [OpenAlex](https://openalex.org)

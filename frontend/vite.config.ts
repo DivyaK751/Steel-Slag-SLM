@@ -10,6 +10,6 @@ export default defineConfig({
     port: 5173,
     strictPort: true, // fail loudly instead of moving to another port
     // One origin for the browser, so the backend needs no CORS settings
-    proxy: { '/chat': API_URL, '/session': API_URL, '/health': API_URL },
+    proxy: { '/chat': API_URL, '/session': API_URL, '/profile': API_URL, '/health': API_URL },
   },
 })

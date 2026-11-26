@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { ChatEvent } from '../api/types'
 import { applyEvent, type ChatMessage } from './useChat'
 
-const EMPTY_ANSWER: ChatMessage = { id: 'a1', role: 'assistant', text: '', citations: [], isError: false }
+const EMPTY_ANSWER: ChatMessage = { id: 'a1', role: 'assistant', text: '', citations: [], isError: false, isDone: false }
 
 function apply(events: Partial<ChatEvent>[]): ChatMessage {
   return events.reduce<ChatMessage>(
@@ -23,6 +23,7 @@ describe('applyEvent', () => {
 
     expect(message.text).toBe('Steel slag.')
     expect(message.isError).toBe(false)
+    expect(message.isDone).toBe(true)
   })
 
   it('stores the citations event', () => {
@@ -36,5 +37,6 @@ describe('applyEvent', () => {
 
     expect(message.text).toBe('Steel \n\nServer failed.')
     expect(message.isError).toBe(true)
+    expect(message.isDone).toBe(true)
   })
 })
