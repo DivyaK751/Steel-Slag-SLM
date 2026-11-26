@@ -3,7 +3,7 @@ from collections.abc import Sequence
 import numpy as np
 import pytest
 
-from steel_slag_slm.rag.retrieval import TwoStageRetriever, keyword_tokens
+from steel_slag_slm.rag.retrieval import TwoStageRetriever, keyword_tokens, reranker_device
 from steel_slag_slm.rag.vector_store import VectorStore
 from steel_slag_slm.schemas import Chunk
 
@@ -58,3 +58,16 @@ def test_search_can_be_limited_to_one_paper(keyword_encoder):
 def test_search_rejects_a_blank_query(keyword_encoder):
     with pytest.raises(ValueError, match="blank"):
         _retriever(keyword_encoder, WordScorer(), top_papers=1).search("  ", top_k=5)
+
+
+@pytest.mark.parametrize(
+    ("cuda", "mps", "expected"),
+    [(True, True, "cuda"), (False, True, "mps"), (False, False, "cpu")],
+)
+def test_the_reranker_runs_on_the_fastest_device(monkeypatch, cuda, mps, expected):
+    import torch
+
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: cuda)
+    monkeypatch.setattr(torch.backends.mps, "is_available", lambda: mps)
+
+    assert reranker_device() == expected
