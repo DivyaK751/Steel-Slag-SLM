@@ -44,6 +44,7 @@ evaluate-retrieval = "steel_slag_slm.cli:evaluate_retrieval"
 extract-figures = "steel_slag_slm.cli:extract_figures"
 read-figures = "steel_slag_slm.cli:read_figures"
 export-parsed = "steel_slag_slm.cli:export_parsed"
+describe-tables = "steel_slag_slm.cli:describe_tables"
 
 [dependency-groups]
 dev = [

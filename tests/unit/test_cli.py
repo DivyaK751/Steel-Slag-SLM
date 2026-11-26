@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 
 import steel_slag_slm.cli as cli
+from steel_slag_slm.pipelines.describe_tables import TableDescriptionReport
 
 
 def _fake_parse_pdfs_clients(monkeypatch, calls: dict[str, object]) -> MagicMock:
@@ -135,3 +136,88 @@ def test_parse_pdfs_skip_index_leaves_the_index_alone(monkeypatch) -> None:
     cli.parse_pdfs()
 
     assert "indexed_folder" not in calls
+
+
+def _fake_describe_tables_clients(monkeypatch, calls: dict[str, object]) -> None:
+    """Stub settings, Drive, Gemini and the pipeline for describe-tables."""
+    settings = MagicMock(prompt_name="describe_table", max_run_usd=20.0)
+    monkeypatch.setattr(cli, "load_table_description_settings", lambda: settings)
+    monkeypatch.setattr(
+        cli, "load_gcp_settings", lambda: MagicMock(credentials_file=Path("/tmp/gcp.json"))
+    )
+    monkeypatch.setattr(
+        cli,
+        "load_pdf_parsing_settings",
+        lambda: MagicMock(output_folder_name="_parsed_approved", index_file_name="index.json"),
+    )
+    monkeypatch.setattr(cli, "_connect_to_parsed_folder", lambda name: ("drive", f"id-{name}"))
+    monkeypatch.setattr(
+        cli, "load_drive_connection_settings", lambda: MagicMock(folder_id="source-folder")
+    )
+    monkeypatch.setattr(cli, "list_paper_titles", lambda _service, _folder: {"W1": "A title"})
+    monkeypatch.setattr(cli, "load_prompt", lambda _name: "prompt")
+    monkeypatch.setattr(cli, "build_table_describer_agent", lambda *_: "agent")
+    monkeypatch.setattr(cli, "build_runner", lambda _agent: "runner")
+
+    def fake_run(service, folder_id, index_name, runner, prompt, _settings, **kwargs):
+        calls.update(kwargs, folder_id=folder_id, index_name=index_name, runner=runner)
+        return TableDescriptionReport(outcomes=Counter(calls.pop("outcomes", {})))
+
+    monkeypatch.setattr(cli, "run_table_description", fake_run)
+
+
+@pytest.mark.parametrize(
+    ("flags", "budget", "seconds"),
+    [([], 20.0, None), (["--max-gemini-usd", "3", "--max-minutes", "150"], 3.0, 9000.0)],
+)
+def test_describe_tables_runs_on_the_configured_folder(
+    monkeypatch, capsys, flags, budget, seconds
+) -> None:
+    calls: dict[str, object] = {"outcomes": {"described": 2}}
+    _fake_describe_tables_clients(monkeypatch, calls)
+    monkeypatch.setattr(sys, "argv", ["describe-tables", *flags])
+    monkeypatch.delenv("GOOGLE_APPLICATION_CREDENTIALS", raising=False)
+
+    cli.describe_tables()
+
+    assert calls["folder_id"] == "id-_parsed_approved" and calls["index_name"] == "index.json"
+    assert calls["max_run_usd"] == budget and calls["max_seconds"] == seconds
+    assert calls["titles"] == {"W1": "A title"}
+    assert cli.os.environ["GOOGLE_APPLICATION_CREDENTIALS"] == "/tmp/gcp.json"
+    assert "2  described" in capsys.readouterr().out
+
+
+def test_describe_tables_fails_when_a_paper_failed(monkeypatch) -> None:
+    _fake_describe_tables_clients(monkeypatch, {"outcomes": {"failed": 1}})
+    monkeypatch.setattr(sys, "argv", ["describe-tables", "--paper-ids", "W1"])
+    monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", "unused")
+
+    with pytest.raises(SystemExit, match="1 paper\\(s\\) failed"):
+        cli.describe_tables()
+
+
+@pytest.mark.parametrize(
+    ("outcomes", "complete"),
+    [({"complete": 3}, True), ({"incomplete": 1, "tables_missing": 2}, False)],
+)
+def test_describe_tables_check_fails_until_every_table_is_described(
+    monkeypatch, outcomes, complete
+) -> None:
+    calls: dict[str, object] = {"outcomes": outcomes}
+    _fake_describe_tables_clients(monkeypatch, calls)
+    monkeypatch.setattr(sys, "argv", ["describe-tables", "--check"])
+    monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", "unused")
+
+    if complete:
+        cli.describe_tables()
+    else:
+        with pytest.raises(SystemExit, match="2 table\\(s\\) still without a description"):
+            cli.describe_tables()
+    assert calls["check_only"] is True
+
+
+def test_describe_tables_rejects_a_nonpositive_time_limit(monkeypatch) -> None:
+    monkeypatch.setattr(sys, "argv", ["describe-tables", "--max-minutes", "0"])
+
+    with pytest.raises(SystemExit):
+        cli.describe_tables()

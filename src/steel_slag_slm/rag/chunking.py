@@ -1,17 +1,25 @@
 """Split a parsed paper into section-aware chunks of text, tables and figures.
 
-Papers with content blocks are chunked from the blocks, which carry page numbers, and each
-figure chunk holds the caption plus Gemini's reading of the figure. Older papers fall back to
-their Markdown, which has no page numbers, and their figures are indexed by caption only.
+Papers with content blocks are chunked from the blocks, which carry page numbers. Each figure
+chunk holds the caption plus Gemini's reading of the figure, and each table chunk holds the
+caption, Gemini's description of the table and its compact rows. Older papers fall back to
+their Markdown, which has no page numbers; their figures are indexed by caption only.
 """
 
 import logging
 import re
 import textwrap
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import replace
 
+from steel_slag_slm.data.section_headings import (
+    MAX_SECTION_CHARS,
+    STANDARD_HEADINGS,
+    is_section_heading,
+)
+from steel_slag_slm.data.table_text import compact_markdown_table, is_contents_list, is_table_row
+from steel_slag_slm.rag.token_budget import TokenBudget
 from steel_slag_slm.schemas import (
     Chunk,
     ChunkKind,
@@ -19,6 +27,7 @@ from steel_slag_slm.schemas import (
     PaperFigure,
     ParsedContentBlock,
     ParsedPaper,
+    TableDescription,
 )
 
 logger = logging.getLogger(__name__)
@@ -41,42 +50,14 @@ _BOILERPLATE = re.compile(
 # A sentence up to this long is kept whole, even past the chunk size, so it is never cut.
 # Limit set by the embedding model (512 tokens is roughly 2,000 characters)
 MAX_WHOLE_SENTENCE_CHARS = 1500
-# A section title longer than this is a running header merged into the heading; cut it short
-MAX_SECTION_CHARS = 150
-# A real section starts with its number ("3.2 Utilization…") or is one of these standard names
-_NUMBERED_HEADING = re.compile(r"^\d+(\.\d+)*\.?\s+\S")
-_STANDARD_HEADINGS = frozenset(
-    {
-        "abstract",
-        "introduction",
-        "background",
-        "literature review",
-        "materials and methods",
-        "materials and method",
-        "methods",
-        "methodology",
-        "experimental",
-        "experimental procedure",
-        "results",
-        "results and discussion",
-        "discussion",
-        "conclusion",
-        "conclusions",
-        "summary",
-        "references",
-        "bibliography",
-        "acknowledgements",
-        "acknowledgments",
-        "appendix",
-    }
-)
-
 _HEADING = re.compile(r"^#{1,6}\s+(?P<title>\S.*?)\s*$")
 _CAPTION = re.compile(r"^(Fig\.?|Figure|Slika|Abb\.?|Figura)\s*\d+", re.IGNORECASE)
 # A sentence ends with terminal punctuation, optionally followed by a closing bracket or quote
 _ENDS_SENTENCE = re.compile(r"[.!?:;)\]\"'”’%]\s*$")
 _SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9(\[])")
-_TABLE_SEPARATOR = re.compile(r"^\|?[\s|:-]+\|?$")
+
+# A table's description takes at most this share of a chunk, so its rows still fit beside it
+MAX_DESCRIPTION_SHARE = 0.5
 
 # A block is ("text", paragraph) or ("table", index into ParsedPaper.tables)
 _Block = tuple[str, str | int]
@@ -86,17 +67,12 @@ Paragraph = tuple[str, tuple[int, ...]]
 _Piece = tuple[ChunkKind, str, str, tuple[int, ...]]
 
 
-def is_table_line(line: str) -> bool:
-    """Return True for a line of a Markdown table."""
-    return line.lstrip().startswith("|")
-
-
 def _is_repeatable(line: str) -> bool:
     """Return True for a plain short line; headings and table rows are never running lines."""
     stripped = line.strip()
     return (
         bool(stripped)
-        and not is_table_line(line)
+        and not is_table_row(line)
         and _HEADING.match(stripped) is None
         and len(stripped) <= RUNNING_LINE_MAX_CHARS
     )
@@ -129,7 +105,7 @@ def scan_sections(lines: Iterable[str]) -> list[tuple[str, list[_Block]]]:
 
     for line in lines:
         stripped = line.strip()
-        if is_table_line(line):
+        if is_table_row(line):
             if not in_table:
                 flush_paragraph()
                 sections[-1][1].append(("table", table_index))
@@ -192,28 +168,103 @@ def pack_paragraphs(paragraphs: list[Paragraph], max_chars: int) -> list[Paragra
     return passages
 
 
-def split_table(table: str, max_chars: int) -> list[str]:
-    """Return the table whole, or in row groups that each repeat the caption and header."""
-    if len(table) <= max_chars:
-        return [table]
+def _pack_lines(head: list[str], items: list[str], fits: Callable[[str], bool]) -> list[str]:
+    """Group items into pieces that fit, each starting with the head lines.
 
-    lines = table.splitlines()
-    first_row = next((i for i, line in enumerate(lines) if is_table_line(line)), len(lines))
-    caption, rows = lines[:first_row], lines[first_row:]
-    # The header is the first row, plus its separator line when Markdown has one
-    header_size = 2 if len(rows) > 1 and _TABLE_SEPARATOR.match(rows[1]) else 1
-    prefix = caption + rows[:header_size]
+    An item is never split: one too long for the budget gets a piece of its own.
+    """
     pieces: list[str] = []
     group: list[str] = []
-    for row in rows[header_size:]:
-        candidate = "\n".join([*prefix, *group, row])
-        if group and len(candidate) > max_chars:
-            pieces.append("\n".join([*prefix, *group]))
+    for item in items:
+        if group and not fits("\n".join([*head, *group, item])):
+            pieces.append("\n".join([*head, *group]))
             group = []
-        group.append(row)
-    if group:
-        pieces.append("\n".join([*prefix, *group]))
-    return pieces or [table]
+        group.append(item)
+    if group or not pieces:
+        pieces.append("\n".join([*head, *group]))
+    return pieces
+
+
+def table_texts(
+    table: str,
+    description: TableDescription | None,
+    max_chars: int,
+    tokens: TokenBudget | None = None,
+) -> list[str]:
+    """Return a table as chunk texts: its caption, description, header row and compact rows.
+
+    A table longer than max_chars, or than the token budget when one is given, is split into
+    row groups that each repeat the caption, description and header, so every piece says
+    what its numbers are.
+    """
+    lines = compact_markdown_table(table).splitlines()
+    first_row = next((i for i, line in enumerate(lines) if is_table_row(line)), len(lines))
+    caption = [line for line in lines[:first_row] if line.strip()]
+    rows = [line for line in lines[first_row:] if line.strip()]
+    described = _description_lines(
+        description, _table_fits(max_chars, tokens, MAX_DESCRIPTION_SHARE)
+    )
+    fits = _table_fits(max_chars, tokens)
+    if not fits("\n".join([*caption, *rows[:1]])):
+        # Only prose misread as a table has a caption and header this long (real ones take
+        # about a seventh of the budget): one passage cut to the budget, not one copy per row
+        return [_clip("\n".join([*caption, *described, *rows]), fits)]
+    return _pack_lines([*caption, *described, *rows[:1]], rows[1:], fits)
+
+
+def _clip(text: str, fits: Callable[[str], bool]) -> str:
+    """Return the longest start of text that fits, ending with "…" when it was cut."""
+    if fits(text):
+        return text
+    low, high = 0, len(text)
+    while low < high:  # binary search, since each check may count tokens
+        middle = (low + high + 1) // 2
+        if fits(text[:middle].rstrip() + "…"):
+            low = middle
+        else:
+            high = middle - 1
+    return text[:low].rstrip() + "…"
+
+
+def _table_fits(
+    max_chars: int, tokens: TokenBudget | None, share: float = 1.0
+) -> Callable[[str], bool]:
+    """Return a check that text takes at most this share of the character and token budgets."""
+    return lambda text: (
+        len(text) <= max_chars * share and (tokens is None or tokens.fits(text, share))
+    )
+
+
+def _description_lines(
+    description: TableDescription | None, fits: Callable[[str], bool]
+) -> list[str]:
+    """Return a table description as lines, most useful first, that fit together.
+
+    The summary is always kept; a later line that would no longer fit is left out.
+    """
+    if description is None:
+        return []
+    columns = [
+        f"{column.label}: {column.meaning}" + (f" [{column.unit}]" if column.unit else "")
+        for column in description.columns
+        if column.meaning  # a column's label and unit are already in the header row
+    ]
+    candidates = [
+        _labelled("Columns", columns, "; "),
+        _labelled("Terms", [f"{term.term}: {term.meaning}" for term in description.terms], "; "),
+        _labelled("Conditions", description.conditions, "; "),
+        _labelled("Samples", description.samples, ", "),
+        _labelled("Also called", description.synonyms, ", "),
+    ]
+    lines = [description.summary.strip()]
+    for line in filter(None, candidates):
+        if fits("\n".join([*lines, line])):
+            lines.append(line)
+    return [line for line in lines if line]
+
+
+def _labelled(label: str, items: list[str], separator: str) -> str:
+    return f"{label}: {separator.join(items)}" if items else ""
 
 
 # Values are read off the plot image, so the chunk says they are approximate
@@ -258,17 +309,7 @@ def figure_texts(figure: PaperFigure, max_chars: int) -> list[str]:
     if figure.reading is not None:
         header, items = _reading_lines(figure.reading)
         head += [figure.reading.summary.strip(), *header]
-    head = [line for line in head if line]
-    pieces: list[str] = []
-    group: list[str] = []
-    for item in items:
-        if group and len("\n".join([*head, *group, item])) > max_chars:
-            pieces.append("\n".join([*head, *group]))
-            group = []
-        group.append(item)
-    if group or not pieces:
-        pieces.append("\n".join([*head, *group]))
-    return pieces
+    return _pack_lines([line for line in head if line], items, lambda text: len(text) <= max_chars)
 
 
 def _caption_number(caption: str) -> str:
@@ -329,7 +370,7 @@ def _with_section(
 
 _NUMBERED_HEADING_START = re.compile(
     r"^(\d+(?:\.\d+)*\.?)\s+("
-    + "|".join(sorted((re.escape(name) for name in _STANDARD_HEADINGS), key=len, reverse=True))
+    + "|".join(sorted((re.escape(name) for name in STANDARD_HEADINGS), key=len, reverse=True))
     + r")\b(.*)$",
     re.IGNORECASE,
 )
@@ -344,14 +385,6 @@ def _is_front_matter(block: ParsedContentBlock) -> bool:
     )
 
 
-def _is_section_heading(text: str) -> bool:
-    """Return True for a real section heading: numbered, or a standard name such as Results."""
-    cleaned = " ".join(text.split())
-    if _NUMBERED_HEADING.match(cleaned):
-        return True
-    return cleaned.strip(" .:").lower() in _STANDARD_HEADINGS
-
-
 def _clean_text(text: str) -> str:
     """Join the text's words: drop soft hyphens (a word the parser split at a line end) and
     collapse whitespace."""
@@ -363,34 +396,34 @@ def _pages_of(block: ParsedContentBlock) -> tuple[int, ...]:
 
 
 def _pieces_from_blocks(
-    blocks: tuple[ParsedContentBlock, ...],
-    figures: tuple[PaperFigure, ...],
-    max_chars: int,
-    table_max_chars: int,
+    paper: ParsedPaper, max_chars: int, table_max_chars: int, table_tokens: TokenBudget | None
 ) -> list[_Piece]:
     """Chunk a paper from its content blocks, which know their own pages and labels.
 
     Each caption block becomes the chunk of the figure with its number, in reading order.
     Figures whose caption is not in the text flow are added after the rest of the paper.
+    Each table is led by its description, when Gemini has described it.
     """
     pieces: list[_Piece] = []
     section = ""
     paragraphs: list[Paragraph] = []
     seen_texts: set[str] = set()
-    unplaced = list(figures)
+    unplaced = list(paper.figures)
     placed_numbers: set[str] = set()
-    for block in blocks:
+    for index, block in enumerate(paper.content_blocks):
         if block.label in _SKIPPED_LABELS or not block.text.strip():
             continue
-        if block.kind == "table" and _is_toc(block.text):
+        if block.kind == "table" and is_contents_list(block.text):
             continue  # a contents list the parser read as a table
         if block.kind == "text" and (
-            _BOILERPLATE.search(block.text) or _is_toc(block.text) or _is_front_matter(block)
+            _BOILERPLATE.search(block.text)
+            or is_contents_list(block.text)
+            or _is_front_matter(block)
         ):
             continue
         # A header that is not a real section (a title or declaration on the cover page) is
         # body text: attaching it as a section would label the text that follows it wrongly
-        if block.label == "section_header" and _is_section_heading(block.text):
+        if block.label == "section_header" and is_section_heading(block.text):
             pieces += _with_section(
                 section, _text_passages(paragraphs, max_chars, detect_captions=False)
             )
@@ -426,9 +459,10 @@ def _pieces_from_blocks(
             )
             paragraphs = held
             pages = _pages_of(block)
+            description = paper.table_descriptions.get(index)
             pieces += [
                 ("table", section, table, pages)
-                for table in split_table(block.text, table_max_chars)
+                for table in table_texts(block.text, description, table_max_chars, table_tokens)
             ]
         else:
             text = _clean_text(block.text)
@@ -459,7 +493,9 @@ def _pieces_from_blocks(
     return pieces
 
 
-def _pieces_from_markdown(paper: ParsedPaper, max_chars: int, table_max_chars: int) -> list[_Piece]:
+def _pieces_from_markdown(
+    paper: ParsedPaper, max_chars: int, table_max_chars: int, table_tokens: TokenBudget | None
+) -> list[_Piece]:
     """Chunk a paper from its Markdown. Used for papers parsed before content blocks."""
     pieces: list[_Piece] = []
     table_count = 0
@@ -473,7 +509,7 @@ def _pieces_from_markdown(paper: ParsedPaper, max_chars: int, table_max_chars: i
             paragraphs = []
             table_count += 1
             if int(value) < len(paper.tables):
-                tables = split_table(paper.tables[int(value)], table_max_chars)
+                tables = table_texts(paper.tables[int(value)], None, table_max_chars, table_tokens)
                 pieces += [("table", section_title, table, ()) for table in tables]
         pieces += _with_section(section_title, _text_passages(paragraphs, max_chars))
 
@@ -520,9 +556,16 @@ def _carry_unfinished_sentences(pieces: list[_Piece]) -> list[_Piece]:
 
 
 def build_chunks(
-    paper: ParsedPaper, max_chars: int, table_max_chars: int, paper_title: str = ""
+    paper: ParsedPaper,
+    max_chars: int,
+    table_max_chars: int,
+    paper_title: str = "",
+    table_tokens: TokenBudget | None = None,
 ) -> list[Chunk]:
     """Turn one paper into chunks in reading order, each tagged with its section and pages.
+
+    With table_tokens, a table chunk is also kept within that many tokens of the model that
+    reads it (the reranker, which cuts its input off), not only within table_max_chars.
 
     Raises:
         ValueError: If max_chars or table_max_chars is not positive.
@@ -531,11 +574,9 @@ def build_chunks(
         raise ValueError("chunk sizes must be greater than zero")
 
     if paper.content_blocks:
-        pieces = _pieces_from_blocks(
-            paper.content_blocks, paper.figures, max_chars, table_max_chars
-        )
+        pieces = _pieces_from_blocks(paper, max_chars, table_max_chars, table_tokens)
     else:
-        pieces = _pieces_from_markdown(paper, max_chars, table_max_chars)
+        pieces = _pieces_from_markdown(paper, max_chars, table_max_chars, table_tokens)
     pieces = _drop_repeated(_carry_unfinished_sentences(pieces))
     chunks = [
         Chunk(
@@ -582,13 +623,7 @@ FRONT_MATTER_MAX_CHARS = 300
 FRONT_MATTER_MAX_PAGE = 2
 
 
-_TOC_LEADER = re.compile(r"\.{8,}|\bkazalo vsebine\b|\btable of contents\b", re.IGNORECASE)
 _FIGURE_REFERENCE = re.compile(r"\b(?:Fig\.?|Figure|Slika|Abb\.?|Figura)\s*(\d+)", re.IGNORECASE)
-
-
-def _is_toc(text: str) -> bool:
-    """True for a table of contents: dotted leader lines or a contents heading."""
-    return _TOC_LEADER.search(text) is not None
 
 
 def _drop_repeated(pieces: list[_Piece]) -> list[_Piece]:

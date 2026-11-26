@@ -106,3 +106,46 @@ class KeywordEncoder:
 @pytest.fixture
 def keyword_encoder() -> KeywordEncoder:
     return KeywordEncoder()
+
+
+TABLE_MARKDOWN = (
+    "Table 1. Chemical composition of the steel slag (wt.%).\n\n"
+    "| Oxide   |   SS |\n|---------|------|\n| CaO     | 38.9 |\n| SiO2    | 14.2 |"
+)
+
+
+@pytest.fixture
+def manifest_record() -> dict[str, Any]:
+    """A valid parsed.json record of one text block and one table block, with no figures."""
+    return {
+        "openalex_id": "W1",
+        "source_drive_link": "https://drive.google.com/file/d/pdf/view",
+        "source_sha256": "0" * 64,
+        "content_schema_version": 4,
+        "parser_revision": "1" * 64,
+        "parse_generation": "a" * 32,
+        "text_parser": "Docling",
+        "image_parser": "Docling+PyMuPDF",
+        "page_count": 2,
+        "markdown": f"Table 1 lists the oxides.\n\n{TABLE_MARKDOWN}",
+        "tables": [TABLE_MARKDOWN],
+        "content_blocks": [
+            {
+                "kind": "text",
+                "label": "text",
+                "text": "Table 1 lists the oxides measured by XRF.",
+                "placements": [_placement(1)],
+            },
+            {
+                "kind": "table",
+                "label": "table",
+                "text": TABLE_MARKDOWN,
+                "placements": [_placement(2)],
+            },
+        ],
+        "images": [],
+    }
+
+
+def _placement(page_number: int) -> dict[str, Any]:
+    return {"page_number": page_number, "bbox": [10, 10, 100, 100], "coordinate_origin": "TOPLEFT"}

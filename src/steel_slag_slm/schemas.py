@@ -1,6 +1,6 @@
 """Record types shared across modules."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
@@ -93,6 +93,8 @@ class ParsedPaper:
     # Empty for papers parsed before content blocks existed; the Markdown is used then
     content_blocks: tuple[ParsedContentBlock, ...] = ()
     figures: tuple["PaperFigure", ...] = ()  # in the order parsed.json lists them
+    # Gemini's description of each described table, keyed by its position in content_blocks
+    table_descriptions: dict[int, "TableDescription"] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -294,6 +296,52 @@ class FigureReading(BaseModel):
     phases: list[str] = Field(default_factory=list)  # phases labelled on an XRD pattern
     steps: list[ProcessStep] = Field(default_factory=list)
     flows: list[ProcessFlow] = Field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
+class TableToDescribe:
+    """One table block of a parsed paper, with the paper's text that explains it."""
+
+    paper_id: str
+    block_index: int  # position in the manifest's content_blocks
+    label: str | None  # "Table 3" from its caption; None when the table has no caption
+    table: str  # compact Markdown, caption included
+    context: str  # the paper's paragraphs that cite, introduce or define the table; "" if none
+    table_sha256: str  # of the block's original text, stored with the description
+    paper_title: str = ""  # "" when the registry has no title for the paper
+    section: str = ""  # heading of the section the table sits in; "" before the first one
+    # Caption and header of the table this uncaptioned one continues onto a new page; "" if none
+    previous_table: str = ""
+
+
+class DescribedColumn(BaseModel):
+    """One column header of a table, copied as printed, with what it measures."""
+
+    label: str  # e.g. "ψ" or "UCS (MPa) - 28 d"
+    meaning: str | None = None  # in plain words; None when the paper does not say
+    unit: str | None = None
+
+
+class TableTerm(BaseModel):
+    """A symbol, abbreviation or sample code of a table, defined as the paper defines it."""
+
+    term: str
+    meaning: str
+
+
+class TableDescription(BaseModel):
+    """Gemini's description of one table, in the words a question about it would use.
+
+    Only the paper's own wording is kept; the table's values stay in the table itself.
+    """
+
+    summary: str
+    columns: list[DescribedColumn] = Field(default_factory=list)
+    samples: list[str] = Field(default_factory=list)  # materials or mixes the rows cover
+    conditions: list[str] = Field(default_factory=list)  # ages, curing, test methods
+    terms: list[TableTerm] = Field(default_factory=list)
+    # Other common names of the measured properties, e.g. "compressive strength" for UCS
+    synonyms: list[str] = Field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)

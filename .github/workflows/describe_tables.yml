@@ -1,0 +1,225 @@
+name: Describe parsed tables
+
+# Started by hand: Gemini describes the tables of papers that are already parsed and stores
+# each description in that paper's parsed.json. No PDF is parsed again. Each run then checks
+# every paper; while tables are left, it starts the next run itself (at most runs_left more),
+# so one click describes the whole folder.
+on:
+  workflow_dispatch:
+    inputs:
+      paper_ids:
+        description: "OpenAlex IDs, space-separated (e.g. W123 W456); blank means every parsed paper"
+        required: false
+        default: ""
+        type: string
+      max_papers:
+        description: "Check at most this many papers, in ID order; blank means all"
+        required: false
+        default: ""
+        type: string
+      max_gemini_usd:
+        description: "Stop calling Gemini in this run at this estimated cost (US$)"
+        required: false
+        default: "100"
+        type: string
+      parsed_folder:
+        description: "Parsed Drive folder; blank means the configured one (_parsed_approved)"
+        required: false
+        default: ""
+        type: string
+      check_only:
+        description: "Only check that every table has a description (no Gemini, no writes)"
+        required: false
+        default: false
+        type: boolean
+      billed_to:
+        description: "Member whose Google Cloud project pays for Gemini (never the team's)"
+        required: false
+        default: KANE
+        type: choice
+        options: [YASSINE, DIVYA, LAKSHYA, ANISHA, KANE]
+      runs_left:
+        description: "If tables are left, start up to this many more runs automatically (0: just this one)"
+        required: false
+        default: "5"
+        type: string
+
+permissions:
+  contents: read
+  actions: write  # to start the next run while tables are left
+
+# The parsing workflow's group: both rewrite parsed.json, so they must never run at once
+concurrency:
+  group: parse-trial-pdfs
+  cancel-in-progress: false
+
+env:
+  DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+  GOOGLE_OAUTH_TOKEN_JSON: ${{ secrets.GOOGLE_OAUTH_TOKEN_JSON }}
+  GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+  # Gemini is billed to one member's own project, never the team's (this job needs no
+  # BigQuery). Each member reads GOOGLE_CLOUD_PROJECT_<NAME> and GCP_SERVICE_ACCOUNT_JSON_<NAME>
+  BILLED_TO: ${{ inputs.billed_to }}
+  GOOGLE_CLOUD_PROJECT: ${{ secrets[format('GOOGLE_CLOUD_PROJECT_{0}', inputs.billed_to)] }}
+  GOOGLE_CLOUD_LOCATION: global
+  GCP_SERVICE_ACCOUNT_JSON: ${{ secrets[format('GCP_SERVICE_ACCOUNT_JSON_{0}', inputs.billed_to)] }}
+  TEAM_GCP_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+  PAPER_IDS: ${{ inputs.paper_ids }}
+  MAX_PAPERS: ${{ inputs.max_papers }}
+  MAX_GEMINI_USD: ${{ inputs.max_gemini_usd }}
+  PARSED_FOLDER: ${{ inputs.parsed_folder }}
+  CHECK_ONLY: ${{ inputs.check_only }}
+  RUNS_LEFT: ${{ inputs.runs_left }}
+
+jobs:
+  describe:
+    runs-on: ubuntu-latest
+    # GitHub stops a job at 6 hours: describing stops at 320 minutes, leaving time to check
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Check required secrets
+        run: |
+          if [ -z "$DRIVE_FOLDER_ID" ]; then
+            echo "DRIVE_FOLDER_ID secret is required."
+            exit 1
+          fi
+          if [ -z "$GOOGLE_OAUTH_TOKEN_JSON" ] && [ -z "$GOOGLE_SERVICE_ACCOUNT_JSON" ]; then
+            echo "Configure GOOGLE_OAUTH_TOKEN_JSON or GOOGLE_SERVICE_ACCOUNT_JSON for Drive."
+            exit 1
+          fi
+          if [ -z "$GOOGLE_CLOUD_PROJECT" ] || [ -z "$GCP_SERVICE_ACCOUNT_JSON" ]; then
+            echo "Set the GOOGLE_CLOUD_PROJECT_${BILLED_TO} and GCP_SERVICE_ACCOUNT_JSON_${BILLED_TO}"
+            echo "secrets (docs/table_description_setup.md)."
+            exit 1
+          fi
+
+      - name: Check who pays for Gemini
+        run: |
+          # Never fall back to the team's project: stop instead
+          if [ "$GOOGLE_CLOUD_PROJECT" = "$TEAM_GCP_PROJECT" ]; then
+            echo "::error::GOOGLE_CLOUD_PROJECT_${BILLED_TO} is the team's project; use your own."
+            exit 1
+          fi
+          # The key must come from that same project, so a key pasted from elsewhere is caught
+          key_project=$(jq -r '.project_id // empty' <<< "$GCP_SERVICE_ACCOUNT_JSON" 2>/dev/null || true)
+          if [ "$key_project" != "$GOOGLE_CLOUD_PROJECT" ]; then
+            echo "::error::GCP_SERVICE_ACCOUNT_JSON_${BILLED_TO} is not a key of that project."
+            exit 1
+          fi
+          message="Gemini is billed to ${BILLED_TO}'s Google Cloud project, not the team's"
+          echo "$message"
+          echo "$message" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Read the inputs
+        shell: bash
+        run: |
+          # The papers to work on, one argument per line, shared by the describe and check steps
+          scope=()
+          if [[ -n "$PAPER_IDS" ]]; then
+            read -r -a ids <<< "$PAPER_IDS"
+            for id in "${ids[@]}"; do
+              if [[ ! "$id" =~ ^W[0-9]+$ ]]; then
+                echo "::error::Not an OpenAlex ID: '$id'"
+                exit 1
+              fi
+            done
+            scope+=(--paper-ids "${ids[@]}")
+          fi
+          if [[ -n "$MAX_PAPERS" ]]; then
+            scope+=(--max-papers "$MAX_PAPERS")
+          fi
+          if [[ -n "$PARSED_FOLDER" ]]; then
+            scope+=(--parsed-folder "$PARSED_FOLDER")
+          fi
+          if [[ ! "$RUNS_LEFT" =~ ^[0-9]+$ ]]; then
+            echo "::error::runs_left must be a whole number, not '$RUNS_LEFT'"
+            exit 1
+          fi
+          # An empty list must leave the file empty: printf would still write one blank line
+          : > "$RUNNER_TEMP/scope_args"
+          if [ ${#scope[@]} -gt 0 ]; then
+            printf '%s\n' "${scope[@]}" > "$RUNNER_TEMP/scope_args"
+          fi
+
+      - name: Write Google credentials
+        run: .github/scripts/write_google_credentials.sh
+
+      - name: Install project dependencies
+        run: uv sync --locked --no-dev
+
+      - name: Describe tables
+        if: ${{ !inputs.check_only }}
+        shell: bash
+        run: |
+          mapfile -t scope < "$RUNNER_TEMP/scope_args"
+          args=(--max-minutes 320)
+          if [[ -n "$MAX_GEMINI_USD" ]]; then
+            args+=(--max-gemini-usd "$MAX_GEMINI_USD")
+          fi
+          # A failed paper doesn't stop the job: the check below decides what happens next
+          set +e
+          uv run --locked --no-sync describe-tables "${args[@]}" "${scope[@]}" 2>&1 | tee describe.log
+          echo "describe-tables exited with ${PIPESTATUS[0]}"
+          exit 0
+
+      - name: Check every table
+        id: check
+        shell: bash
+        run: |
+          mapfile -t scope < "$RUNNER_TEMP/scope_args"
+          set +e
+          uv run --locked --no-sync describe-tables --check "${scope[@]}" 2>&1 | tee check.log
+          if [ "${PIPESTATUS[0]}" = 0 ]; then complete=true; else complete=false; fi
+          echo "complete=$complete" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Summarize the run
+        if: always()
+        shell: bash
+        run: |
+          {
+            for log in describe.log check.log; do
+              [ -f "$log" ] || continue
+              echo '```'
+              sed -n '/^Table descriptions (Drive folder/,$p' "$log"
+              echo '```'
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Finish, or start the next run
+        shell: bash
+        env:
+          COMPLETE: ${{ steps.check.outputs.complete }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          note() { echo "$1"; echo "$1" >> "$GITHUB_STEP_SUMMARY"; }
+          if [ "$COMPLETE" = true ]; then
+            note "Every table of the papers checked has a description."
+            exit 0
+          fi
+          if [ "$CHECK_ONLY" = true ]; then
+            echo "::error::Some tables still have no description (see the check above)."
+            exit 1
+          fi
+          described=$(awk '/described in this run/ { print $1; exit }' describe.log 2>/dev/null || true)
+          # No table described and no early stop: the tables left fail every time, so stop here
+          if [ "${described:-0}" = 0 ] && ! grep -q '^Stopped early' describe.log 2>/dev/null; then
+            { grep 'Could not describe' describe.log 2>/dev/null || true; } \
+              | sed 's/.*Could not describe //' | head -50
+            echo "::error::This run described no table; see the lines above, or the describe step's log."
+            exit 1
+          fi
+          if [ "$RUNS_LEFT" -le 0 ]; then
+            echo "::error::Tables are left and no automatic runs remain; start the workflow again."
+            exit 1
+          fi
+          gh workflow run describe_tables.yml --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME" \
+            -f "paper_ids=$PAPER_IDS" -f "max_papers=$MAX_PAPERS" -f "max_gemini_usd=$MAX_GEMINI_USD" \
+            -f "parsed_folder=$PARSED_FOLDER" -f "billed_to=$BILLED_TO" -f "runs_left=$((RUNS_LEFT - 1))"
+          note "Tables are left: started the next run ($((RUNS_LEFT - 1)) more allowed after it)."

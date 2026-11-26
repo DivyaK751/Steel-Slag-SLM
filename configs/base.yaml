@@ -405,8 +405,12 @@ embedding:
   query_prefix: "Represent this sentence for searching relevant passages: "
   # Text chunks are packed from paragraphs up to this many characters
   chunk_max_chars: 800
-  # A table longer than this is split into row groups, each repeating the header
+  # A table longer than this is split into row groups, each repeating caption, description
+  # and header
   table_max_chars: 1500
+  # ... and no more than this many reranker tokens: of the 512 it reads, 64 are left for the
+  # question and 64 for the paper title, section and special tokens, so no row is cut off
+  table_max_tokens: 384
   # The index is saved to Drive after this many papers, so a failed run loses little work;
   # every save uploads the whole index, so a full rebuild should not save too often
   papers_per_save: 200
@@ -450,6 +454,26 @@ figure_reading:
   max_run_usd: 60
   # Vertex AI price of llm.model per million tokens, for the run's cost report. Gemini Flash
   # is on an introductory $0.75 / $3.75 until 2026-12-31, then $1.50 / $7.50; re-check it
+  prices:
+    input_usd_per_million: 0.75
+    output_usd_per_million: 3.75
+
+table_description:
+  prompt_name: describe_table
+  model: null  # null = use llm.model
+  # Describing a table is reading, not reasoning; low thinking keeps each call cheap
+  thinking_level: low
+  # Gemini calls in flight at once; raise slowly, Vertex quotas are per minute. 8, as for
+  # screening: a pilot call took about 20 s, so 4 would need several runs for the corpus
+  max_concurrency: 8
+  # A call taking longer is skipped and reported; the next run retries that table
+  call_timeout_s: 120
+  # describe-tables stops calling Gemini once a run's estimated cost reaches this (US$); a
+  # rerun picks up the tables still undescribed. Override with --max-gemini-usd
+  max_run_usd: 20
+  # The paper's own paragraphs sent with each table (notes, citing and defining sentences)
+  context_max_chars: 4000
+  # Vertex AI price of llm.model per million tokens, as for figure_reading; re-check it
   prices:
     input_usd_per_million: 0.75
     output_usd_per_million: 3.75

@@ -334,6 +334,44 @@ uv run evaluate-retrieval --eval-set configs/retrieval_eval_heldout.yaml \
 - Settings are in the `embedding:` section of `configs/base.yaml`. Design notes are in
   [docs/adr/003-semantic-search-index.md](docs/adr/003-semantic-search-index.md).
 
+### Table descriptions
+
+A table passage starts with its caption and Gemini's description of the table (what it
+measures, column meanings and units, samples, conditions and the codes the paper defines),
+then its rows. `describe-tables` writes those descriptions into each paper's `parsed.json`,
+reading only that file: no PDF is downloaded or parsed again.
+
+```bash
+uv run describe-tables --paper-ids W2618057564     # try one paper first
+uv run describe-tables --max-gemini-usd 20         # every parsed paper; rerun to continue
+uv run describe-tables --check                     # every table described? (no Gemini, no writes)
+uv run build-index --rebuild                       # then rebuild the index to use them
+```
+
+- On GitHub, run **Actions → Describe parsed tables** with no inputs filled to describe every
+  parsed paper (fill `paper_ids` to try a few first). Each run describes for up to 320 minutes
+  or `max_gemini_usd`, then checks every paper; while tables are left it starts the next run
+  itself, up to `runs_left` more, and stops early if a run describes nothing. The last run
+  passes only when every table is described. `check_only` just checks. It never runs while
+  the parsing workflow does, since both rewrite `parsed.json`.
+- The workflow bills Gemini to the Google Cloud project of the member picked in `billed_to`,
+  never the team's: it reads that member's `GOOGLE_CLOUD_PROJECT_<NAME>` and
+  `GCP_SERVICE_ACCOUNT_JSON_<NAME>` secrets and stops if either is missing, if the project is
+  the team's or if the key is from another project. Setup:
+  [docs/table_description_setup.md](docs/table_description_setup.md).
+- Gemini reads the table, the paper's title and section, the caption and header of the table
+  an uncaptioned one continues, and the paper's paragraphs that explain it (notes, the
+  paragraph before it, sentences citing it, definitions of its codes).
+- Only tables without a description from the current prompt version are sent. Bump
+  `version` in `prompts/describe_table.yaml` to describe every table again.
+- No table is ever left out, and no unchecked Gemini text is ever stored. An answer that is
+  malformed, too slow, or states a number none of its inputs print is asked again once. If
+  no answer passes, it is dropped: the description holds only the table's caption and
+  headers and is marked `"source": "paper"` (no `source` key means Gemini), and its passages
+  stay the paper's caption and rows. Only Gemini being unreachable leaves a table for the
+  next run. Settings are in `table_description:` in `configs/base.yaml`; design notes in
+  [docs/adr/004-table-descriptions.md](docs/adr/004-table-descriptions.md).
+
 ## Asking a question
 
 A small open model reads each message into a form (what it asks for, which table columns, which
@@ -342,7 +380,7 @@ lookup tool and paper search as needed, and package their results as cited evide
 answer model.
 
 ```bash
-ollama pull qwen2.5:3b          # once; the reader model, served by Ollama on localhost:11434
+ollama pull qwen2.5:7b          # once; the reader model, served by Ollama on localhost:11434
 uv run ask "What 28-day strength do concretes with 20% BOF slag reach?"
 uv run ask "How reactive is my slag?" --profile my_slag.json
 ```

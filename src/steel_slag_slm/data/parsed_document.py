@@ -1,4 +1,4 @@
-"""Read a paper's text, tables, content blocks and figures from its parsed.json."""
+"""Read a paper's text, tables, content blocks, figures and table descriptions from parsed.json."""
 
 import json
 import logging
@@ -6,12 +6,14 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from steel_slag_slm.data.parsed_manifest import StoredTableDescription, table_text_sha256
 from steel_slag_slm.schemas import (
     ContentPlacement,
     FigureReading,
     PaperFigure,
     ParsedContentBlock,
     ParsedPaper,
+    TableDescription,
 )
 
 logger = logging.getLogger(__name__)
@@ -41,13 +43,50 @@ def parse_parsed_json(content: bytes) -> ParsedPaper:
     if not isinstance(tables, list) or not all(isinstance(table, str) for table in tables):
         raise ValueError("parsed.json needs tables to be a list of strings")
 
+    content_blocks = _parse_content_blocks(record.get("content_blocks", []))
     return ParsedPaper(
         openalex_id=paper_id,
         markdown=markdown,
         tables=tuple(tables),
-        content_blocks=_parse_content_blocks(record.get("content_blocks", [])),
+        content_blocks=content_blocks,
         figures=_parse_figures(paper_id, record.get("images", [])),
+        table_descriptions=_parse_table_descriptions(
+            paper_id, record.get("table_descriptions", []), content_blocks
+        ),
     )
+
+
+def _parse_table_descriptions(
+    paper_id: str, raw_descriptions: Any, blocks: tuple[ParsedContentBlock, ...]
+) -> dict[int, TableDescription]:
+    """Map each table block's position to its description, if it still matches the table.
+
+    A malformed description, or one whose table text has changed, is skipped: a bad
+    description should not cost the paper its text, and its table is still indexed.
+    """
+    if not isinstance(raw_descriptions, list):
+        raise ValueError("parsed.json needs table_descriptions to be a list")
+    descriptions: dict[int, TableDescription] = {}
+    for raw in raw_descriptions:
+        try:
+            stored = StoredTableDescription.model_validate(raw)
+        except ValidationError:
+            logger.warning("%s: ignoring an unreadable table description", paper_id)
+            continue
+        index = stored.block_index
+        if (
+            index >= len(blocks)
+            or blocks[index].kind != "table"
+            or table_text_sha256(blocks[index].text) != stored.table_sha256
+        ):
+            logger.warning(
+                "%s: ignoring a description of a changed table (block %d)", paper_id, index
+            )
+            continue
+        if stored.source == "paper":
+            continue  # only the paper's caption and headers, which the chunk already holds
+        descriptions[index] = stored.description
+    return descriptions
 
 
 def _parse_figures(paper_id: str, raw_figures: Any) -> tuple[PaperFigure, ...]:

@@ -11,6 +11,7 @@ from steel_slag_slm.data import drive_storage, embedding_store, parsed_index
 from steel_slag_slm.data.parsed_document import parse_parsed_json
 from steel_slag_slm.rag.chunking import build_chunks, passage_for_embedding
 from steel_slag_slm.rag.embeddings import TextEncoder
+from steel_slag_slm.rag.token_budget import TokenBudget
 from steel_slag_slm.rag.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,7 @@ def run_build_index(
     rebuild: bool = False,
     titles: Mapping[str, str] | None = None,
     store_folder_id: str | None = None,
+    table_tokens: TokenBudget | None = None,
 ) -> Counter[str]:
     """Index each parsed paper that is not in the saved store yet, or was parsed again since.
 
@@ -35,6 +37,7 @@ def run_build_index(
     re-embed every paper from scratch. A paper whose parsed.json is unreadable is left out and
     retried on the next run. Each chunk carries its paper's title from titles, when given.
     The store is kept under store_folder_id, or under the parsed folder when it is None.
+    Table chunks are kept within table_tokens of the reranker, when given.
     """
     titles = titles or {}
     store_folder = store_folder_id or parsed_folder_id
@@ -97,6 +100,7 @@ def run_build_index(
                 settings.chunk_max_chars,
                 settings.table_max_chars,
                 titles.get(paper_id, ""),
+                table_tokens,
             )
         ]
         if not chunks:

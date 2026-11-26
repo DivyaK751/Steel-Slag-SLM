@@ -91,6 +91,7 @@ class EmbeddingSettings(BaseModel):
     query_prefix: str
     chunk_max_chars: int
     table_max_chars: int
+    table_max_tokens: int = Field(gt=0)  # reranker tokens a table chunk's text may hold
     papers_per_save: int
     top_k: int
     # Folder in the shared Drive folder that holds one search index per parsed folder, so
@@ -206,6 +207,19 @@ class FigureReadingSettings(AgentSettings):
     call_timeout_s: float
     prices: ModelPrices
     # parse-pdfs stops calling Gemini once a run's estimated cost reaches this; None = no cap
+    max_run_usd: float | None = None
+
+
+class TableDescriptionSettings(AgentSettings):
+    """How the table-describing agent explains parsed tables and what its tokens cost."""
+
+    prompt_name: str
+    max_concurrency: int
+    call_timeout_s: float
+    prices: ModelPrices
+    # Characters of the paper's own text sent with each table to explain its codes and symbols
+    context_max_chars: int = Field(gt=0)
+    # describe-tables stops calling Gemini once a run's estimated cost reaches this; None = no cap
     max_run_usd: float | None = None
 
 
@@ -572,6 +586,14 @@ def load_figure_reading_settings(
     raw_config = _read_base_config(config_path)
     section = _agent_section(raw_config, "figure_reading")
     return FigureReadingSettings(**section)
+
+
+def load_table_description_settings(
+    config_path: Path = BASE_CONFIG_PATH,
+) -> TableDescriptionSettings:
+    """Build the table-describing agent's settings; needs no OpenAlex, Drive or BigQuery secrets."""
+    raw_config = _read_base_config(config_path)
+    return TableDescriptionSettings(**_agent_section(raw_config, "table_description"))
 
 
 def load_embedding_settings(config_path: Path = BASE_CONFIG_PATH) -> EmbeddingSettings:
