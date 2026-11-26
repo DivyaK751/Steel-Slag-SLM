@@ -319,11 +319,8 @@ similar_slags:
   min_shared_oxides: 3
 
 question_routing:
-  # Small open model that reads each question into a form (served locally, e.g. by Ollama);
-  # its output is forced to the form's JSON schema, so it can only name real columns
-  reader_model: qwen2.5:7b
-  reader_url: http://localhost:11434
-  reader_timeout_s: 60
+  # The reader (llm_gateway.reader_model) reads each question into a form; its output is
+  # forced to the form's JSON schema, so it can only name real columns
   prompt_name: read_question
   # Worked examples (prompts/<name>.yaml); the examples_k most like each message are shown
   examples_name: read_question_examples

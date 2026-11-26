@@ -447,13 +447,12 @@ uv run build-index --rebuild                       # then rebuild the index to u
 
 ## Asking a question
 
-A small open model reads each message into a form (what it asks for, which table columns, which
-filters, whether it is about the user's slag); fixed rules then run the similar-slags tool, the
-lookup tool and paper search as needed, and package their results as cited evidence for the
-answer model.
+A model behind the LiteLLM gateway (`llm_gateway.reader_model`) reads each message into a form
+(what it asks for, which table columns, which filters, whether it is about the user's slag);
+fixed rules then run the similar-slags tool, the lookup tool and paper search as needed, and
+package their results as cited evidence for the answer model.
 
 ```bash
-ollama pull qwen2.5:7b          # once; the reader model, served by Ollama on localhost:11434
 uv run ask "What 28-day strength do concretes with 20% BOF slag reach?"
 uv run ask "How reactive is my slag?" --profile my_slag.json
 ```

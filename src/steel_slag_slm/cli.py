@@ -89,7 +89,6 @@ from steel_slag_slm.evaluation.figure_checks import total_checks
 from steel_slag_slm.evaluation.value_metrics import count_values
 from steel_slag_slm.exceptions import PapersNotFoundError, PromotionError
 from steel_slag_slm.llm.gateway import GatewayClient
-from steel_slag_slm.llm.local_model import OllamaJsonModel
 from steel_slag_slm.llm.prompts import PromptTemplate, load_prompt
 from steel_slag_slm.pipelines.background_figure_reader import BackgroundFigureReader
 from steel_slag_slm.pipelines.build_index import run_build_index
@@ -1206,6 +1205,7 @@ def ask() -> None:
     _setup_logging()
     routing = load_question_routing_settings()
     embedding = load_embedding_settings()
+    gateway = load_llm_gateway_settings()
     profile = (
         SlagProfile.model_validate_json(args.profile.read_text(encoding="utf-8"))
         if args.profile
@@ -1239,7 +1239,7 @@ def ask() -> None:
     )
     prepared = prepare_evidence(
         args.question,
-        OllamaJsonModel(routing.reader_url, routing.reader_model, routing.reader_timeout_s),
+        GatewayClient(gateway, gateway.reader_model),
         load_prompt(routing.prompt_name),
         load_form_columns(client, catalogue_settings.dataset, routing.max_listed_values),
         tools,

@@ -60,9 +60,8 @@ contract before either is written.
 
 ## Consequences
 
-- Comparing models is a config change, and the routing reader moves from the local Ollama model
-  to the gateway with no other change, as long as `complete_json` keeps the reader's
-  `JsonModel` signature.
+- Comparing models is a config change. The routing reader uses the gateway too, through the
+  `JsonModel` protocol (`complete_json`) that `GatewayClient` implements.
 - Sessions are lost when the server restarts, and the backend must run as one process. This is
   enough for a demo, but not for many users.
 - Until routing merges, `answer_message` is a stub that yields fixed events in the contract's

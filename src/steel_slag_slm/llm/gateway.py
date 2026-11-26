@@ -7,7 +7,7 @@ bound to one model, so it can stand in wherever a JsonModel (complete_json) is e
 import json
 import re
 from collections.abc import Iterator
-from typing import Any
+from typing import Any, Protocol
 
 from openai import OpenAI, omit
 from openai.types.chat import ChatCompletionMessageParam
@@ -18,6 +18,12 @@ from steel_slag_slm.config import LlmGatewaySettings
 # A reasoning block some models put before their answer, and a ```json fence around it
 _THINK_BLOCK = re.compile(r"^\s*<think>.*?</think>", re.DOTALL)
 _CODE_FENCE = re.compile(r"^\s*```(?:json)?\s*(.*?)\s*```\s*$", re.DOTALL)
+
+
+class JsonModel(Protocol):
+    """Anything that answers a prompt with a JSON object matching a schema."""
+
+    def complete_json(self, system: str, user: str, schema: dict[str, Any]) -> dict[str, Any]: ...
 
 
 def _strip_reply(text: str) -> str:

@@ -12,8 +12,8 @@ data it came from.
 
 ## Decision
 
-- **A small open model reads; code decides.** The reader model (qwen2.5:7b, served locally by
-  Ollama) only fills a `QuestionForm`: message type, whether the answer is values only, the
+- **A model reads; code decides.** The reader model (`llm_gateway.reader_model`, reached through
+  the LiteLLM gateway of ADR 005) only fills a `QuestionForm`: message type, whether the answer is values only, the
   extraction-table columns asked for, filters on columns, oxides stated in the message, whether
   it is about the user's slag, missing details and a stand-alone search query. Fixed rules in
   `agents/router.py` turn the form into tool calls, so the same form always gives the same calls.
@@ -60,7 +60,7 @@ data it came from.
 ## Consequences
 
 - `uv run ask "question" --profile slag.json` runs the whole path and prints the form, the tools
-  and the evidence. It needs Ollama with the reader model, BigQuery and the Drive search index.
+  and the evidence. It needs the LiteLLM gateway, BigQuery and the Drive search index.
 - Lookup without a slag profile only reaches slags that are in the catalogue (slags with
   chemistry); values from papers that report no slag chemistry are found through paper search.
 - The reader is not fine-tuned. Its accuracy on message types, columns and filters still has to be

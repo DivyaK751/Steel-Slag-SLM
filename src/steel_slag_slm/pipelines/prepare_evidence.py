@@ -33,7 +33,7 @@ from steel_slag_slm.config import (
 )
 from steel_slag_slm.data.column_values import read_seen_values
 from steel_slag_slm.data.slag_catalogue import SlagCatalogueEntry, read_catalogue
-from steel_slag_slm.llm.local_model import JsonModel
+from steel_slag_slm.llm.gateway import JsonModel
 from steel_slag_slm.llm.prompts import PromptTemplate
 from steel_slag_slm.rag.search import SearchHit
 from steel_slag_slm.rag.similar_slags import SimilarSlags, SlagProfile, find_similar_slags

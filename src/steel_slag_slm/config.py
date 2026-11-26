@@ -290,9 +290,6 @@ class SimilarSlagSettings(BaseModel):
 class QuestionRoutingSettings(BaseModel):
     """How a user's question is read into a form and turned into tool calls and evidence."""
 
-    reader_model: str  # small open model that fills the form, as named by the model server
-    reader_url: str  # local model server (Ollama) base URL
-    reader_timeout_s: float
     prompt_name: str
     examples_name: str  # worked question-to-form examples, prompts/<name>.yaml
     examples_k: int = Field(gt=0)  # examples shown with each message, the most similar first
