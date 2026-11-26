@@ -481,6 +481,12 @@ llm_gateway:
     # LiteLLM wrongly rejects temperature for these two; this lets it through to Gemini
     gemini-3.5-flash-lite: {allowed_openai_params: [temperature]}
     gemini-3.8-flash: {allowed_openai_params: [temperature]}
-    gemini-4-neon: {}
     # Served by vLLM; without this Qwen3 reasons in a <think> block before every answer
     qwen3-8b: {chat_template_kwargs: {enable_thinking: false}}
+
+# The answer model: writes the chat answer from the evidence (model: llm_gateway.answer_model)
+answer:
+  prompt_name: answer_question
+  temperature: 0.2  # low, so answers stay close to the evidence
+  # No cap: Gemini counts its thinking here, and a 2000 cap cut answers off mid-sentence
+  max_tokens: null
