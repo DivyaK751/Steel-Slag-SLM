@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.app import SERVER_ERROR_MESSAGE, create_app
+from steel_slag_slm.data.slag_catalogue import OXIDE_LABELS
 from steel_slag_slm.pipelines.answer_message import ChatSession
 from steel_slag_slm.schemas import ChatEvent
 
@@ -62,6 +63,14 @@ def test_chat_uses_the_profile_saved_for_the_session(client: TestClient) -> None
 
     assert response.status_code == 204
     assert "your EAF slag" in "".join(event.text for event in events if event.type == "token")
+
+
+def test_profile_options_list_every_slag_type_and_oxide(client: TestClient) -> None:
+    options = client.get("/profile/options").json()
+
+    assert "EAF" in options["slag_types"]
+    assert {"column": "cao_pct", "label": "CaO"} in options["oxides"]
+    assert len(options["oxides"]) == len(OXIDE_LABELS)
 
 
 def test_profile_with_an_unknown_oxide_is_rejected(client: TestClient) -> None:

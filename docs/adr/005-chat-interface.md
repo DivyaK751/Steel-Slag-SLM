@@ -47,6 +47,7 @@ contract before either is written.
   | Route | Body | Response |
   |---|---|---|
   | `GET /health` | – | `{"status": "ok"}` |
+  | `GET /profile/options` | – | `{"slag_types": [...], "oxides": [{"column", "label"}]}` for the profile form |
   | `PUT /session/{session_id}/profile` | a `SlagProfile` | `204`; `422` if it is invalid |
   | `POST /chat` | `{"session_id": ..., "message": ...}` | the event stream above |
 
