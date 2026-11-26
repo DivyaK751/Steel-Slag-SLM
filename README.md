@@ -8,6 +8,24 @@ cp .env.example .env   # then fill in your own values
 uv run pytest
 ```
 
+## Repository layout
+
+| Folder | Holds |
+|---|---|
+| `src/steel_slag_slm/` | The Python package: `data/`, `llm/`, `rag/`, `agents/`, `evaluation/`, `pipelines/` and the CLI |
+| `configs/` | Settings (`base.yaml`): model names, paths, parameters |
+| `prompts/` | One prompt template per file |
+| `tests/` | `unit/` mirrors the package; `integration/` calls real services |
+| `docs/` | Setup guides, experiments, and decision records in `docs/adr/` |
+| `scripts/` | Small developer utilities |
+| `notebooks/`, `reports/` | Exploration and weekly report assets |
+| `backend/` | Chat API (FastAPI): routes, sessions and streaming only; added with the chat app |
+| `frontend/` | Chat UI (React + Vite + TypeScript, its own `package.json`); added with the chat app |
+
+The chat logic itself lives in `src/steel_slag_slm/pipelines/answer_message.py`, so the CLI,
+tests and API share it. See [ADR 005](docs/adr/005-chat-interface.md) for the stack and the
+streamed event contract.
+
 ## Paper fetcher
 
 A background job (GitHub Actions, every night) that searches [OpenAlex](https://openalex.org)
