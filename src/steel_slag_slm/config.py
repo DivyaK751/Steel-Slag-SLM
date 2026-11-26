@@ -148,6 +148,9 @@ class GcpSettings(BaseModel):
     location: str
     # Unattended runs only; locally BigQuery uses `gcloud auth application-default login`
     credentials_file: Path | None = None
+    # Project holding the team's tables when queries run (and bill) in another project;
+    # None: the tables are in `project`
+    data_project: str | None = None
 
 
 class ModelPrices(BaseModel):
@@ -463,6 +466,11 @@ def _papers_table(raw_config: dict[str, Any]) -> str:
     )
 
 
+def load_papers_table(config_path: Path = BASE_CONFIG_PATH) -> str:
+    """The fully qualified papers table (registry), where paper titles, authors and DOIs live."""
+    return _papers_table(_read_base_config(config_path))
+
+
 def load_settings(config_path: Path = BASE_CONFIG_PATH) -> Settings:
     """Build settings from the YAML config plus secrets from the environment or .env."""
     raw_config = _read_base_config(config_path)
@@ -491,6 +499,7 @@ def load_gcp_settings() -> GcpSettings:
         project=_require_env("GOOGLE_CLOUD_PROJECT"),
         location=_require_env("GOOGLE_CLOUD_LOCATION"),
         credentials_file=_optional_path_env("GCP_CREDENTIALS_FILE"),
+        data_project=os.environ.get("BIGQUERY_DATA_PROJECT", "").strip() or None,
     )
 
 

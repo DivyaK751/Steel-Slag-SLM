@@ -150,7 +150,7 @@ def _fake_describe_tables_clients(monkeypatch, calls: dict[str, object]) -> None
         "load_pdf_parsing_settings",
         lambda: MagicMock(output_folder_name="_parsed_approved", index_file_name="index.json"),
     )
-    monkeypatch.setattr(cli, "_connect_to_parsed_folder", lambda name: ("drive", f"id-{name}"))
+    monkeypatch.setattr(cli, "connect_to_parsed_folder", lambda name: ("drive", f"id-{name}"))
     monkeypatch.setattr(
         cli, "load_drive_connection_settings", lambda: MagicMock(folder_id="source-folder")
     )

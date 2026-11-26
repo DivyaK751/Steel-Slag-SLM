@@ -16,16 +16,16 @@ from google.adk.runners import Runner
 from google.cloud import bigquery
 
 from steel_slag_slm.agents.abstract_extractor import build_extractor_agent
-from steel_slag_slm.agents.answer_writer import unknown_citations, write_answer
+from steel_slag_slm.agents.answer_writer import TextModel, unknown_citations, write_answer
 from steel_slag_slm.agents.data_extractor import build_data_extractor_agent
 from steel_slag_slm.agents.extraction_judge import build_adjudicator_agent, build_judge_agent
 from steel_slag_slm.agents.figure_reader import build_figure_reader_agent
-from steel_slag_slm.agents.form_examples import ExamplePicker, load_examples
 from steel_slag_slm.agents.relevance_screener import build_screener_agent
 from steel_slag_slm.agents.runner import build_runner
 from steel_slag_slm.agents.table_describer import build_table_describer_agent
 from steel_slag_slm.config import (
     RETRIEVAL_EVAL_PATH,
+    AnswerSettings,
     DataExtractionSettings,
     ScreeningSettings,
     Settings,
@@ -43,11 +43,9 @@ from steel_slag_slm.config import (
     load_gcp_settings,
     load_llm_gateway_settings,
     load_pdf_parsing_settings,
-    load_question_routing_settings,
     load_retrieval_eval_set,
     load_screening_settings,
     load_settings,
-    load_similar_slag_settings,
     load_slag_catalogue_settings,
     load_slag_reference,
     load_table_description_settings,
@@ -55,7 +53,6 @@ from steel_slag_slm.config import (
 from steel_slag_slm.data import parsed_index
 from steel_slag_slm.data.drive_storage import (
     build_drive_service,
-    ensure_subfolder,
     find_subfolder_id,
     list_paper_titles,
 )
@@ -90,6 +87,7 @@ from steel_slag_slm.evaluation.value_metrics import count_values
 from steel_slag_slm.exceptions import PapersNotFoundError, PromotionError
 from steel_slag_slm.llm.gateway import GatewayClient
 from steel_slag_slm.llm.prompts import PromptTemplate, load_prompt
+from steel_slag_slm.pipelines.assistant_setup import build_assistant
 from steel_slag_slm.pipelines.background_figure_reader import BackgroundFigureReader
 from steel_slag_slm.pipelines.build_index import run_build_index
 from steel_slag_slm.pipelines.build_slag_catalogue import run_catalogue_build
@@ -98,6 +96,7 @@ from steel_slag_slm.pipelines.describe_tables import (
     format_description_summary,
     run_table_description,
 )
+from steel_slag_slm.pipelines.drive_folders import connect_to_parsed_folder, index_folder_id
 from steel_slag_slm.pipelines.evaluate_retrieval import (
     format_retrieval_report,
     run_corpus_eval,
@@ -112,11 +111,6 @@ from steel_slag_slm.pipelines.fill_abstracts import run_fill_abstracts
 from steel_slag_slm.pipelines.judge_extraction import adjudicate_run, judge_run
 from steel_slag_slm.pipelines.paper_selection import select_papers
 from steel_slag_slm.pipelines.parse_pdfs import format_parse_summary, run_pdf_parsing
-from steel_slag_slm.pipelines.prepare_evidence import (
-    build_route_tools,
-    load_form_columns,
-    prepare_evidence,
-)
 from steel_slag_slm.pipelines.promote_extraction import run_promotion
 from steel_slag_slm.pipelines.read_figures import (
     list_paper_dirs,
@@ -530,7 +524,7 @@ def describe_tables() -> None:
     gcp = load_gcp_settings()
     settings = load_table_description_settings()
     folder_name = args.parsed_folder or load_pdf_parsing_settings().output_folder_name
-    drive_service, parsed_folder_id = _connect_to_parsed_folder(folder_name)
+    drive_service, parsed_folder_id = connect_to_parsed_folder(folder_name)
     # Titles come from the PDFs' Drive descriptions, as for the search index
     titles = list_paper_titles(drive_service, load_drive_connection_settings().folder_id)
     if gcp.credentials_file:
@@ -584,7 +578,7 @@ def export_parsed() -> None:
 
     outcomes = run_export_parsed(
         settings,
-        *_connect_to_parsed_folder(settings.output_folder_name),
+        *connect_to_parsed_folder(settings.output_folder_name),
         args.out_dir,
         args.paper_ids,
         args.max_papers,
@@ -639,25 +633,6 @@ def fill_abstracts() -> None:
     print("Summary:", dict(outcomes))
 
 
-def _connect_to_parsed_folder(folder_name: str | None = None) -> tuple[Any, str]:
-    """Connect to the configured parsed Drive folder, optionally overriding its name."""
-
-    drive_settings = load_drive_connection_settings()
-    drive_service = build_drive_service(
-        drive_settings.service_account_file,
-        drive_settings.oauth_client_file,
-        drive_settings.oauth_token_file,
-    )
-    parsed_folder_id = find_subfolder_id(
-        drive_service,
-        drive_settings.folder_id,
-        folder_name if folder_name is not None else load_pdf_parsing_settings().output_folder_name,
-    )
-    if parsed_folder_id is None:
-        raise SystemExit("Configured parsed folder is missing in Drive; run parse-pdfs first")
-    return drive_service, parsed_folder_id
-
-
 def _add_parsed_folder_argument(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--parsed-folder",
@@ -699,7 +674,7 @@ def extract_data() -> None:
 
     gcp = load_gcp_settings()
     settings = load_data_extraction_settings()
-    drive_service, parsed_folder_id = _connect_to_parsed_folder()
+    drive_service, parsed_folder_id = connect_to_parsed_folder()
     if gcp.credentials_file:
         # Set only after Drive signs in, as in fill-abstracts: Gemini uses ADC
         os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(gcp.credentials_file)
@@ -756,7 +731,7 @@ def _start_benchmark_run(
 
 def _parsed_markdown_loader() -> Callable[[str], str | None]:
     """Sign in to Drive and return a function that reads a parsed paper's Markdown."""
-    drive_service, parsed_folder_id = _connect_to_parsed_folder()
+    drive_service, parsed_folder_id = connect_to_parsed_folder()
     index = parsed_index.load_index(
         drive_service, parsed_folder_id, load_pdf_parsing_settings().index_file_name
     )
@@ -945,7 +920,7 @@ def build_index() -> None:
         parser.error("--max-papers must be greater than zero")
 
     _setup_logging()
-    drive_service, parsed_folder_id = _connect_to_parsed_folder(args.parsed_folder)
+    drive_service, parsed_folder_id = connect_to_parsed_folder(args.parsed_folder)
     unindexed = _index_parsed_folder(
         drive_service, parsed_folder_id, args.parsed_folder, args.max_papers, args.rebuild
     )
@@ -953,20 +928,6 @@ def build_index() -> None:
         raise SystemExit(
             f"{unindexed} parsed paper(s) could not be indexed; see the warnings above"
         )
-
-
-def _index_folder_id(drive_service: Any, parsed_folder_name: str | None) -> str:
-    """Return the folder holding this parsed folder's search index, creating it if needed.
-
-    It sits in the shared Drive folder (<index_folder_name>/<parsed folder name>/), which
-    everyone on the project can write to, unlike a parsed folder owned by one person.
-    """
-    name = parsed_folder_name or load_pdf_parsing_settings().output_folder_name
-    root_id = load_drive_connection_settings().folder_id
-    index_root = ensure_subfolder(
-        drive_service, root_id, load_embedding_settings().index_folder_name
-    )
-    return ensure_subfolder(drive_service, index_root, name)
 
 
 def _index_parsed_folder(
@@ -989,7 +950,7 @@ def _index_parsed_folder(
         max_papers,
         rebuild,
         titles,
-        _index_folder_id(drive_service, parsed_folder_name),
+        index_folder_id(drive_service, parsed_folder_name),
         load_token_budget(settings.reranker, settings.table_max_tokens),
     )
     print("Index summary:", dict(outcomes))
@@ -1014,11 +975,11 @@ def search_index() -> None:
     _setup_logging()
     settings = load_embedding_settings()
     kinds = cast(set[ChunkKind], set(args.kind)) if args.kind else None
-    drive_service, _ = _connect_to_parsed_folder(args.parsed_folder)
+    drive_service, _ = connect_to_parsed_folder(args.parsed_folder)
     hits = run_search(
         settings,
         drive_service,
-        _index_folder_id(drive_service, args.parsed_folder),
+        index_folder_id(drive_service, args.parsed_folder),
         Embedder(settings.model),
         CrossEncoderScorer(settings.reranker),
         args.query,
@@ -1080,9 +1041,9 @@ def evaluate_retrieval() -> None:
         )
     else:
         eval_set = load_retrieval_eval_set(args.eval_set)
-        drive_service, _ = _connect_to_parsed_folder(args.parsed_folder)
-        index_folder_id = _index_folder_id(drive_service, args.parsed_folder)
-        store = load_store(drive_service, index_folder_id, settings.model, encoder.dimension)
+        drive_service, _ = connect_to_parsed_folder(args.parsed_folder)
+        index_id = index_folder_id(drive_service, args.parsed_folder)
+        store = load_store(drive_service, index_id, settings.model, encoder.dimension)
         retriever = TwoStageRetriever(
             store, encoder, scorer, settings.query_prefix, settings.top_papers, settings.candidates
         )
@@ -1193,63 +1154,43 @@ def read_figures() -> None:
 
 
 def ask() -> None:
-    """Read a question, run the tools it needs and print the evidence the answer model gets."""
+    """Read a question, run the tools it needs, print the evidence and stream the answer."""
     parser = argparse.ArgumentParser(description=ask.__doc__)
     parser.add_argument("question", help="the user's message, in plain language")
     parser.add_argument(
         "--profile", type=Path, help="JSON file with the user's slag (type, oxides, phases)"
     )
+    parser.add_argument(
+        "--reader-model", help="gateway model name; default: llm_gateway.reader_model"
+    )
+    parser.add_argument(
+        "--answer-model", help="gateway model name; default: llm_gateway.answer_model"
+    )
+    parser.add_argument("--no-answer", action="store_true", help="stop after printing the evidence")
     _add_parsed_folder_argument(parser)
     args = parser.parse_args()
 
     _setup_logging()
-    routing = load_question_routing_settings()
-    embedding = load_embedding_settings()
-    gateway = load_llm_gateway_settings()
     profile = (
         SlagProfile.model_validate_json(args.profile.read_text(encoding="utf-8"))
         if args.profile
         else None
     )
-    drive_service, _ = _connect_to_parsed_folder(args.parsed_folder)
-    encoder = Embedder(embedding.model)
-    store = load_store(
-        drive_service,
-        _index_folder_id(drive_service, args.parsed_folder),
-        embedding.model,
-        encoder.dimension,
-    )
-    retriever = TwoStageRetriever(
-        store,
-        encoder,
-        CrossEncoderScorer(embedding.reranker),
-        embedding.query_prefix,
-        embedding.top_papers,
-        embedding.candidates,
-    )
-    gcp = load_gcp_settings()
-    client = build_bigquery_client(gcp.project, gcp.credentials_file)
-    catalogue_settings = load_slag_catalogue_settings()
-    tools = build_route_tools(
-        client,
-        catalogue_settings,
-        load_similar_slag_settings(),
-        load_slag_reference(),
-        lambda query, top_k: retriever.search(query, top_k),
-    )
-    prepared = prepare_evidence(
-        args.question,
-        GatewayClient(gateway, gateway.reader_model),
-        load_prompt(routing.prompt_name),
-        load_form_columns(client, catalogue_settings.dataset, routing.max_listed_values),
-        tools,
-        routing,
-        profile,
-        examples=ExamplePicker(load_examples(routing.examples_name), routing.examples_k, encoder),
-    )
+    assistant = build_assistant(args.parsed_folder, args.reader_model, args.answer_model)
+    prepared = assistant.prepare(args.question, profile)
     print("FORM\n" + prepared.form.model_dump_json(indent=2))
     print("TOOLS: " + (", ".join(call.tool for call in prepared.plan.calls) or "none"))
     print("\nEVIDENCE\n" + prepared.evidence)
+    if not args.no_answer:
+        print("\nANSWER")
+        _print_answer(
+            args.question,
+            prepared.evidence,
+            assistant.writer,
+            assistant.answer_prompt,
+            assistant.answer_settings,
+            args.answer_model or load_llm_gateway_settings().answer_model,
+        )
 
 
 def answer() -> None:
@@ -1272,14 +1213,27 @@ def answer() -> None:
         parser.error(f"--model must be one of: {', '.join(gateway.models)}")
     settings = load_answer_settings()
     evidence = args.evidence.read_text(encoding="utf-8")
-    pieces = []
-    for piece in write_answer(
+    _print_answer(
         args.question,
         evidence,
         GatewayClient(gateway, model),
         load_prompt(settings.prompt_name),
         settings,
-    ):
+        model,
+    )
+
+
+def _print_answer(
+    question: str,
+    evidence: str,
+    writer: TextModel,
+    prompt: PromptTemplate,
+    settings: AnswerSettings,
+    model: str,
+) -> None:
+    """Stream the answer to stdout, then list any labels it cites that the evidence lacks."""
+    pieces = []
+    for piece in write_answer(question, evidence, writer, prompt, settings):
         print(piece, end="", flush=True)
         pieces.append(piece)
     unknown = unknown_citations("".join(pieces), evidence)
