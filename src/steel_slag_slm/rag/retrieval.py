@@ -32,17 +32,30 @@ class PassageScorer(Protocol):
     def score(self, query: str, passages: Sequence[str]) -> np.ndarray: ...
 
 
+def reranker_device() -> str:
+    """The fastest device here: an NVIDIA GPU, then Apple's GPU (mps), then the CPU.
+
+    On a Mac the CPU takes minutes to rerank one search; mps takes about 30 seconds.
+    """
+    # Imported here: torch is slow to load and only the reranker needs it
+    import torch
+
+    if torch.cuda.is_available():
+        return "cuda"
+    if torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
+
+
 class CrossEncoderScorer:
     """A sentence-transformers cross-encoder, on the GPU in half precision when there is one."""
 
     def __init__(self, model_name: str) -> None:
-        # Imported here: torch is slow to load and only this class needs it
-        import torch
         from sentence_transformers import CrossEncoder
 
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+        device = reranker_device()
         self._model = CrossEncoder(model_name, max_length=512, device=device)
-        if device == "cuda":
+        if device != "cpu":  # half precision gives the same ranking on a GPU, much faster
             self._model.model.half()
 
     def score(self, query: str, passages: Sequence[str]) -> np.ndarray:
