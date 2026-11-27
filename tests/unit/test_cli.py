@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 
 import steel_slag_slm.cli as cli
+from steel_slag_slm.llm.gateway import ReplyPiece
 from steel_slag_slm.pipelines.describe_tables import TableDescriptionReport
 
 
@@ -234,7 +235,7 @@ def _fake_answer_setup(monkeypatch, pieces: list[str]) -> dict[str, object]:
 
     def fake_write(question, evidence, client, prompt, _settings):
         calls.update(question=question, evidence=evidence, client=client, prompt=prompt)
-        yield from pieces
+        yield from (ReplyPiece(piece) for piece in pieces)
 
     monkeypatch.setattr(cli, "write_answer", fake_write)
     return calls

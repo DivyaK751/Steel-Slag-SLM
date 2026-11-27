@@ -377,6 +377,19 @@ class EvaluationSettings(BaseModel):
     prices: dict[str, ModelPrice] = {}
 
 
+class GatewayModel(BaseModel):
+    """One model the gateway serves: the name the chat shows and the extra request fields."""
+
+    label: str
+    request: dict[str, Any] = {}  # e.g. Qwen's chat_template_kwargs; {} for none
+    # Sent instead of request when the user turns thinking on; None: thinking can't be switched
+    thinking_request: dict[str, Any] | None = None
+
+    @property
+    def supports_thinking(self) -> bool:
+        return self.thinking_request is not None
+
+
 class LlmGatewaySettings(BaseModel):
     """The LiteLLM gateway every chat-time model is called through (docs/adr/005)."""
 
@@ -385,9 +398,7 @@ class LlmGatewaySettings(BaseModel):
     timeout_s: float
     reader_model: str  # reads a question into a form
     answer_model: str  # writes the answer from the evidence
-    # Every model the gateway serves, by its LiteLLM name, with the extra request fields it
-    # needs (e.g. Qwen's chat_template_kwargs); {} for none
-    models: dict[str, dict[str, Any]]
+    models: dict[str, GatewayModel]  # every model the gateway serves, by its LiteLLM name
 
     @model_validator(mode="after")
     def _jobs_use_listed_models(self) -> "LlmGatewaySettings":

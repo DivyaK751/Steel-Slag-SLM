@@ -121,4 +121,4 @@ def test_chat_event_survives_a_json_round_trip() -> None:
 
 def test_chat_event_rejects_an_unknown_type() -> None:
     with pytest.raises(ValidationError):
-        ChatEvent.model_validate({"type": "thinking", "text": "hmm"})
+        ChatEvent.model_validate({"type": "progress", "text": "50%"})

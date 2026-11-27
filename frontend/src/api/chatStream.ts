@@ -1,4 +1,4 @@
-import type { ChatEvent } from './types'
+import type { ChatEvent, ModelChoice } from './types'
 
 const EVENT_SEPARATOR = '\n\n'
 const DATA_PREFIX = 'data: '
@@ -29,15 +29,21 @@ export function isFinalEvent(event: ChatEvent): boolean {
 export async function streamChat(
   sessionId: string,
   message: string,
+  choice: ModelChoice | null, // null: the backend's default models
   onEvent: (event: ChatEvent) => void,
   signal: AbortSignal,
 ): Promise<void> {
   const response = await fetch('/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ session_id: sessionId, message }),
+    body: JSON.stringify({ session_id: sessionId, message, ...choice }),
     signal,
   })
+  if (response.status === 422) {
+    // e.g. a model the backend no longer lists; its detail says which
+    const body = (await response.json()) as { detail?: unknown }
+    throw new Error(typeof body.detail === 'string' ? body.detail : 'The chat server rejected the message.')
+  }
   if (!response.ok || !response.body) {
     throw new Error(`The chat server answered ${response.status}. Is the backend running?`)
   }

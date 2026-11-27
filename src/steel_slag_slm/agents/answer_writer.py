@@ -9,6 +9,7 @@ from collections.abc import Iterator
 from typing import Protocol
 
 from steel_slag_slm.config import AnswerSettings
+from steel_slag_slm.llm.gateway import ReplyPiece
 from steel_slag_slm.llm.prompts import PromptTemplate
 
 # A label where the evidence defines it: first thing in a bracket, e.g. "[S1 EXP-0004 / Mix 20%]"
@@ -27,7 +28,7 @@ class TextModel(Protocol):
         user: str,
         temperature: float | None = None,
         max_tokens: int | None = None,
-    ) -> Iterator[str]: ...
+    ) -> Iterator[ReplyPiece]: ...
 
 
 def write_answer(
@@ -36,8 +37,11 @@ def write_answer(
     model: TextModel,
     prompt: PromptTemplate,
     settings: AnswerSettings,
-) -> Iterator[str]:
-    """Stream the answer to the question, built only from the evidence, piece by piece."""
+) -> Iterator[ReplyPiece]:
+    """Stream the answer to the question, built only from the evidence, piece by piece.
+
+    A thinking model's reasoning comes first, as thinking pieces; only the rest is the answer.
+    """
     yield from model.stream_text(
         prompt.instruction,
         prompt.render_input(question=question.strip(), evidence=evidence.strip()),

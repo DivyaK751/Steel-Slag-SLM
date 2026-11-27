@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from steel_slag_slm.agents.answer_citations import build_citations
 from steel_slag_slm.agents.answer_writer import unknown_citations, write_answer
 from steel_slag_slm.agents.question_form import QuestionForm
-from steel_slag_slm.pipelines.assistant_setup import Assistant
+from steel_slag_slm.pipelines.assistant_setup import Assistant, ModelChoice
 from steel_slag_slm.rag.similar_slags import SlagProfile
 from steel_slag_slm.schemas import ChatEvent
 
@@ -29,15 +29,23 @@ class ChatSession:
     previous: QuestionForm | None = None  # so a follow-up ("and for BOF?") can build on it
 
 
-def answer_message(message: str, session: ChatSession, assistant: Assistant) -> Iterator[ChatEvent]:
+def answer_message(
+    message: str,
+    session: ChatSession,
+    assistant: Assistant,
+    choice: ModelChoice | None = None,
+) -> Iterator[ChatEvent]:
     """Stream the events that answer one message, and remember its form for follow-ups.
 
+    choice swaps the reader and writer models for this message; None keeps the assistant's.
     A blank message yields one "error" event. Failures (gateway, BigQuery) propagate; the
     chat API turns them into the stream's closing "error" event.
     """
     if not message.strip():
         yield ChatEvent(type="error", text=BLANK_MESSAGE)
         return
+    if choice:
+        assistant = assistant.with_models(choice)
     yield ChatEvent(type="status", text=SEARCHING)
     prepared = assistant.prepare(message, session.profile, session.previous)
     if prepared.form.message_type == "question":  # small talk keeps the earlier question
@@ -45,7 +53,7 @@ def answer_message(message: str, session: ChatSession, assistant: Assistant) -> 
     if not prepared.plan.reply_only:
         yield ChatEvent(type="status", text=WRITING)
 
-    pieces = []
+    pieces = []  # the answer only: reasoning is shown but never cited
     for piece in write_answer(
         message,
         prepared.evidence,
@@ -53,8 +61,11 @@ def answer_message(message: str, session: ChatSession, assistant: Assistant) -> 
         assistant.answer_prompt,
         assistant.answer_settings,
     ):
-        pieces.append(piece)
-        yield ChatEvent(type="token", text=piece)
+        if piece.is_thinking:
+            yield ChatEvent(type="thinking", text=piece.text)
+            continue
+        pieces.append(piece.text)
+        yield ChatEvent(type="token", text=piece.text)
 
     answer = "".join(pieces)
     unknown = unknown_citations(answer, prepared.evidence)

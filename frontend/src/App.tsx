@@ -7,8 +7,9 @@ import { Sidebar, type ChatSummary } from './components/Sidebar'
 import { SlagProfilePage } from './components/SlagProfilePage'
 import { WelcomeScreen } from './components/WelcomeScreen'
 import { conversationFrom, useChat } from './hooks/useChat'
+import { useModels } from './hooks/useModels'
 import { useProfile } from './hooks/useProfile'
-import { BIGQUERY_TABLES, MODELS, RESEARCH_PAPERS, SAMPLE_CHATS } from './placeholder/sampleData'
+import { BIGQUERY_TABLES, RESEARCH_PAPERS, SAMPLE_CHATS } from './placeholder/sampleData'
 
 const LIVE_CHAT_ID = 'live' // the chat being typed in now; the rest of the list is sample history
 const NEW_CHAT_TITLE = 'New research chat'
@@ -17,16 +18,13 @@ const INDEXED_SUMMARY = `${RESEARCH_PAPERS.length} papers · ${BIGQUERY_TABLES.l
 export default function App() {
   const { sessionId, messages, status, isStreaming, send, newChat, openChat } = useChat()
   const { profile, syncError, save } = useProfile(sessionId)
+  const models = useModels()
   const [page, setPage] = useState<'chat' | 'sources' | 'profile'>('chat')
   const [activeChatId, setActiveChatId] = useState(LIVE_CHAT_ID)
   const [liveTitle, setLiveTitle] = useState<string | null>(null)
-  // Not sent to the backend yet; the chat API has no model or thinking option
-  const [modelId, setModelId] = useState(MODELS[0].id)
-  const [isThinking, setIsThinking] = useState(true)
 
   const activeSample = SAMPLE_CHATS.find((chat) => chat.id === activeChatId)
   const chatTitle = activeSample?.title ?? liveTitle ?? NEW_CHAT_TITLE
-  const modelLabel = MODELS.find((model) => model.id === modelId)?.label ?? MODELS[0].label
   const chats: ChatSummary[] = [{ id: LIVE_CHAT_ID, title: liveTitle ?? NEW_CHAT_TITLE, when: 'Just now' }, ...SAMPLE_CHATS]
 
   function startNewChat() {
@@ -47,7 +45,7 @@ export default function App() {
 
   function sendMessage(text: string) {
     if (activeChatId === LIVE_CHAT_ID && !liveTitle) setLiveTitle(text)
-    void send(text)
+    void send(text, models.choice, models.writerLabel)
   }
 
   return (
@@ -70,18 +68,23 @@ export default function App() {
             <span className="indexed-pill">{INDEXED_SUMMARY}</span>
           </header>
           {syncError && <p className="form-error banner">{syncError}</p>}
+          {models.loadError && <p className="form-error banner">{models.loadError}</p>}
           <div className="chat-body">
             {messages.length === 0 ? (
               <WelcomeScreen onPick={sendMessage} />
             ) : (
-              <MessageList messages={messages} status={status} modelLabel={modelLabel} />
+              <MessageList messages={messages} status={status} />
             )}
             <Composer
               isDisabled={isStreaming}
-              modelId={modelId}
-              isThinking={isThinking}
-              onModelChange={setModelId}
-              onThinkingChange={setIsThinking}
+              models={models.models}
+              readerId={models.readerId}
+              writerId={models.writerId}
+              isThinking={models.isThinking}
+              canThink={models.canThink}
+              onReaderChange={models.setReaderId}
+              onWriterChange={models.setWriterId}
+              onThinkingChange={models.setIsThinking}
               onSend={sendMessage}
             />
             <p className="disclaimer">Answers cite indexed sources. Check figures before publishing.</p>

@@ -1234,7 +1234,9 @@ def _print_answer(
     """Stream the answer to stdout, then list any labels it cites that the evidence lacks."""
     pieces = []
     for piece in write_answer(question, evidence, writer, prompt, settings):
-        print(piece, end="", flush=True)
-        pieces.append(piece)
+        if piece.is_thinking:
+            continue  # the CLI shows only the answer
+        print(piece.text, end="", flush=True)
+        pieces.append(piece.text)
     unknown = unknown_citations("".join(pieces), evidence)
     print(f"\n\n[{model}] Unknown citations: {', '.join(unknown) or 'none'}")

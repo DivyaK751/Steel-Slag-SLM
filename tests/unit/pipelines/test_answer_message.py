@@ -6,6 +6,7 @@ import pytest
 from steel_slag_slm.agents.question_form import QuestionForm
 from steel_slag_slm.agents.router import RoutePlan, ToolCall, ToolResults
 from steel_slag_slm.config import AnswerSettings
+from steel_slag_slm.llm.gateway import ReplyPiece
 from steel_slag_slm.llm.prompts import load_prompt
 from steel_slag_slm.pipelines.answer_message import (
     BLANK_MESSAGE,
@@ -14,6 +15,7 @@ from steel_slag_slm.pipelines.answer_message import (
     ChatSession,
     answer_message,
 )
+from steel_slag_slm.pipelines.assistant_setup import ModelChoice
 from steel_slag_slm.pipelines.prepare_evidence import PreparedEvidence
 from steel_slag_slm.rag.search import SearchHit
 from steel_slag_slm.rag.similar_slags import SlagProfile
@@ -27,22 +29,29 @@ EVIDENCE = "# Question\nWhy?\n\n## Paper passages\n[P1] Results (W9, text)\nFree
 
 
 class FakeWriter:
-    def __init__(self, pieces: list[str]) -> None:
+    def __init__(self, pieces: list[str | ReplyPiece]) -> None:
         self.pieces = pieces
 
-    def stream_text(self, *_: Any, **__: Any) -> Iterator[str]:
-        yield from self.pieces
+    def stream_text(self, *_: Any, **__: Any) -> Iterator[ReplyPiece]:
+        for piece in self.pieces:
+            yield piece if isinstance(piece, ReplyPiece) else ReplyPiece(piece)
 
 
 class FakeAssistant:
     """The parts of Assistant that answer_message uses, with a canned prepare()."""
 
-    def __init__(self, form: QuestionForm, plan: RoutePlan, pieces: list[str]) -> None:
+    def __init__(self, form: QuestionForm, plan: RoutePlan, pieces: list[str | ReplyPiece]) -> None:
         self.prepared = PreparedEvidence(form, plan, ToolResults(passages=[PASSAGE]), EVIDENCE)
         self.writer = FakeWriter(pieces)
         self.answer_prompt = load_prompt("answer_question")
         self.answer_settings = AnswerSettings(prompt_name="answer_question", temperature=0.2)
         self.calls: list[tuple[str, SlagProfile | None, QuestionForm | None]] = []
+        self.choices: list[ModelChoice] = []
+
+    def with_models(self, choice: ModelChoice) -> "FakeAssistant":
+        self.choices.append(choice)
+        self.writer = FakeWriter([f"Written by {choice.answer_model}."])
+        return self
 
     def prepare(
         self, message: str, profile: SlagProfile | None, previous: QuestionForm | None
@@ -54,8 +63,13 @@ class FakeAssistant:
         return {"W9": PaperCitation("Free lime in slag", ("A. Author",), 2021, None)}
 
 
-def _events(assistant: FakeAssistant, message: str = "Why?", session: ChatSession | None = None):
-    return list(answer_message(message, session or ChatSession(), assistant))  # type: ignore[arg-type]
+def _events(
+    assistant: FakeAssistant,
+    message: str = "Why?",
+    session: ChatSession | None = None,
+    choice: ModelChoice | None = None,
+):
+    return list(answer_message(message, session or ChatSession(), assistant, choice))  # type: ignore[arg-type]
 
 
 def test_a_question_streams_status_tokens_citations_then_done():
@@ -71,6 +85,18 @@ def test_a_question_streams_status_tokens_citations_then_done():
         ("P1", "Free lime in slag", [4])
     ]
     assert events[-1] == ChatEvent(type="done")
+
+
+def test_reasoning_streams_as_thinking_events_and_is_not_part_of_the_answer():
+    thinking = ReplyPiece("They ask about [P4]...", is_thinking=True)
+    assistant = FakeAssistant(QUESTION, SEARCH, [thinking, "It swells [P1]."])
+
+    events = _events(assistant)
+
+    assert [e.type for e in events[2:]] == ["thinking", "token", "citations", "done"]
+    assert events[2].text == "They ask about [P4]..."
+    # Only the answer is cited: P4 in the reasoning gets no citation
+    assert [c.label for c in events[-2].citations] == ["P1"]
 
 
 def test_the_question_form_is_kept_and_passed_to_the_next_message():
@@ -108,3 +134,21 @@ def test_a_blank_message_yields_one_error_event():
 
     assert _events(assistant, "   ") == [ChatEvent(type="error", text=BLANK_MESSAGE)]
     assert assistant.calls == []
+
+
+def test_a_model_choice_answers_with_the_chosen_models():
+    assistant = FakeAssistant(QUESTION, SEARCH, ["Default model."])
+    choice = ModelChoice("qwen3-8b", "qwen3-8b", thinking=True)
+
+    events = _events(assistant, choice=choice)
+
+    assert assistant.choices == [choice]
+    assert "".join(e.text for e in events if e.type == "token") == "Written by qwen3-8b."
+
+
+def test_no_model_choice_keeps_the_assistant_models():
+    assistant = FakeAssistant(QUESTION, SEARCH, ["Default model."])
+
+    _events(assistant)
+
+    assert assistant.choices == []

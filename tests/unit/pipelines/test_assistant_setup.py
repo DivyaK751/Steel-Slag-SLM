@@ -4,8 +4,9 @@ from typing import Any
 from steel_slag_slm.agents.question_form import ColumnFilter, QuestionForm, form_columns
 from steel_slag_slm.agents.router import RouteTools
 from steel_slag_slm.config import AnswerSettings, QuestionRoutingSettings
+from steel_slag_slm.llm.gateway import ReplyPiece
 from steel_slag_slm.llm.prompts import load_prompt
-from steel_slag_slm.pipelines.assistant_setup import Assistant
+from steel_slag_slm.pipelines.assistant_setup import Assistant, ModelChoice
 from steel_slag_slm.rag.search import SearchHit
 from steel_slag_slm.rag.slag_lookup import SlagLookup
 from steel_slag_slm.schemas import Chunk
@@ -27,7 +28,7 @@ class FixedReader:
 
 
 class UnusedWriter:
-    def stream_text(self, *_: Any, **__: Any) -> Iterator[str]:
+    def stream_text(self, *_: Any, **__: Any) -> Iterator[ReplyPiece]:
         raise AssertionError("prepare must not write an answer")
 
 
@@ -48,6 +49,7 @@ def _assistant(reader_answer: dict[str, Any], searched: list[str]) -> Assistant:
         answer_prompt=load_prompt("answer_question"),
         answer_settings=AnswerSettings(prompt_name="answer_question", temperature=0.2),
         paper_citations=lambda _: {},
+        connect_model=lambda model, thinking: f"{model}:{thinking}",  # type: ignore[arg-type,return-value]
     )
 
 
@@ -81,3 +83,13 @@ def test_prepare_fills_a_follow_up_from_the_previous_form():
 
     assert form.message_type == "question"
     assert {(f.column, f.value) for f in form.filters} == {(REPLACEMENT, 20.0), (SLAG_TYPE, "EAF")}
+
+
+def test_with_models_swaps_only_the_reader_and_writer():
+    assistant = _assistant({"message_type": "chat"}, [])
+
+    chosen = assistant.with_models(ModelChoice("qwen3-8b", "gemini-4-neon", thinking=True))
+
+    assert (chosen.reader, chosen.writer) == ("qwen3-8b:True", "gemini-4-neon:True")
+    assert chosen.tools is assistant.tools
+    assert isinstance(assistant.writer, UnusedWriter)  # the shared assistant is unchanged

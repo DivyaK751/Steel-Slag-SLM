@@ -1,7 +1,7 @@
 """Build everything the chat needs once (models, index, tools), shared by the CLI and the API."""
 
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, replace
 
 from steel_slag_slm.agents.answer_citations import PaperCitations
 from steel_slag_slm.agents.answer_writer import TextModel
@@ -23,7 +23,7 @@ from steel_slag_slm.config import (
 )
 from steel_slag_slm.data.embedding_store import load_store
 from steel_slag_slm.data.paper_registry import build_bigquery_client, read_citations
-from steel_slag_slm.llm.gateway import GatewayClient, JsonModel
+from steel_slag_slm.llm.gateway import GatewayClient, JsonModel, connect
 from steel_slag_slm.llm.prompts import PromptTemplate, load_prompt
 from steel_slag_slm.pipelines.drive_folders import connect_to_parsed_folder, index_folder_id
 from steel_slag_slm.pipelines.prepare_evidence import (
@@ -36,6 +36,18 @@ from steel_slag_slm.rag.embeddings import Embedder
 from steel_slag_slm.rag.retrieval import CrossEncoderScorer, TwoStageRetriever
 from steel_slag_slm.rag.similar_slags import SlagProfile
 from steel_slag_slm.schemas import PaperCitation
+
+# Builds the client for one gateway model, with thinking on or off
+ModelConnector = Callable[[str, bool], GatewayClient]
+
+
+@dataclass(frozen=True, slots=True)
+class ModelChoice:
+    """The models one chat message uses, by gateway name, as the user picked them."""
+
+    reader_model: str
+    answer_model: str
+    thinking: bool = False  # only models with a thinking_request can switch it
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,6 +64,15 @@ class Assistant:
     answer_prompt: PromptTemplate
     answer_settings: AnswerSettings
     paper_citations: PaperCitations  # title, authors, year and DOI of papers, by OpenAlex id
+    connect_model: ModelConnector
+
+    def with_models(self, choice: ModelChoice) -> "Assistant":
+        """This assistant reading and writing with the chosen models; the rest is shared."""
+        return replace(
+            self,
+            reader=self.connect_model(choice.reader_model, choice.thinking),
+            writer=self.connect_model(choice.answer_model, choice.thinking),
+        )
 
     def prepare(
         self,
@@ -117,12 +138,16 @@ def build_assistant(
         data_project,
     )
     papers_table = load_papers_table()
+    sdk = connect(gateway)  # one connection pool for every model the chat switches to
+
+    def connect_model(model: str, thinking: bool) -> GatewayClient:
+        return GatewayClient(gateway, model, sdk, thinking)
 
     def paper_citations(paper_ids: Sequence[str]) -> dict[str, PaperCitation]:
         return read_citations(client, papers_table, paper_ids) if paper_ids else {}
 
     return Assistant(
-        reader=GatewayClient(gateway, reader_model or gateway.reader_model),
+        reader=connect_model(reader_model or gateway.reader_model, False),
         read_prompt=load_prompt(routing.prompt_name),
         columns=load_form_columns(
             client, f"{data_project}.{catalogue_settings.dataset}", routing.max_listed_values
@@ -130,8 +155,9 @@ def build_assistant(
         tools=tools,
         routing=routing,
         examples=ExamplePicker(load_examples(routing.examples_name), routing.examples_k, encoder),
-        writer=GatewayClient(gateway, answer_model or gateway.answer_model),
+        writer=connect_model(answer_model or gateway.answer_model, False),
         answer_prompt=load_prompt(answer_settings.prompt_name),
         answer_settings=answer_settings,
         paper_citations=paper_citations,
+        connect_model=connect_model,
     )

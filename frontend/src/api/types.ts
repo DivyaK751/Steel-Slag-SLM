@@ -11,7 +11,7 @@ export interface Citation {
   pages: number[]
 }
 
-export type ChatEventType = 'status' | 'token' | 'citations' | 'done' | 'error'
+export type ChatEventType = 'status' | 'thinking' | 'token' | 'citations' | 'done' | 'error'
 
 export interface ChatEvent {
   type: ChatEventType
@@ -30,4 +30,24 @@ export interface SlagProfile {
 export interface ProfileOptions {
   slag_types: string[]
   oxides: { column: string; label: string }[]
+}
+
+// GET /models: what the Reader and Writer pickers offer
+export interface ModelInfo {
+  id: string // the gateway's name, sent back in the chat request
+  label: string
+  supports_thinking: boolean
+}
+
+export interface ModelOptions {
+  models: ModelInfo[]
+  reader_default: string
+  answer_default: string
+}
+
+// The model fields of POST /chat; left out, the backend uses its config defaults
+export interface ModelChoice {
+  reader_model: string
+  answer_model: string
+  thinking: boolean
 }

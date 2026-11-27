@@ -65,7 +65,8 @@ def test_model_answers_without_a_think_block(settings: LlmGatewaySettings, model
         )
     )
 
-    text = "".join(pieces)
+    text = "".join(piece.text for piece in pieces)
     assert text.strip()
     assert "<think>" not in text
+    assert not any(piece.is_thinking for piece in pieces)  # thinking is off by default
     assert len(pieces) > 1  # streamed, not sent as one block

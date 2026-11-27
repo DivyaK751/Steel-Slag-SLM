@@ -494,13 +494,23 @@ llm_gateway:
   timeout_s: 120
   reader_model: gemini-3.8-flash  # reads each question into a form
   answer_model: gemini-3.8-flash  # writes the answer from the evidence
-  # LiteLLM model name -> extra request fields it needs ({} for none)
+  # LiteLLM model name -> the chat's label and the extra request fields it needs. Models with
+  # a thinking_request get a working Thinking switch; Gemini always reasons internally
   models:
     # LiteLLM wrongly rejects temperature for these two; this lets it through to Gemini
-    gemini-3.5-flash-lite: {allowed_openai_params: [temperature]}
-    gemini-3.8-flash: {allowed_openai_params: [temperature]}
-    # Served by vLLM; without this Qwen3 reasons in a <think> block before every answer
-    qwen3-8b: {chat_template_kwargs: {enable_thinking: false}}
+    gemini-3.5-flash-lite:
+      label: Gemini 3.5 Flash Lite
+      request: {allowed_openai_params: [temperature]}
+    gemini-3.8-flash:
+      label: Gemini 3.8 Flash
+      request: {allowed_openai_params: [temperature]}
+    gemini-4-neon:
+      label: Gemini 4 Neon
+    # Served by vLLM; without enable_thinking false Qwen3 reasons before every answer
+    qwen3-8b:
+      label: Qwen3 8B
+      request: {chat_template_kwargs: {enable_thinking: false}}
+      thinking_request: {chat_template_kwargs: {enable_thinking: true}}
 
 # The answer model: writes the chat answer from the evidence (model: llm_gateway.answer_model)
 answer:
