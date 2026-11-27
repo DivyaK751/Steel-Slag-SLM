@@ -139,6 +139,35 @@ def add_paper_search(plan: RoutePlan, notes: Sequence[str]) -> RoutePlan:
     return replace(plan, calls=calls, notes=plan.notes + tuple(notes))
 
 
+def thin_lookup_reasons(
+    lookup: SlagLookup, form: QuestionForm, columns: Sequence[FormColumn], min_papers: int
+) -> list[str]:
+    """Why the lookup's values are too few to answer from alone: fewer than min_papers papers
+    behind them, or an asked-for column no returned row reports. Empty when they are enough."""
+    rows = [row for slag in lookup.slags for sheet in slag.rows_by_sheet.values() for row in sheet]
+    reasons = []
+    papers = {row.source_id for row in rows}
+    if len(papers) < min_papers:
+        reasons.append(
+            f"The extraction tables have values from only {len(papers)} paper(s) for this "
+            "question; paper passages were added"
+        )
+    by_name = {column.name: column for column in columns}
+    reported = {(row.sheet, header) for row in rows for header in row.values}
+    missing = [
+        name
+        for name in form.properties
+        if name in by_name and (by_name[name].sheet, by_name[name].header) not in reported
+    ]
+    if missing:
+        reasons.append(
+            "The extraction tables have no values for "
+            + ", ".join(missing)
+            + "; paper passages were added"
+        )
+    return reasons
+
+
 def run_route(
     question: str,
     plan: RoutePlan,
@@ -146,10 +175,13 @@ def run_route(
     tools: RouteTools,
     columns: Sequence[FormColumn],
     search_top_k: int,
+    min_lookup_papers: int = 0,
 ) -> ToolResults:
-    """Run the planned tools; when the tables give nothing, search the papers instead.
+    """Run the planned tools; when the tables give nothing, or too little, search the papers.
 
-    Papers are searched with the form's stand-alone query, or the question itself if empty.
+    Too little: values from fewer than min_lookup_papers papers, or an asked-for column with no
+    values (thin_lookup_reasons). Papers are searched with the form's stand-alone query, or the
+    question itself if empty.
     """
     query = form.search_query.strip() or question
     results = ToolResults(notes=list(plan.notes))
@@ -162,10 +194,16 @@ def run_route(
             results.lookup = _lookup(call, form, tools, columns, results.similar)
         elif call.tool == "paper_search":
             results.passages = tools.paper_search(query, search_top_k)
-    tables_empty = results.lookup is None or not results.lookup.slags
-    if tables_empty and not results.passages and not plan.reply_only:
+    if results.passages or plan.reply_only:
+        return results
+    if results.lookup is None or not results.lookup.slags:
         if results.lookup is not None or results.similar is not None:
             results.notes.append("The extraction tables have no values for this question")
+        results.passages = tools.paper_search(query, search_top_k)
+        return results
+    thin = thin_lookup_reasons(results.lookup, form, columns, min_lookup_papers)
+    if thin:
+        results.notes += thin
         results.passages = tools.paper_search(query, search_top_k)
     return results
 

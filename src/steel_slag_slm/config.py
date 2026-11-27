@@ -299,6 +299,8 @@ class QuestionRoutingSettings(BaseModel):
     max_listed_values: int  # text columns with at most this many values list them for the reader
     search_top_k: int  # paper passages handed to the answer model
     evidence_max_chars: int  # longest evidence text handed to the answer model
+    # A lookup-only answer backed by fewer papers than this searches the papers too
+    min_lookup_papers: int = Field(default=2, ge=0)
 
 
 class OxideRange(BaseModel):
