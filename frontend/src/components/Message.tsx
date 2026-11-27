@@ -27,8 +27,18 @@ function answerComponents(message: ChatMessage): Components {
   }
 }
 
+/** The writer's reasoning, open while it streams and folded away once the answer starts. */
+function ThinkingBlock({ thinking, isAnswering }: { thinking: string; isAnswering: boolean }) {
+  return (
+    <details className="thinking-block" open={!isAnswering}>
+      <summary>{isAnswering ? 'Thoughts' : 'Thinking…'}</summary>
+      <p>{thinking}</p>
+    </details>
+  )
+}
+
 /** One chat message: the user's text as typed, the assistant's answer as markdown with its sources. */
-export function Message({ message, modelLabel }: { message: ChatMessage; modelLabel: string }) {
+export function Message({ message }: { message: ChatMessage }) {
   if (message.role === 'user') {
     return (
       <div className="message message--user">
@@ -38,7 +48,10 @@ export function Message({ message, modelLabel }: { message: ChatMessage; modelLa
   }
   return (
     <div className={message.isError ? 'message message--assistant message--error' : 'message message--assistant'}>
-      <span className="message-author">{modelLabel}</span>
+      <span className="message-author">{message.modelLabel ?? 'Assistant'}</span>
+      {message.thinking.trim() && (
+        <ThinkingBlock thinking={message.thinking.trim()} isAnswering={message.text !== '' || message.isDone} />
+      )}
       <Markdown remarkPlugins={MARKDOWN_PLUGINS} components={answerComponents(message)}>
         {linkCitations(message.text)}
       </Markdown>

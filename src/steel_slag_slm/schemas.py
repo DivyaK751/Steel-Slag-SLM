@@ -565,7 +565,7 @@ class ExtractionRun:
     paper_ids: tuple[str, ...]
 
 
-ChatEventType = Literal["status", "token", "citations", "done", "error"]
+ChatEventType = Literal["status", "thinking", "token", "citations", "done", "error"]
 
 
 class Citation(BaseModel):
@@ -584,5 +584,6 @@ class ChatEvent(BaseModel):
     """One event the chat streams while an answer is written (order: docs/adr/005)."""
 
     type: ChatEventType
-    text: str = ""  # the status step, the next piece of the answer, or the error message
+    # The status step, the next piece of reasoning or of the answer, or the error message
+    text: str = ""
     citations: list[Citation] = Field(default_factory=list)  # only on a "citations" event

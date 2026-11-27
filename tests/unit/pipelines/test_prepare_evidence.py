@@ -10,7 +10,7 @@ from steel_slag_slm.rag.slag_lookup import SlagLookup
 from steel_slag_slm.schemas import Chunk
 
 SETTINGS = QuestionRoutingSettings(
-    reader_model="m", reader_url="http://x", reader_timeout_s=1, prompt_name="read_question",
+    prompt_name="read_question",
     examples_name="read_question_examples", examples_k=6,
     max_listed_values=12, search_top_k=15, evidence_max_chars=9000,
 )  # fmt: skip

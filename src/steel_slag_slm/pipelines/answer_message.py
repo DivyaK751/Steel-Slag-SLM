@@ -1,62 +1,79 @@
 """Answer one chat message as a stream of events (contract: docs/adr/005-chat-interface.md).
 
-STUB: until question routing and the answer model are connected (A3), answer_message yields
-fixed events in the contract's order, so the chat API and UI can be built against it.
+message -> reader form -> tools -> cited evidence -> streamed answer -> citations.
 """
 
-import re
+import logging
 from collections.abc import Iterator
 from dataclasses import dataclass
 
+from steel_slag_slm.agents.answer_citations import build_citations
+from steel_slag_slm.agents.answer_writer import unknown_citations, write_answer
+from steel_slag_slm.agents.question_form import QuestionForm
+from steel_slag_slm.pipelines.assistant_setup import Assistant, ModelChoice
 from steel_slag_slm.rag.similar_slags import SlagProfile
-from steel_slag_slm.schemas import ChatEvent, Citation
+from steel_slag_slm.schemas import ChatEvent
+
+logger = logging.getLogger(__name__)
 
 BLANK_MESSAGE = "Please type a question about steel slag."
-
-# Fixed stub output, replaced by the real answer path in A3
-_STUB_STEPS = ("Searching papers…", "Writing the answer…")
-_STUB_ANSWER = (
-    "This is a placeholder answer about {slag}. Steel slag can replace part of the cement in "
-    "concrete [P1], and slags close to yours in chemistry are reported in the tables [S1]."
-)
-_STUB_CITATIONS = (
-    Citation(
-        label="P1",
-        paper_id="stub-paper-1",
-        title="Placeholder paper on steel slag in concrete",
-        authors=["A. Author", "B. Author"],
-        year=2024,
-        doi="10.0000/stub.1",
-        pages=[3],
-    ),
-    Citation(label="S1", paper_id="stub-paper-2", title="Placeholder slag catalogue entry"),
-)
+SEARCHING = "Reading your question and searching the papers and tables…"
+WRITING = "Writing the answer…"
 
 
-@dataclass(slots=True)  # mutable: the backend sets the profile, and A3 adds the previous form
+@dataclass(slots=True)  # mutable: the backend sets the profile, each question sets previous
 class ChatSession:
-    """One user's conversation: their slag profile, if they gave one."""
+    """One user's conversation: their slag profile, and the last question's form."""
 
     profile: SlagProfile | None = None
+    previous: QuestionForm | None = None  # so a follow-up ("and for BOF?") can build on it
 
 
-def _split_tokens(text: str) -> list[str]:
-    """Split text into words, each keeping its trailing space, so the pieces join back exactly."""
-    return re.findall(r"\S+\s*", text)
+def answer_message(
+    message: str,
+    session: ChatSession,
+    assistant: Assistant,
+    choice: ModelChoice | None = None,
+) -> Iterator[ChatEvent]:
+    """Stream the events that answer one message, and remember its form for follow-ups.
 
-
-def answer_message(message: str, session: ChatSession) -> Iterator[ChatEvent]:
-    """Stream the events that answer one message. STUB until A3: the events are fixed.
-
-    A blank message yields one "error" event.
+    choice swaps the reader and writer models for this message; None keeps the assistant's.
+    A blank message yields one "error" event. Failures (gateway, BigQuery) propagate; the
+    chat API turns them into the stream's closing "error" event.
     """
     if not message.strip():
         yield ChatEvent(type="error", text=BLANK_MESSAGE)
         return
-    for step in _STUB_STEPS:
-        yield ChatEvent(type="status", text=step)
-    slag = f"your {session.profile.steel_slag_type} slag" if session.profile else "steel slag"
-    for token in _split_tokens(_STUB_ANSWER.format(slag=slag)):
-        yield ChatEvent(type="token", text=token)
-    yield ChatEvent(type="citations", citations=list(_STUB_CITATIONS))
+    if choice:
+        assistant = assistant.with_models(choice)
+    yield ChatEvent(type="status", text=SEARCHING)
+    prepared = assistant.prepare(message, session.profile, session.previous)
+    if prepared.form.message_type == "question":  # small talk keeps the earlier question
+        session.previous = prepared.form
+    if not prepared.plan.reply_only:
+        yield ChatEvent(type="status", text=WRITING)
+
+    pieces = []  # the answer only: reasoning is shown but never cited
+    for piece in write_answer(
+        message,
+        prepared.evidence,
+        assistant.writer,
+        assistant.answer_prompt,
+        assistant.answer_settings,
+    ):
+        if piece.is_thinking:
+            yield ChatEvent(type="thinking", text=piece.text)
+            continue
+        pieces.append(piece.text)
+        yield ChatEvent(type="token", text=piece.text)
+
+    answer = "".join(pieces)
+    unknown = unknown_citations(answer, prepared.evidence)
+    if unknown:
+        logger.warning("The answer cites labels the evidence lacks: %s", ", ".join(unknown))
+    citations = build_citations(
+        answer, prepared.evidence, prepared.results, assistant.paper_citations
+    )
+    if citations:
+        yield ChatEvent(type="citations", citations=citations)
     yield ChatEvent(type="done")

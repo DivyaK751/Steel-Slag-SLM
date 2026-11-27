@@ -6,20 +6,54 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.app import SERVER_ERROR_MESSAGE, create_app
+from steel_slag_slm.config import GatewayModel, LlmGatewaySettings
 from steel_slag_slm.data.slag_catalogue import OXIDE_LABELS
-from steel_slag_slm.pipelines.answer_message import ChatSession
-from steel_slag_slm.schemas import ChatEvent
+from steel_slag_slm.pipelines.answer_message import BLANK_MESSAGE, ChatSession
+from steel_slag_slm.pipelines.assistant_setup import ModelChoice
+from steel_slag_slm.schemas import ChatEvent, Citation
+
+GATEWAY = LlmGatewaySettings(
+    base_url="http://gateway.test/v1",
+    api_key="key",
+    timeout_s=5,
+    reader_model="gemini",
+    answer_model="gemini",
+    models={
+        "gemini": GatewayModel(label="Gemini"),
+        "qwen": GatewayModel(label="Qwen", thinking_request={"think": True}),
+    },
+)
+CHOICES: list[ModelChoice] = []  # what each fake_answer call was given
+
+
+def fake_answer(message: str, session: ChatSession, choice: ModelChoice) -> Iterator[ChatEvent]:
+    """Stands in for the real assistant: fixed events in the contract's order."""
+    CHOICES.append(choice)
+    if not message.strip():
+        yield ChatEvent(type="error", text=BLANK_MESSAGE)
+        return
+    yield ChatEvent(type="status", text="Searching…")
+    slag = f"your {session.profile.steel_slag_type} slag" if session.profile else "steel slag"
+    for token in (f"About {slag}: ", "it works [P1] ", "as tables show [S1]."):
+        yield ChatEvent(type="token", text=token)
+    citations = [Citation(label="P1", paper_id="W1"), Citation(label="S1", paper_id="W2")]
+    yield ChatEvent(type="citations", citations=citations)
+    yield ChatEvent(type="done")
 
 
 @pytest.fixture
 def client() -> Iterator[TestClient]:
-    with TestClient(create_app()) as test_client:  # "with" runs the startup hook
+    CHOICES.clear()
+    app = create_app(answer=fake_answer, gateway=GATEWAY)
+    with TestClient(app) as test_client:  # "with" runs startup
         yield test_client
 
 
-def _chat(client: TestClient, message: str, session_id: str | None = None) -> list[ChatEvent]:
-    """Send one message and parse the streamed events."""
-    body = {"session_id": session_id or str(uuid4()), "message": message}
+def _chat(
+    client: TestClient, message: str, session_id: str | None = None, **models: object
+) -> list[ChatEvent]:
+    """Send one message, with any model fields, and parse the streamed events."""
+    body = {"session_id": session_id or str(uuid4()), "message": message, **models}
     response = client.post("/chat", json=body)
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
@@ -90,12 +124,46 @@ def test_session_id_that_is_not_a_uuid_is_rejected(client: TestClient) -> None:
 
 
 def test_failure_midway_ends_the_stream_with_an_error() -> None:
-    def failing_answer(message: str, session: ChatSession) -> Iterator[ChatEvent]:
+    def failing_answer(
+        message: str, session: ChatSession, choice: ModelChoice
+    ) -> Iterator[ChatEvent]:
         yield ChatEvent(type="token", text="Steel ")
         raise RuntimeError("gateway down")
 
-    with TestClient(create_app(answer=failing_answer)) as failing_client:
+    with TestClient(create_app(answer=failing_answer, gateway=GATEWAY)) as failing_client:
         events = _chat(failing_client, "hi")
 
     assert [event.type for event in events] == ["token", "error"]
     assert events[-1].text == SERVER_ERROR_MESSAGE
+
+
+def test_models_lists_every_configured_model_and_the_defaults(client: TestClient) -> None:
+    options = client.get("/models").json()
+
+    assert options["models"] == [
+        {"id": "gemini", "label": "Gemini", "supports_thinking": False},
+        {"id": "qwen", "label": "Qwen", "supports_thinking": True},
+    ]
+    assert (options["reader_default"], options["answer_default"]) == ("gemini", "gemini")
+
+
+def test_chat_without_models_uses_the_config_defaults(client: TestClient) -> None:
+    _chat(client, "hi")
+
+    assert CHOICES == [ModelChoice("gemini", "gemini", thinking=False)]
+
+
+def test_chat_passes_the_picked_models_and_thinking(client: TestClient) -> None:
+    _chat(client, "hi", reader_model="gemini", answer_model="qwen", thinking=True)
+
+    assert CHOICES == [ModelChoice("gemini", "qwen", thinking=True)]
+
+
+def test_chat_with_an_unknown_model_is_rejected_before_streaming(client: TestClient) -> None:
+    body = {"session_id": str(uuid4()), "message": "hi", "answer_model": "gpt-unknown"}
+
+    response = client.post("/chat", json=body)
+
+    assert response.status_code == 422
+    assert "gpt-unknown" in response.json()["detail"]
+    assert CHOICES == []

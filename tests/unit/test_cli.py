@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 
 import steel_slag_slm.cli as cli
+from steel_slag_slm.llm.gateway import ReplyPiece
 from steel_slag_slm.pipelines.describe_tables import TableDescriptionReport
 
 
@@ -150,7 +151,7 @@ def _fake_describe_tables_clients(monkeypatch, calls: dict[str, object]) -> None
         "load_pdf_parsing_settings",
         lambda: MagicMock(output_folder_name="_parsed_approved", index_file_name="index.json"),
     )
-    monkeypatch.setattr(cli, "_connect_to_parsed_folder", lambda name: ("drive", f"id-{name}"))
+    monkeypatch.setattr(cli, "connect_to_parsed_folder", lambda name: ("drive", f"id-{name}"))
     monkeypatch.setattr(
         cli, "load_drive_connection_settings", lambda: MagicMock(folder_id="source-folder")
     )
@@ -234,7 +235,7 @@ def _fake_answer_setup(monkeypatch, pieces: list[str]) -> dict[str, object]:
 
     def fake_write(question, evidence, client, prompt, _settings):
         calls.update(question=question, evidence=evidence, client=client, prompt=prompt)
-        yield from pieces
+        yield from (ReplyPiece(piece) for piece in pieces)
 
     monkeypatch.setattr(cli, "write_answer", fake_write)
     return calls

@@ -33,7 +33,7 @@ from steel_slag_slm.config import (
 )
 from steel_slag_slm.data.column_values import read_seen_values
 from steel_slag_slm.data.slag_catalogue import SlagCatalogueEntry, read_catalogue
-from steel_slag_slm.llm.local_model import JsonModel
+from steel_slag_slm.llm.gateway import JsonModel
 from steel_slag_slm.llm.prompts import PromptTemplate
 from steel_slag_slm.rag.search import SearchHit
 from steel_slag_slm.rag.similar_slags import SimilarSlags, SlagProfile, find_similar_slags
@@ -66,10 +66,15 @@ def build_route_tools(
     similar_settings: SimilarSlagSettings,
     reference: SlagReference,
     paper_search: Callable[[str, int], list[SearchHit]],
+    data_project: str | None = None,
 ) -> RouteTools:
     """The router's tools on the real data: the catalogue and sheets in BigQuery, and the
-    paper search passed in. The catalogue is read once, on first use."""
-    table_id = f"{client.project}.{catalogue_settings.dataset}.{catalogue_settings.table}"
+    paper search passed in. The catalogue is read once, on first use.
+
+    data_project holds the tables when it differs from the client's (billing) project.
+    """
+    dataset_id = f"{data_project or client.project}.{catalogue_settings.dataset}"
+    table_id = f"{dataset_id}.{catalogue_settings.table}"
 
     @cache
     def catalogue() -> tuple[SlagCatalogueEntry, ...]:
@@ -81,7 +86,7 @@ def build_route_tools(
         )
 
     def lookup(entries: Sequence[SlagCatalogueEntry]) -> SlagLookup:
-        return lookup_slags(client, catalogue_settings.dataset, entries)
+        return lookup_slags(client, dataset_id, entries)
 
     return RouteTools(similar, catalogue, lookup, paper_search)
 

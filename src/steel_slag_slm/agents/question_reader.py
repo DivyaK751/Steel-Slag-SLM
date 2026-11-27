@@ -15,7 +15,7 @@ from steel_slag_slm.agents.question_form import (
     move_stated_oxides,
     off_vocabulary,
 )
-from steel_slag_slm.llm.local_model import JsonModel
+from steel_slag_slm.llm.gateway import JsonModel
 from steel_slag_slm.llm.prompts import PromptTemplate
 from steel_slag_slm.rag.similar_slags import SlagProfile
 
@@ -124,7 +124,7 @@ def read_question(
             answer = model.complete_json(prompt.instruction, user, schema)
             read = QuestionForm.model_validate(answer)
             # A value outside a column's list ("LD" for slag type) gets one retry naming the
-            # allowed values; checked here, not in the schema, which Ollama compiles too slowly
+            # allowed values; checked here, which keeps the schema small for the model server
             wrong = off_vocabulary(read, columns)
             if wrong and attempt < READ_ATTEMPTS:
                 problem = "; ".join(wrong)[:_PROBLEM_CHARS]

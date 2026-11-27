@@ -148,6 +148,9 @@ class GcpSettings(BaseModel):
     location: str
     # Unattended runs only; locally BigQuery uses `gcloud auth application-default login`
     credentials_file: Path | None = None
+    # Project holding the team's tables when queries run (and bill) in another project;
+    # None: the tables are in `project`
+    data_project: str | None = None
 
 
 class ModelPrices(BaseModel):
@@ -290,9 +293,6 @@ class SimilarSlagSettings(BaseModel):
 class QuestionRoutingSettings(BaseModel):
     """How a user's question is read into a form and turned into tool calls and evidence."""
 
-    reader_model: str  # small open model that fills the form, as named by the model server
-    reader_url: str  # local model server (Ollama) base URL
-    reader_timeout_s: float
     prompt_name: str
     examples_name: str  # worked question-to-form examples, prompts/<name>.yaml
     examples_k: int = Field(gt=0)  # examples shown with each message, the most similar first
@@ -377,6 +377,19 @@ class EvaluationSettings(BaseModel):
     prices: dict[str, ModelPrice] = {}
 
 
+class GatewayModel(BaseModel):
+    """One model the gateway serves: the name the chat shows and the extra request fields."""
+
+    label: str
+    request: dict[str, Any] = {}  # e.g. Qwen's chat_template_kwargs; {} for none
+    # Sent instead of request when the user turns thinking on; None: thinking can't be switched
+    thinking_request: dict[str, Any] | None = None
+
+    @property
+    def supports_thinking(self) -> bool:
+        return self.thinking_request is not None
+
+
 class LlmGatewaySettings(BaseModel):
     """The LiteLLM gateway every chat-time model is called through (docs/adr/005)."""
 
@@ -385,9 +398,7 @@ class LlmGatewaySettings(BaseModel):
     timeout_s: float
     reader_model: str  # reads a question into a form
     answer_model: str  # writes the answer from the evidence
-    # Every model the gateway serves, by its LiteLLM name, with the extra request fields it
-    # needs (e.g. Qwen's chat_template_kwargs); {} for none
-    models: dict[str, dict[str, Any]]
+    models: dict[str, GatewayModel]  # every model the gateway serves, by its LiteLLM name
 
     @model_validator(mode="after")
     def _jobs_use_listed_models(self) -> "LlmGatewaySettings":
@@ -466,6 +477,11 @@ def _papers_table(raw_config: dict[str, Any]) -> str:
     )
 
 
+def load_papers_table(config_path: Path = BASE_CONFIG_PATH) -> str:
+    """The fully qualified papers table (registry), where paper titles, authors and DOIs live."""
+    return _papers_table(_read_base_config(config_path))
+
+
 def load_settings(config_path: Path = BASE_CONFIG_PATH) -> Settings:
     """Build settings from the YAML config plus secrets from the environment or .env."""
     raw_config = _read_base_config(config_path)
@@ -494,6 +510,7 @@ def load_gcp_settings() -> GcpSettings:
         project=_require_env("GOOGLE_CLOUD_PROJECT"),
         location=_require_env("GOOGLE_CLOUD_LOCATION"),
         credentials_file=_optional_path_env("GCP_CREDENTIALS_FILE"),
+        data_project=os.environ.get("BIGQUERY_DATA_PROJECT", "").strip() or None,
     )
 
 

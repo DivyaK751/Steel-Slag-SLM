@@ -1,19 +1,21 @@
 import { useRef, useState } from 'react'
 
 import { streamChat } from '../api/chatStream'
-import type { ChatEvent, Citation } from '../api/types'
+import type { ChatEvent, Citation, ModelChoice } from '../api/types'
 
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
   text: string
+  thinking: string // the writer's reasoning, when thinking is on; never cited
+  modelLabel?: string // the writer that answered, kept so the label survives a new pick
   citations: Citation[]
   isError: boolean
   isDone: boolean // the stream ended ("done" or "error"), so its citations are final
 }
 
 function newMessage(role: ChatMessage['role'], text = ''): ChatMessage {
-  return { id: crypto.randomUUID(), role, text, citations: [], isError: false, isDone: role === 'user' }
+  return { id: crypto.randomUUID(), role, text, thinking: '', citations: [], isError: false, isDone: role === 'user' }
 }
 
 /** A finished question-and-answer pair, e.g. a saved chat being reopened. */
@@ -24,6 +26,8 @@ export function conversationFrom(question: string, answer: string, citations: Ci
 /** Return the assistant message with one streamed event applied; status events don't change it. */
 export function applyEvent(message: ChatMessage, event: ChatEvent): ChatMessage {
   switch (event.type) {
+    case 'thinking':
+      return { ...message, thinking: message.thinking + event.text }
     case 'token':
       return { ...message, text: message.text + event.text }
     case 'citations':
@@ -58,14 +62,15 @@ export function useChat() {
     updateMessage(answerId, (message) => applyEvent(message, event))
   }
 
-  async function send(text: string) {
-    const answer = newMessage('assistant')
+  /** Send a message with the picked models (null: the backend's defaults). */
+  async function send(text: string, choice: ModelChoice | null, modelLabel: string) {
+    const answer = { ...newMessage('assistant'), modelLabel }
     setMessages((current) => [...current, newMessage('user', text), answer])
     setIsStreaming(true)
     const thisRequest = new AbortController()
     controller.current = thisRequest
     try {
-      await streamChat(sessionId, text, (event) => handleEvent(answer.id, event), thisRequest.signal)
+      await streamChat(sessionId, text, choice, (event) => handleEvent(answer.id, event), thisRequest.signal)
     } catch (error) {
       if (thisRequest.signal.aborted) return // the user started a new chat
       const text = error instanceof Error ? error.message : String(error)

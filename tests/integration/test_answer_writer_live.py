@@ -38,7 +38,11 @@ def test_model_answers_citing_only_labels_in_the_evidence(model: str) -> None:
     client = GatewayClient(load_llm_gateway_settings(), model)
 
     answer = "".join(
-        write_answer(QUESTION, EVIDENCE, client, load_prompt(settings.prompt_name), settings)
+        piece.text
+        for piece in write_answer(
+            QUESTION, EVIDENCE, client, load_prompt(settings.prompt_name), settings
+        )
+        if not piece.is_thinking
     )
 
     assert "42.5" in answer

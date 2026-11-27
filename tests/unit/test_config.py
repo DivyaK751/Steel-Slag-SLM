@@ -260,6 +260,8 @@ def test_llm_gateway_settings_read_models_from_yaml_and_secrets_from_env(
     assert settings.api_key.get_secret_value() == "secret"
     assert settings.reader_model in settings.models
     assert settings.answer_model in settings.models
+    # Only Qwen can switch thinking; Gemini always reasons internally
+    assert [name for name, m in settings.models.items() if m.supports_thinking] == ["qwen3-8b"]
 
 
 def test_llm_gateway_settings_need_the_gateway_url(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -278,7 +280,7 @@ def test_llm_gateway_settings_reject_a_job_model_not_listed() -> None:
             timeout_s=5,
             reader_model="gemini",
             answer_model="gemnii",
-            models={"gemini": {}},
+            models={"gemini": config.GatewayModel(label="Gemini")},
         )
 
 

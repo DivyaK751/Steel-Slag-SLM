@@ -1,17 +1,7 @@
-// Placeholder data for screens not yet wired to the backend (chat history, models, knowledge
+// Placeholder data for screens not yet wired to the backend (chat history and knowledge
 // sources). Each export here is meant to be replaced by an API call.
 
 import type { Citation } from '../api/types'
-
-export interface ModelOption {
-  id: string
-  label: string
-}
-
-export const MODELS: ModelOption[] = [
-  { id: 'slagmind-pro', label: 'SlagMind Pro' },
-  { id: 'slagmind-fast', label: 'SlagMind Fast' },
-]
 
 export const SUGGESTED_QUESTIONS = [
   'Compare CO₂ uptake of BOF vs EAF slag in our lab runs',

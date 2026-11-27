@@ -5,6 +5,7 @@ import pytest
 
 from steel_slag_slm.agents.answer_writer import unknown_citations, write_answer
 from steel_slag_slm.config import AnswerSettings
+from steel_slag_slm.llm.gateway import ReplyPiece
 from steel_slag_slm.llm.prompts import PromptTemplate, load_prompt
 
 SETTINGS = AnswerSettings(prompt_name="answer_question", temperature=0.2, max_tokens=900)
@@ -46,11 +47,11 @@ class _FakeModel:
         user: str,
         temperature: float | None = None,
         max_tokens: int | None = None,
-    ) -> Iterator[str]:
+    ) -> Iterator[ReplyPiece]:
         self.calls.append(
             {"system": system, "user": user, "temperature": temperature, "max_tokens": max_tokens}
         )
-        yield from self.pieces
+        yield from (ReplyPiece(piece) for piece in self.pieces)
 
 
 def test_write_answer_sends_the_prompt_and_settings_and_yields_pieces_unchanged() -> None:
@@ -58,7 +59,7 @@ def test_write_answer_sends_the_prompt_and_settings_and_yields_pieces_unchanged(
 
     pieces = list(write_answer("  Strength?\n", EVIDENCE + "\n", model, PROMPT, SETTINGS))
 
-    assert pieces == ["It was ", "42.5 MPa [S1]."]
+    assert [piece.text for piece in pieces] == ["It was ", "42.5 MPa [S1]."]
     assert model.calls == [
         {
             "system": "Answer from the evidence.",
