@@ -287,6 +287,20 @@ class SimilarSlagSettings(BaseModel):
     min_shared_oxides: int
 
 
+class QuestionRoutingSettings(BaseModel):
+    """How a user's question is read into a form and turned into tool calls and evidence."""
+
+    reader_model: str  # small open model that fills the form, as named by the model server
+    reader_url: str  # local model server (Ollama) base URL
+    reader_timeout_s: float
+    prompt_name: str
+    examples_name: str  # worked question-to-form examples, prompts/<name>.yaml
+    examples_k: int = Field(gt=0)  # examples shown with each message, the most similar first
+    max_listed_values: int  # text columns with at most this many values list them for the reader
+    search_top_k: int  # paper passages handed to the answer model
+    evidence_max_chars: int  # longest evidence text handed to the answer model
+
+
 class OxideRange(BaseModel):
     """Typical wt% range of one oxide in one slag type, with its typical average if known."""
 
@@ -635,6 +649,13 @@ def load_slag_catalogue_settings(config_path: Path = BASE_CONFIG_PATH) -> SlagCa
 def load_similar_slag_settings(config_path: Path = BASE_CONFIG_PATH) -> SimilarSlagSettings:
     """Build the similar-slags tool's matching rules from the YAML config."""
     return SimilarSlagSettings(**_read_base_config(config_path)["similar_slags"])
+
+
+def load_question_routing_settings(
+    config_path: Path = BASE_CONFIG_PATH,
+) -> QuestionRoutingSettings:
+    """Build the question reader's and router's settings from the YAML config."""
+    return QuestionRoutingSettings(**_read_base_config(config_path)["question_routing"])
 
 
 def load_slag_reference(path: Path = SLAG_REFERENCE_PATH) -> SlagReference:

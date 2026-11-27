@@ -1,0 +1,163 @@
+# Worked messages and the forms they should be read into. For each message, the few most like
+# it are shown to the reader model (agents/form_examples.py); without an encoder, the first
+# ones are, so the most general examples come first.
+#
+# Add an example for a KIND of message the reader gets wrong, written in your own words.
+# Never copy a question from an evaluation set here: the score would then measure memory,
+# not reading. Fields left out are empty. tests/unit/agents/test_form_examples.py checks that
+# every column named here exists.
+name: read_question_examples
+version: 1
+examples:
+  # --- general kinds ---------------------------------------------------------------------
+  - message: "Which sulfate resistance results are reported for concrete containing EAF slag?"
+    form: {message_type: question, values_only: true,
+           properties: [durability.sulfate_resistance],
+           filters: [{column: durability.steel_slag_type, op: "=", value: EAF}],
+           search_query: "sulfate resistance of concrete containing EAF slag"}
+  - message: "Why does adding steel slag lower the slump of fresh concrete?"
+    form: {message_type: question, values_only: false,
+           properties: [concrete_performance.workability_slump_mm],
+           search_query: "why steel slag lowers the slump of fresh concrete"}
+  - message: "What should I do to make our slag safe to use in road bases?"
+    form: {message_type: question, values_only: false, about_my_slag: true,
+           properties: [durability.expansion_pct],
+           search_query: "treating steel slag for use in road base"}
+  - message: "good morning"
+    form: {message_type: chat}
+  - message: "Can you help me fix this Python error?"
+    form: {message_type: off_topic}
+  - message: "and the 90-day values?"
+    form: {message_type: follow_up, values_only: true,
+           properties: [concrete_performance.compressive_strength_90d_mpa]}
+
+  # --- message type ----------------------------------------------------------------------
+  - message: "great, cheers"
+    form: {message_type: chat}
+  - message: "What's the weather in Pittsburgh tomorrow?"
+    form: {message_type: off_topic}
+  - message: "Translate this sentence into German for me"
+    form: {message_type: off_topic}
+  - message: "Recommend a good movie, and also tell me how stainless steel slag is treated"
+    form: {message_type: question, values_only: false,
+           filters: [{column: processing.steel_slag_type, op: "=", value: Stainless Steel}],
+           search_query: "how stainless steel slag is treated"}
+  - message: "now only for ladle slag"
+    form: {message_type: follow_up, values_only: true,
+           filters: [{column: concrete_performance.steel_slag_type, op: "=", value: Ladle}]}
+  - message: "but why is that?"
+    form: {message_type: follow_up, values_only: false}
+
+  # --- values only or reasoning ----------------------------------------------------------
+  - message: "List the air content values measured in slag concrete mixes"
+    form: {message_type: question, values_only: true,
+           properties: [concrete_performance.air_content_pct],
+           search_query: "air content of steel slag concrete"}
+  - message: "Is it worth using steel slag in precast blocks?"
+    form: {message_type: question, values_only: false,
+           properties: [concrete_performance.compressive_strength_28d_mpa],
+           search_query: "use of steel slag in precast concrete blocks"}
+  - message: "Which is better for freeze-thaw durability, BOF or EAF slag concrete?"
+    form: {message_type: question, values_only: false,
+           # both types are wanted, so no slag type filter: filters must all hold at once
+           properties: [durability.freeze_thaw, durability.steel_slag_type],
+           search_query: "freeze-thaw durability of BOF versus EAF slag concrete"}
+  - message: "What markets exist for granulated stainless slag?"
+    form: {message_type: question, values_only: false,
+           filters: [{column: processing.steel_slag_type, op: "=", value: Stainless Steel}],
+           search_query: "markets for granulated stainless steel slag"}
+  - message: "Summarise what is known about chloride resistance of slag concrete"
+    form: {message_type: question, values_only: false,
+           properties: [durability.chloride_resistance],
+           search_query: "chloride resistance of steel slag concrete"}
+
+  # --- filters on columns other than slag type -------------------------------------------
+  - message: "CO2 uptake of slags that were sieved before carbonation"
+    form: {message_type: question, values_only: true,
+           properties: [carbon_uptake.co2_uptake_kg_per_t, carbon_uptake.co2_uptake_pct_by_mass],
+           filters: [{column: processing.processing_method, op: "=", value: Sieving}],
+           search_query: "CO2 uptake of sieved steel slag"}
+  - message: "Oxide analyses obtained with ICP-OES"
+    form: {message_type: question, values_only: true,
+           properties: [feedstock_chemistry.cao_pct, feedstock_chemistry.sio2_pct,
+                        feedstock_chemistry.fe2o3_pct],
+           filters: [{column: feedstock_chemistry.analysis_method, op: "=", value: ICP-OES}],
+           search_query: "steel slag oxide composition measured by ICP-OES"}
+  - message: "Strength of thermally treated slag binders"
+    form: {message_type: question, values_only: true,
+           properties: [concrete_performance.compressive_strength_28d_mpa],
+           filters: [{column: activation.activation_type, op: "=", value: Thermal}],
+           search_query: "strength of thermally activated steel slag binders"}
+  - message: "How efficient is dry magnetic separation at recovering iron?"
+    form: {message_type: question, values_only: false,
+           properties: [processing.yield_pct],
+           filters: [{column: processing.processing_method, op: "=", value: Magnetic Separation},
+                     {column: processing.dry_or_wet, op: "=", value: Dry}],
+           search_query: "iron recovery by dry magnetic separation of steel slag"}
+  - message: "Papers from India published since 2018 on slag in pavements"
+    form: {message_type: question, values_only: true,
+           properties: [scientific_literature.title, scientific_literature.authors],
+           filters: [{column: scientific_literature.country_or_region, op: "contains", value: India},
+                     {column: scientific_literature.publication_year, op: ">", value: 2017}],
+           search_query: "steel slag in pavements India"}
+  - message: "Mixes using limestone powder alongside slag: what strengths?"
+    form: {message_type: question, values_only: true,
+           properties: [concrete_performance.compressive_strength_28d_mpa],
+           filters: [{column: concrete_performance.other_scms, op: "contains", value: limestone}],
+           search_query: "strength of concrete with steel slag and limestone powder"}
+
+  # --- numeric conditions ----------------------------------------------------------------
+  - message: "Which mixes kept slump above 100 mm with more than 25% slag?"
+    form: {message_type: question, values_only: true,
+           properties: [concrete_performance.workability_slump_mm],
+           filters: [{column: concrete_performance.workability_slump_mm, op: ">", value: 100.0},
+                     {column: concrete_performance.scm_replacement_pct, op: ">", value: 25.0}],
+           search_query: "workability of concrete with over 25% steel slag replacement"}
+  - message: "Slags with free MgO under 2%"
+    form: {message_type: question, values_only: true,
+           properties: [feedstock_chemistry.free_mgo_pct],
+           filters: [{column: feedstock_chemistry.free_mgo_pct, op: "<", value: 2.0}],
+           search_query: "steel slags with low free MgO"}
+
+  # --- compositions the user states ------------------------------------------------------
+  - message: "Ours is roughly 50% CaO and 10% SiO2 with 4% MnO. Could it absorb much CO2?"
+    form: {message_type: question, values_only: false, about_my_slag: true,
+           chemistry: {cao_pct: 50.0, sio2_pct: 10.0, mno_pct: 4.0},
+           properties: [carbon_uptake.co2_uptake_kg_per_t],
+           search_query: "CO2 uptake of high-CaO steel slag"}
+  - message: "Given Fe2O3 at 35% and Al2O3 at 3%, would grinding it be hard?"
+    form: {message_type: question, values_only: false,
+           chemistry: {fe2o3_pct: 35.0, al2o3_pct: 3.0},
+           properties: [particle_size.grinding_time],
+           search_query: "grindability of iron-rich steel slag"}
+  - message: "With 1.5% V2O5 and 6% TiO2 in it, is vanadium worth recovering?"
+    form: {message_type: question, values_only: false,
+           chemistry: {v2o5_pct: 1.5, tio2_pct: 6.0},
+           search_query: "vanadium recovery from steel slag"}
+  - message: "Which slags have CaO above 45%?"
+    form: {message_type: question, values_only: true,
+           properties: [feedstock_chemistry.cao_pct],
+           filters: [{column: feedstock_chemistry.cao_pct, op: ">", value: 45.0}],
+           search_query: "steel slags with high CaO content"}
+
+  # --- the user's stored slag -------------------------------------------------------------
+  - message: "What carbonation time would suit this slag?"
+    form: {message_type: question, values_only: false, about_my_slag: true,
+           properties: [carbon_uptake.carbonation_time, carbon_uptake.co2_uptake_kg_per_t],
+           search_query: "carbonation time for steel slag"}
+  - message: "Show me the reported 7-day strengths for slags like ours"
+    form: {message_type: question, values_only: true, about_my_slag: true,
+           properties: [concrete_performance.compressive_strength_7d_mpa],
+           search_query: "7-day compressive strength of steel slag concrete"}
+
+  # --- synonyms for slag types -----------------------------------------------------------
+  - message: "Leaching from oxygen converter slag aggregates"
+    form: {message_type: question, values_only: true,
+           properties: [durability.leaching],
+           filters: [{column: durability.steel_slag_type, op: "=", value: BOF}],
+           search_query: "leaching of BOF steel slag aggregates"}
+  - message: "Free lime in ladle furnace residue"
+    form: {message_type: question, values_only: true,
+           properties: [feedstock_chemistry.free_cao_pct],
+           filters: [{column: feedstock_chemistry.steel_slag_type, op: "=", value: Ladle}],
+           search_query: "free lime in ladle furnace slag"}
