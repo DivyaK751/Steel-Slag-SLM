@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { ChatEvent } from '../api/types'
-import { applyEvent, type ChatMessage } from './useChat'
+import { applyEvent, conversationFrom, type ChatMessage } from './useChat'
 
 const EMPTY_ANSWER: ChatMessage = { id: 'a1', role: 'assistant', text: '', citations: [], isError: false, isDone: false }
 
@@ -38,5 +38,15 @@ describe('applyEvent', () => {
     expect(message.text).toBe('Steel \n\nServer failed.')
     expect(message.isError).toBe(true)
     expect(message.isDone).toBe(true)
+  })
+})
+
+describe('conversationFrom', () => {
+  it('builds a user question and a finished answer with its citations', () => {
+    const citation = { label: 'P1', paper_id: 'W1', title: null, authors: [], year: null, doi: null, pages: [] }
+    const [question, answer] = conversationFrom('Why?', 'Because [P1].', [citation])
+
+    expect(question).toMatchObject({ role: 'user', text: 'Why?', isDone: true })
+    expect(answer).toMatchObject({ role: 'assistant', text: 'Because [P1].', citations: [citation], isDone: true })
   })
 })
