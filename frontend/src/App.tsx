@@ -1,33 +1,93 @@
 import { useState } from 'react'
 
 import { Composer } from './components/Composer'
+import { KnowledgeSources } from './components/KnowledgeSources'
 import { MessageList } from './components/MessageList'
-import { ProfilePanel } from './components/ProfilePanel'
-import { useChat } from './hooks/useChat'
+import { Sidebar, type ChatSummary } from './components/Sidebar'
+import { SlagProfilePage } from './components/SlagProfilePage'
+import { WelcomeScreen } from './components/WelcomeScreen'
+import { conversationFrom, useChat } from './hooks/useChat'
 import { useProfile } from './hooks/useProfile'
+import { BIGQUERY_TABLES, MODELS, RESEARCH_PAPERS, SAMPLE_CHATS } from './placeholder/sampleData'
+
+const LIVE_CHAT_ID = 'live' // the chat being typed in now; the rest of the list is sample history
+const NEW_CHAT_TITLE = 'New research chat'
+const INDEXED_SUMMARY = `${RESEARCH_PAPERS.length} papers · ${BIGQUERY_TABLES.length} tables indexed`
 
 export default function App() {
-  const { sessionId, messages, status, isStreaming, send, newChat } = useChat()
+  const { sessionId, messages, status, isStreaming, send, newChat, openChat } = useChat()
   const { profile, syncError, save } = useProfile(sessionId)
-  const [isProfileOpen, setIsProfileOpen] = useState(false)
+  const [page, setPage] = useState<'chat' | 'sources' | 'profile'>('chat')
+  const [activeChatId, setActiveChatId] = useState(LIVE_CHAT_ID)
+  const [liveTitle, setLiveTitle] = useState<string | null>(null)
+  // Not sent to the backend yet; the chat API has no model or thinking option
+  const [modelId, setModelId] = useState(MODELS[0].id)
+  const [isThinking, setIsThinking] = useState(true)
+
+  const activeSample = SAMPLE_CHATS.find((chat) => chat.id === activeChatId)
+  const chatTitle = activeSample?.title ?? liveTitle ?? NEW_CHAT_TITLE
+  const modelLabel = MODELS.find((model) => model.id === modelId)?.label ?? MODELS[0].label
+  const chats: ChatSummary[] = [{ id: LIVE_CHAT_ID, title: liveTitle ?? NEW_CHAT_TITLE, when: 'Just now' }, ...SAMPLE_CHATS]
+
+  function startNewChat() {
+    newChat()
+    setLiveTitle(null)
+    setActiveChatId(LIVE_CHAT_ID)
+    setPage('chat')
+  }
+
+  function openSidebarChat(id: string) {
+    setPage('chat')
+    if (id === activeChatId) return
+    const sample = SAMPLE_CHATS.find((chat) => chat.id === id)
+    if (!sample) return startNewChat()
+    openChat(conversationFrom(sample.question, sample.answer, sample.citations))
+    setActiveChatId(id)
+  }
+
+  function sendMessage(text: string) {
+    if (activeChatId === LIVE_CHAT_ID && !liveTitle) setLiveTitle(text)
+    void send(text)
+  }
 
   return (
     <div className="app">
-      <header className="app-header">
-        <h1>Steel slag assistant</h1>
-        <div className="header-actions">
-          <button type="button" aria-expanded={isProfileOpen} onClick={() => setIsProfileOpen(!isProfileOpen)}>
-            {profile ? `Your slag: ${profile.steel_slag_type}` : 'Add your slag'}
-          </button>
-          <button type="button" onClick={newChat}>
-            New chat
-          </button>
-        </div>
-      </header>
-      {syncError && <p className="form-error banner">{syncError}</p>}
-      {isProfileOpen && <ProfilePanel profile={profile} onSave={save} />}
-      <MessageList messages={messages} status={status} />
-      <Composer isDisabled={isStreaming} onSend={send} />
+      <Sidebar
+        chats={chats}
+        activeChatId={page === 'chat' ? activeChatId : null}
+        page={page}
+        onNewChat={startNewChat}
+        onOpenChat={openSidebarChat}
+        onOpenSources={() => setPage('sources')}
+        onOpenProfile={() => setPage('profile')}
+      />
+      {page === 'sources' && <KnowledgeSources />}
+      {page === 'profile' && <SlagProfilePage profile={profile} onSave={save} />}
+      {page === 'chat' && (
+        <main className="chat">
+          <header className="chat-header">
+            <h1>{chatTitle}</h1>
+            <span className="indexed-pill">{INDEXED_SUMMARY}</span>
+          </header>
+          {syncError && <p className="form-error banner">{syncError}</p>}
+          <div className="chat-body">
+            {messages.length === 0 ? (
+              <WelcomeScreen onPick={sendMessage} />
+            ) : (
+              <MessageList messages={messages} status={status} modelLabel={modelLabel} />
+            )}
+            <Composer
+              isDisabled={isStreaming}
+              modelId={modelId}
+              isThinking={isThinking}
+              onModelChange={setModelId}
+              onThinkingChange={setIsThinking}
+              onSend={sendMessage}
+            />
+            <p className="disclaimer">Answers cite indexed sources. Check figures before publishing.</p>
+          </div>
+        </main>
+      )}
     </div>
   )
 }

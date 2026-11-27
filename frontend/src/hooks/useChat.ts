@@ -16,6 +16,11 @@ function newMessage(role: ChatMessage['role'], text = ''): ChatMessage {
   return { id: crypto.randomUUID(), role, text, citations: [], isError: false, isDone: role === 'user' }
 }
 
+/** A finished question-and-answer pair, e.g. a saved chat being reopened. */
+export function conversationFrom(question: string, answer: string, citations: Citation[]): ChatMessage[] {
+  return [newMessage('user', question), { ...newMessage('assistant', answer), citations, isDone: true }]
+}
+
 /** Return the assistant message with one streamed event applied; status events don't change it. */
 export function applyEvent(message: ChatMessage, event: ChatEvent): ChatMessage {
   switch (event.type) {
@@ -73,14 +78,17 @@ export function useChat() {
     }
   }
 
-  function newChat() {
+  /** Stop any answer in progress and start a fresh session showing these messages. */
+  function openChat(initialMessages: ChatMessage[]) {
     controller.current?.abort()
     controller.current = null
     setSessionId(crypto.randomUUID())
-    setMessages([])
+    setMessages(initialMessages)
     setStatus(null)
     setIsStreaming(false)
   }
 
-  return { sessionId, messages, status, isStreaming, send, newChat }
+  const newChat = () => openChat([])
+
+  return { sessionId, messages, status, isStreaming, send, newChat, openChat }
 }

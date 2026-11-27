@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm'
 import { CITATION_HREF_PREFIX, linkCitations } from '../citations/linkCitations'
 import type { ChatMessage } from '../hooks/useChat'
 import { CitationChip } from './CitationChip'
+import { SourcePills } from './SourcePills'
 
 // remark-gfm renders the small tables the answer prompt asks for when comparing values
 const MARKDOWN_PLUGINS = [remarkGfm]
@@ -26,18 +27,22 @@ function answerComponents(message: ChatMessage): Components {
   }
 }
 
-/** One chat message: the user's text as typed, the assistant's answer as markdown. */
-export function Message({ message }: { message: ChatMessage }) {
-  const classes = ['message', `message--${message.role}`, message.isError && 'message--error']
-  return (
-    <div className={classes.filter(Boolean).join(' ')}>
-      {message.role === 'user' ? (
+/** One chat message: the user's text as typed, the assistant's answer as markdown with its sources. */
+export function Message({ message, modelLabel }: { message: ChatMessage; modelLabel: string }) {
+  if (message.role === 'user') {
+    return (
+      <div className="message message--user">
         <p>{message.text}</p>
-      ) : (
-        <Markdown remarkPlugins={MARKDOWN_PLUGINS} components={answerComponents(message)}>
-          {linkCitations(message.text)}
-        </Markdown>
-      )}
+      </div>
+    )
+  }
+  return (
+    <div className={message.isError ? 'message message--assistant message--error' : 'message message--assistant'}>
+      <span className="message-author">{modelLabel}</span>
+      <Markdown remarkPlugins={MARKDOWN_PLUGINS} components={answerComponents(message)}>
+        {linkCitations(message.text)}
+      </Markdown>
+      {message.isDone && <SourcePills citations={message.citations} />}
     </div>
   )
 }
