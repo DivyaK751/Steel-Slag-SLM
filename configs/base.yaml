@@ -335,6 +335,9 @@ question_routing:
   search_top_k: 15
   # Evidence beyond this length is cut, passages first, so a small answer model is not flooded
   evidence_max_chars: 12000
+  # A values-only question whose table values come from fewer papers than this, or that has
+  # an asked-for column with no values, searches the papers too instead of answering thinly
+  min_lookup_papers: 2
 
 extraction_judge:
   # Scores benchmark runs of extract-data against the hand-extracted reference workbook

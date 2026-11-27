@@ -173,3 +173,43 @@ def test_a_values_only_question_with_columns_but_no_filters_still_looks_values_u
 def test_a_reasoning_question_about_my_slag_still_looks_up_the_similar_slags():
     form = _form(about_my_slag=True, properties=[STRENGTH])
     assert _plan(form) == ["similar_slags", "lookup", "paper_search"]
+
+
+def _lookup_from(sources: list[str], header: str = "Compressive_Strength_28d_MPa") -> SlagLookup:
+    slags = [
+        SlagEvidence(f"S{i}", _entry(source), None,
+                     {CONCRETE: [SheetRow(CONCRETE, source, "MAT-0001", None, None,
+                                          {header: "41.3"}, {})]})
+        for i, source in enumerate(sources, start=1)
+    ]  # fmt: skip
+    return SlagLookup(slags, [], [])
+
+
+def _run_values_only(
+    found: SlagLookup, properties: list[str] | None = None
+) -> tuple[list[str], list[str]]:
+    """Run a values-only question whose lookup returns found; give the tools run and notes."""
+    recorder = Recorder()
+    tools = recorder.tools()
+    tools = RouteTools(tools.similar_slags, tools.catalogue, lambda _: found, tools.paper_search)
+    form = _form(properties=properties or [STRENGTH], values_only=True)
+    plan = plan_route(form, None, COLUMNS)
+    results = run_route("q", plan, form, tools, COLUMNS, 15, min_lookup_papers=2)
+    return [asked[0] for asked in recorder.asked], results.notes
+
+
+def test_values_from_enough_papers_are_answered_from_the_tables_alone():
+    assert _run_values_only(_lookup_from(["W1", "W2"])) == ([], [])
+
+
+def test_values_from_too_few_papers_search_the_papers_too():
+    asked, notes = _run_values_only(_lookup_from(["W1"]))
+    assert asked == ["search"]
+    assert "only 1 paper(s)" in notes[0]
+
+
+def test_an_asked_column_with_no_values_searches_the_papers_too():
+    slump = "concrete_performance.workability_slump_mm"
+    asked, notes = _run_values_only(_lookup_from(["W1", "W2"]), [STRENGTH, slump])
+    assert asked == ["search"]
+    assert notes == [f"The extraction tables have no values for {slump}; paper passages were added"]

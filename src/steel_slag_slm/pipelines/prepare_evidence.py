@@ -116,6 +116,8 @@ def prepare_evidence(
         plan = plan_route(form, profile, columns)
         if ages.notes:
             plan = add_paper_search(plan, ages.notes)
-    results = run_route(question, plan, form, tools, columns, settings.search_top_k)
+    results = run_route(
+        question, plan, form, tools, columns, settings.search_top_k, settings.min_lookup_papers
+    )
     evidence = build_evidence(question, plan, form, results, settings.evidence_max_chars)
     return PreparedEvidence(form, plan, results, evidence)
