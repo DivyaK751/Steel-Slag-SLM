@@ -221,3 +221,55 @@ def test_describe_tables_rejects_a_nonpositive_time_limit(monkeypatch) -> None:
 
     with pytest.raises(SystemExit):
         cli.describe_tables()
+
+
+def _fake_answer_setup(monkeypatch, pieces: list[str]) -> dict[str, object]:
+    """Stub the gateway and settings for the answer command; return what it was called with."""
+    calls: dict[str, object] = {}
+    gateway = MagicMock(answer_model="gemini", models={"gemini": {}, "qwen3-8b": {}})
+    monkeypatch.setattr(cli, "load_llm_gateway_settings", lambda: gateway)
+    monkeypatch.setattr(cli, "load_answer_settings", lambda: MagicMock(prompt_name="answer"))
+    monkeypatch.setattr(cli, "load_prompt", lambda name: f"prompt:{name}")
+    monkeypatch.setattr(cli, "GatewayClient", lambda _settings, model: f"client:{model}")
+
+    def fake_write(question, evidence, client, prompt, _settings):
+        calls.update(question=question, evidence=evidence, client=client, prompt=prompt)
+        yield from pieces
+
+    monkeypatch.setattr(cli, "write_answer", fake_write)
+    return calls
+
+
+def test_answer_streams_the_answer_and_reports_unknown_citations(
+    monkeypatch, capsys, tmp_path
+) -> None:
+    evidence = tmp_path / "evidence.txt"
+    evidence.write_text("[S1] W123 ...", encoding="utf-8")
+    calls = _fake_answer_setup(monkeypatch, ["42 MPa ", "[S1][P4]."])
+    monkeypatch.setattr(
+        sys, "argv", ["answer", "Strength?", "--evidence", str(evidence), "--model", "qwen3-8b"]
+    )
+
+    cli.answer()
+
+    assert calls == {
+        "question": "Strength?",
+        "evidence": "[S1] W123 ...",
+        "client": "client:qwen3-8b",
+        "prompt": "prompt:answer",
+    }
+    out = capsys.readouterr().out
+    assert out.startswith("42 MPa [S1][P4].")
+    assert "[qwen3-8b] Unknown citations: P4" in out
+
+
+def test_answer_rejects_a_model_the_gateway_does_not_list(monkeypatch, tmp_path) -> None:
+    evidence = tmp_path / "evidence.txt"
+    evidence.write_text("E", encoding="utf-8")
+    _fake_answer_setup(monkeypatch, [])
+    monkeypatch.setattr(
+        sys, "argv", ["answer", "Q", "--evidence", str(evidence), "--model", "gpt-9"]
+    )
+
+    with pytest.raises(SystemExit):
+        cli.answer()

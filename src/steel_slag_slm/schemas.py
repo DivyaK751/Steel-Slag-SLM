@@ -177,6 +177,8 @@ class Chunk:
     figure_captions: tuple[str, ...] = ()  # captions of the figures this text mentions
     parse_generation: str = ""  # the parse this chunk came from; "" when it was not recorded
     paper_title: str = ""  # the paper's title from the registry; "" when it was not looked up
+    # Lines of a table chunk taken from its description; paper selection skips them
+    description_lines: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -561,3 +563,26 @@ class ExtractionRun:
     model: str
     split: str
     paper_ids: tuple[str, ...]
+
+
+ChatEventType = Literal["status", "token", "citations", "done", "error"]
+
+
+class Citation(BaseModel):
+    """One source an answer cites, as the chat shows it on hover."""
+
+    label: str  # as written in the answer, without brackets, e.g. "P3" or "S1"
+    paper_id: str
+    title: str | None = None
+    authors: list[str] = Field(default_factory=list)
+    year: int | None = None
+    doi: str | None = None
+    pages: list[int] = Field(default_factory=list)
+
+
+class ChatEvent(BaseModel):
+    """One event the chat streams while an answer is written (order: docs/adr/005)."""
+
+    type: ChatEventType
+    text: str = ""  # the status step, the next piece of the answer, or the error message
+    citations: list[Citation] = Field(default_factory=list)  # only on a "citations" event

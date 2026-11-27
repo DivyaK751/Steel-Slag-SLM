@@ -5,6 +5,8 @@ from pydantic import ValidationError
 
 from steel_slag_slm.schemas import (
     CaptionBlock,
+    ChatEvent,
+    Citation,
     Figure,
     RelevanceDecision,
     RenderedFigure,
@@ -107,3 +109,16 @@ def test_rendered_figure_is_immutable() -> None:
 
     with pytest.raises(FrozenInstanceError):
         rendered.width = 200  # type: ignore[misc]  # Exercise the frozen-field guard.
+
+
+def test_chat_event_survives_a_json_round_trip() -> None:
+    event = ChatEvent(
+        type="citations", citations=[Citation(label="P1", paper_id="W1", year=2024, pages=[3])]
+    )
+
+    assert ChatEvent.model_validate_json(event.model_dump_json()) == event
+
+
+def test_chat_event_rejects_an_unknown_type() -> None:
+    with pytest.raises(ValidationError):
+        ChatEvent.model_validate({"type": "thinking", "text": "hmm"})

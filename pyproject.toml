@@ -7,12 +7,14 @@ requires-python = ">=3.11"
 dependencies = [
     "docling>=2.140.0",
     "faiss-cpu>=1.15.1",
+    "fastapi>=0.141.1",
     "google-adk>=2.12.0",
     "google-api-python-client>=2.100",
     "google-auth>=2.23",
     "google-auth-oauthlib>=1.5.0",
     "google-cloud-bigquery>=3.46.2",
     "langdetect>=1.0.9",
+    "openai>=3.59.0",
     "openpyxl>=3.1.5",
     "pydantic>=2.5",
     "pymupdf>=1.28.2",
@@ -21,6 +23,7 @@ dependencies = [
     "rank-bm25>=0.2.2",
     "requests>=2.31",
     "sentence-transformers>=6.2.0",
+    "uvicorn>=0.54.0",
 ]
 
 [project.scripts]
@@ -45,9 +48,11 @@ extract-figures = "steel_slag_slm.cli:extract_figures"
 read-figures = "steel_slag_slm.cli:read_figures"
 export-parsed = "steel_slag_slm.cli:export_parsed"
 describe-tables = "steel_slag_slm.cli:describe_tables"
+answer = "steel_slag_slm.cli:answer"
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28.1",
     "mypy>=1.8",
     "pytest>=8.0",
     "ruff>=0.4",
@@ -78,5 +83,6 @@ untyped_calls_exclude = ["google", "pymupdf"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]  # so tests can import backend/, which sits outside the installed package
 markers = ["integration: touches real external services (skipped by default)"]
 addopts = "-m 'not integration'"

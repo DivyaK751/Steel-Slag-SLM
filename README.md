@@ -8,6 +8,79 @@ cp .env.example .env   # then fill in your own values
 uv run pytest
 ```
 
+## Repository layout
+
+| Folder | Holds |
+|---|---|
+| `src/steel_slag_slm/` | The Python package: `data/`, `llm/`, `rag/`, `agents/`, `evaluation/`, `pipelines/` and the CLI |
+| `configs/` | Settings (`base.yaml`): model names, paths, parameters |
+| `prompts/` | One prompt template per file |
+| `tests/` | `unit/` mirrors the package; `integration/` calls real services |
+| `docs/` | Setup guides, experiments, and decision records in `docs/adr/` |
+| `scripts/` | Small developer utilities |
+| `notebooks/`, `reports/` | Exploration and weekly report assets |
+| `backend/` | Chat API (FastAPI): routes, sessions and streaming only; added with the chat app |
+| `frontend/` | Chat UI (React + Vite + TypeScript, its own `package.json`); added with the chat app |
+
+The chat logic itself lives in `src/steel_slag_slm/pipelines/answer_message.py`, so the CLI,
+tests and API share it. See [ADR 005](docs/adr/005-chat-interface.md) for the stack and the
+streamed event contract.
+
+## Chat models (LiteLLM)
+
+Every chat-time model (Gemini and Qwen) is called through the team's LiteLLM gateway, with
+`GatewayClient` in `src/steel_slag_slm/llm/gateway.py`.
+
+```bash
+# in .env: LLM_GATEWAY_URL and LLM_GATEWAY_KEY (see .env.example)
+uv run pytest -m integration tests/integration/test_llm_gateway_live.py  # every model, live
+```
+
+- Models and which job uses which: the `llm_gateway:` section of `configs/base.yaml`. A model
+  the gateway adds is one more line under `models:`, with any extra request fields it needs.
+- Qwen3 is served by vLLM with `chat_template_kwargs: {enable_thinking: false}`, so it answers
+  without a `<think>` block.
+
+The answer model writes the chat answer from the evidence text that question routing prepares
+(prompt: `prompts/answer_question.yaml`, settings: `answer:` in `configs/base.yaml`). To compare
+models on the same evidence, save it to a file and run:
+
+```bash
+uv run answer "What strength does 20% BOF slag concrete reach?" --evidence evidence.txt --model qwen3-8b
+uv run pytest -m integration tests/integration/test_answer_writer_live.py  # every model, live
+```
+
+It streams the answer, then lists any `[S#]`/`[P#]` label it cites that the evidence lacks.
+
+## Chat API
+
+`backend/app.py` serves the chat over HTTP (endpoints and event contract:
+[ADR 005](docs/adr/005-chat-interface.md)). Until routing is connected, it streams fixed stub
+events.
+
+```bash
+uv run uvicorn backend.app:app --reload --port 8765
+curl -N -X POST localhost:8765/chat -H 'content-type: application/json' \
+  -d '{"session_id": "'"$(uuidgen)"'", "message": "What is steel slag used for?"}'
+```
+
+## Chat UI
+
+`frontend/` is the chat in the browser (React + Vite + TypeScript). It needs Node 20 or newer,
+and the chat API above running on port 8765; the Vite server forwards API calls to it.
+
+```bash
+cd frontend
+npm install
+npm run dev        # http://localhost:5173
+npm test           # unit tests (Vitest)
+npm run lint       # oxlint; `npm run build` also type-checks
+```
+
+"Add your slag" saves the user's slag profile (type, oxides, phases) in the browser and sends it to
+every new chat. Each `[S#]`/`[P#]` label in an answer shows its paper, authors, year, DOI and
+pages on hover; a label the evidence lacks is struck through.
+
 ## Paper fetcher
 
 A background job (GitHub Actions, every night) that searches [OpenAlex](https://openalex.org)
