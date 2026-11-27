@@ -75,6 +75,18 @@ def test_load_rejects_a_chunks_file_with_the_wrong_schema(fake_drive):
         embedding_store.load_store(None, "parsed", "model-a", dimension=4)
 
 
+def test_save_then_load_keeps_the_description_lines_of_each_chunk(fake_drive, keyword_encoder):
+    text = "Table 1\nOxides by XRF.\n| CaO | 50 |"
+    chunk = Chunk("W1", "table", "", text, 0, description_lines=("Oxides by XRF.",))
+    store = VectorStore.empty(keyword_encoder.dimension)
+    store.add([chunk], keyword_encoder.encode([chunk.text]))
+    embedding_store.save_store(None, "parsed", "model-a", store)
+
+    loaded = embedding_store.load_store(None, "parsed", "model-a", keyword_encoder.dimension)
+
+    assert loaded.chunks == [chunk]
+
+
 def test_save_then_load_keeps_the_pages_of_each_chunk(fake_drive, keyword_encoder):
     chunks = [Chunk("W1", "text", "Results", "Free lime.", 0, pages=(3, 4))]
     store = VectorStore.empty(keyword_encoder.dimension)
