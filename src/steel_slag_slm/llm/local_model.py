@@ -16,10 +16,14 @@ class JsonModel(Protocol):
 class OllamaJsonModel:
     """A model served by Ollama, with its output forced to the schema (structured outputs)."""
 
-    def __init__(self, base_url: str, model: str, timeout_s: float) -> None:
+    def __init__(
+        self, base_url: str, model: str, timeout_s: float, think: bool | None = None
+    ) -> None:
+        """Set think=False for models that reason before answering (Qwen3); None sends nothing."""
         self._url = base_url.rstrip("/") + "/api/chat"
         self._model = model
         self._timeout_s = timeout_s
+        self._think = think
 
     def complete_json(self, system: str, user: str, schema: dict[str, Any]) -> dict[str, Any]:
         """Return the model's answer as a parsed JSON object.
@@ -37,6 +41,8 @@ class OllamaJsonModel:
             # window (4096 tokens) silently cuts longer prompts, and the column list is long
             "options": {"temperature": 0, "num_ctx": CONTEXT_TOKENS},
         }
+        if self._think is not None:
+            body["think"] = self._think
         request = urllib.request.Request(
             self._url, json.dumps(body).encode(), {"Content-Type": "application/json"}
         )

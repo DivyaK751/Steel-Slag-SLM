@@ -30,6 +30,15 @@ def test_the_schema_is_sent_as_the_output_format_and_the_answer_parsed(monkeypat
     assert sent[0]["options"]["temperature"] == 0
 
 
+def test_thinking_is_sent_only_when_it_is_set(monkeypatch):
+    sent = _serve(monkeypatch, "{}")
+    OllamaJsonModel("http://x", "qwen2.5:7b", 30).complete_json("s", "u", {})
+    OllamaJsonModel("http://x", "qwen3:8b", 30, think=False).complete_json("s", "u", {})
+
+    assert "think" not in sent[0]
+    assert sent[1]["think"] is False
+
+
 def test_an_answer_that_is_not_a_json_object_is_reported(monkeypatch):
     _serve(monkeypatch, "[1, 2]")
     with pytest.raises(ValueError, match="not an object"):
