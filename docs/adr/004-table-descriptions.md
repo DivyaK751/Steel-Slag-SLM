@@ -54,6 +54,11 @@ Gemini's figure readings, by contrast, raised figure retrieval markedly.
   is cut off. A "table" whose caption and header alone pass that budget is prose the parser
   misread (real ones take about a seventh of it); it becomes one passage cut to the budget,
   not a copy of that prose per row.
+- Paper selection reads a table chunk without its description; the reranker and the answer
+  model read the whole chunk (amended 2026-11-26). Descriptions repeat the same words
+  ("chemical composition", "XRF", "CaO") across every paper's tables, so in embeddings
+  and BM25 they pulled the top 5 papers toward the wrong papers' tables. Each chunk records
+  its description lines, and embedding and keyword indexing skip them.
 - The per-row passages are retired. Manifests that still hold them (`contextual_tables`) load
   without them, and any rewrite of such a manifest, including `describe-tables`, removes them.
 
@@ -65,5 +70,9 @@ Gemini's figure readings, by contrast, raised figure retrieval markedly.
 - Descriptions cost one text-only Gemini call per table: an estimated $0.004 (about 2,300
   input and 600 output tokens at Flash prices), so roughly $40 for 10,000 tables. The default
   $20 cap per run means the corpus takes about two runs.
-- The gain is not measured yet. Compare table answer@5 on the tuning and held-out sets before
-  and after, on the same corpus; with 19 held-out table questions, one question is about 0.05.
+- Measured on the same 250 papers (2026-11-26), answer@10 / @20 hits over the 100 tuning and
+  held-out questions: no descriptions 81 / 91, descriptions everywhere 83 / 90, descriptions
+  for the reranker only 84 / 91. Descriptions everywhere dropped held-out figure questions
+  from 1.00 to 0.71 at @20; reranker only keeps figures at the baseline on tuning. Held-out
+  @20 is 1-2 questions lower with reranker only (0.81, against 0.88 and 0.84), within the
+  noise of 32 questions.

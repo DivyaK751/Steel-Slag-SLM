@@ -220,6 +220,28 @@ def test_tables_carry_the_paper_title_for_search_and_every_chunk_does_for_rerank
     assert passage_for_reranking(text) == "BOF study\n2. Materials\nThe slag was ground."
 
 
+def test_paper_selection_skips_table_descriptions_but_the_reranker_reads_them() -> None:
+    paper = ParsedPaper(
+        openalex_id="W1",
+        markdown="",
+        tables=(),
+        content_blocks=(_block("table", TABLE, kind="table"), _block("text", "Body text.")),
+        table_descriptions={0: DESCRIPTION},
+    )
+
+    table, text = build_chunks(paper, 800, 1500)
+
+    assert table.description_lines == (
+        "Oxide composition of BOF slag (BOFS) measured by XRF.",
+        "Columns: CaO: calcium oxide content [wt.%]",
+        "Terms: BOFS: basic oxygen furnace slag",
+        "Also called: chemical composition",
+    )
+    assert passage_for_embedding(table) == "Table 1. Composition\n| Oxide | CaO |\n| BOFS | 50 |"
+    assert passage_for_reranking(table) == table.text
+    assert text.description_lines == ()
+
+
 def test_passage_for_embedding_puts_the_section_first() -> None:
     chunk = Chunk(paper_id="W1", kind="text", section="Results", text="Free lime", position=0)
     assert passage_for_embedding(chunk) == "Results\nFree lime"

@@ -578,6 +578,7 @@ def build_chunks(
     else:
         pieces = _pieces_from_markdown(paper, max_chars, table_max_chars, table_tokens)
     pieces = _drop_repeated(_carry_unfinished_sentences(pieces))
+    described = _all_description_lines(paper)
     chunks = [
         Chunk(
             paper_id=paper.openalex_id,
@@ -587,15 +588,28 @@ def build_chunks(
             position=position,
             pages=pages,
             paper_title=paper_title,
+            description_lines=tuple(
+                line for line in text.splitlines() if kind == "table" and line in described
+            ),
         )
         for position, (kind, section, text, pages) in enumerate(pieces)
     ]
     return _link_figure_captions(chunks)
 
 
-def _passage(chunk: Chunk, with_title: bool) -> str:
+def _all_description_lines(paper: ParsedPaper) -> set[str]:
+    """Return every line the paper's table descriptions can put in a chunk (a table chunk
+    keeps the first of its description's lines that fit)."""
+    return {
+        line
+        for description in paper.table_descriptions.values()
+        for line in _description_lines(description, lambda _: True)
+    }
+
+
+def _passage(chunk: Chunk, with_title: bool, text: str) -> str:
     title = chunk.paper_title if with_title else ""
-    parts = [title, chunk.section, chunk.text, *chunk.figure_captions]
+    parts = [title, chunk.section, text, *chunk.figure_captions]
     return "\n".join(part for part in parts if part)
 
 
@@ -604,15 +618,20 @@ def passage_for_embedding(chunk: Chunk) -> str:
     the captions of the figures it mentions.
 
     A table also starts with its paper's title: its cells are numbers and abbreviations, so
-    without the title it shares almost no words with a question about its study.
+    without the title it shares almost no words with a question about its study. Its
+    description lines are left out: they repeat words like "chemical composition" across
+    every paper's tables and pulled paper selection toward the wrong papers. The reranker
+    still reads them (docs/adr/004-table-descriptions.md).
     """
-    return _passage(chunk, with_title=chunk.kind == "table")
+    skipped = set(chunk.description_lines)
+    text = "\n".join(line for line in chunk.text.splitlines() if line not in skipped)
+    return _passage(chunk, with_title=chunk.kind == "table", text=text)
 
 
 def passage_for_reranking(chunk: Chunk) -> str:
     """Return the text a reranker reads: the paper's title, then the passage, so the reranker
     can tell which study each chunk comes from."""
-    return _passage(chunk, with_title=True)
+    return _passage(chunk, with_title=True, text=chunk.text)
 
 
 _AFFILIATION = re.compile(
